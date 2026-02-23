@@ -13,7 +13,14 @@ class MainApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       home: Scaffold(
         body: Center(
-          child: Text('Hello World'),
+          child: Column(
+            children: [
+              Text('Hello World'),
+              Text('Hello World'),
+              Text('Hello World'),
+              Text('Hello World'),
+            ],
+          ),
         ),
       ),
     );
