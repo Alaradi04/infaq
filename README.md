@@ -1,10 +1,14 @@
-# infaq
-
-A new Flutter project.
 <<<<<<< HEAD
 # infaq
 
 A new Flutter project.
+<<<<<<< HEAD
+<<<<<<< HEAD
+# infaq
+
+A new Flutter project.
+=======
+>>>>>>> a7fd507701423cddd806261ec9962c4fb9315791
 =======
 # INFAQ – AI-Powered Personal Financial Management App
 
