@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:infaq/screens/login_screen.dart';
 
+// this is newest version
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // `String.fromEnvironment('name')` reads a *compile-time* env var named `name`, not the URL/key string.
