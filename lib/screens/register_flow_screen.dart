@@ -132,7 +132,8 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
       final email = _email.text.trim();
       final usernameFromEmail =
           email.contains('@') ? email.split('@').first : email;
-      await Supabase.instance.client.auth.signUp(
+      final parsedBalance = num.tryParse(_balance.text.trim());
+      final response = await Supabase.instance.client.auth.signUp(
         email: email,
         password: _password.text,
         data: {
@@ -140,10 +141,27 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
           'name': _fullName.text.trim(),
           'full_name': _fullName.text.trim(),
           'currency': _currency,
-          'balance': num.tryParse(_balance.text.trim()),
-          'monthly_income': num.tryParse(_balance.text.trim()),
+          // String + numeric both survive JWT/user_metadata round-trips reliably.
+          'balance': _balance.text.trim(),
         },
       );
+      final signedInUser = response.session?.user ?? response.user;
+      if (signedInUser != null && parsedBalance != null) {
+        try {
+          await _upsertUserRow(
+            userId: signedInUser.id,
+            name: _fullName.text.trim(),
+            username: usernameFromEmail,
+            currency: _currency,
+            balance: parsedBalance,
+          );
+          await Supabase.instance.client.auth.updateUser(
+            UserAttributes(data: const {'registration_synced': true}),
+          );
+        } catch (_) {
+          // No session after sign-up (e.g. email confirm) or RLS: first login syncs in main.dart.
+        }
+      }
       if (!mounted) return;
       showInfaqSnack(
         context,
@@ -159,6 +177,25 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _upsertUserRow({
+    required String userId,
+    required String name,
+    required String username,
+    required String? currency,
+    required num? balance,
+  }) async {
+    await Supabase.instance.client.from('users').upsert(
+      <String, Object?>{
+        'id': userId,
+        'name': name,
+        'username': username,
+        'currency': currency ?? 'BHD',
+        'Balance': (balance ?? 0).toDouble(),
+      },
+      onConflict: 'id',
+    );
   }
 
   @override
