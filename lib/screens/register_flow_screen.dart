@@ -22,7 +22,7 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
   final _password = TextEditingController();
 
   String? _currency = 'BHD';
-  String? _incomeType = 'salary';
+  final _balance = TextEditingController();
 
   @override
   void initState() {
@@ -42,6 +42,7 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
     _email.dispose();
     _password.removeListener(_onPasswordChanged);
     _password.dispose();
+    _balance.dispose();
     super.dispose();
   }
 
@@ -112,6 +113,16 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
       return;
     }
 
+    final balanceText = _balance.text.trim();
+    if (balanceText.isEmpty) {
+      showInfaqSnack(context, 'Enter your balance.');
+      return;
+    }
+    if (double.tryParse(balanceText) == null) {
+      showInfaqSnack(context, 'Balance must be a number.');
+      return;
+    }
+
     await _signUp();
   }
 
@@ -129,7 +140,8 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
           'name': _fullName.text.trim(),
           'full_name': _fullName.text.trim(),
           'currency': _currency,
-          'income_type': _incomeType,
+          'balance': num.tryParse(_balance.text.trim()),
+          'monthly_income': num.tryParse(_balance.text.trim()),
         },
       );
       if (!mounted) return;
@@ -287,56 +299,38 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
             ),
           ],
         ),
-        child: DropdownMenu<String>(
-          initialSelection: _currency,
-          onSelected: (v) => setState(() => _currency = v),
-          dropdownMenuEntries: const [
-            DropdownMenuEntry(value: 'BHD', label: 'BHD'),
-            DropdownMenuEntry(value: 'USD', label: 'USD'),
-            DropdownMenuEntry(value: 'EUR', label: 'EUR'),
-            DropdownMenuEntry(value: 'SAR', label: 'SAR'),
-          ],
-          inputDecorationTheme: InputDecorationTheme(
-            filled: true,
-            fillColor: const Color(0xFFF7F8F7),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(28),
-              borderSide: BorderSide.none,
+        child: SizedBox(
+          width: double.infinity,
+          child: DropdownMenu<String>(
+            key: ValueKey<String?>(_currency),
+            initialSelection: _currency,
+            expandedInsets: EdgeInsets.zero,
+            onSelected: (v) => setState(() => _currency = v),
+            dropdownMenuEntries: const [
+              DropdownMenuEntry(value: 'BHD', label: 'BHD'),
+              DropdownMenuEntry(value: 'USD', label: 'USD'),
+              DropdownMenuEntry(value: 'EUR', label: 'EUR'),
+              DropdownMenuEntry(value: 'SAR', label: 'SAR'),
+            ],
+            inputDecorationTheme: InputDecorationTheme(
+              filled: true,
+              fillColor: const Color(0xFFF7F8F7),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(28),
+                borderSide: BorderSide.none,
+              ),
             ),
           ),
         ),
       ),
       const SizedBox(height: 14),
-      const _FieldLabel('income type'),
-      Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x223F5F4A),
-              blurRadius: 14,
-              offset: Offset(0, 6),
-            ),
-          ],
-        ),
-        child: DropdownMenu<String>(
-          initialSelection: _incomeType,
-          onSelected: (v) => setState(() => _incomeType = v),
-          dropdownMenuEntries: const [
-            DropdownMenuEntry(value: 'salary', label: 'Salary'),
-            DropdownMenuEntry(value: 'personal', label: 'Personal'),
-          ],
-          inputDecorationTheme: InputDecorationTheme(
-            filled: true,
-            fillColor: const Color(0xFFF7F8F7),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(28),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
+      const _FieldLabel('Balance'),
+      InfaqPillField(
+        controller: _balance,
+        hintText: '0.00',
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        textInputAction: TextInputAction.done,
       ),
     ];
   }
