@@ -90,20 +90,19 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
   void _cancel() => Navigator.pop(context);
 
   Future<void> _save() async {
-    final name = _nameCtrl.text.trim();
+    final title = _nameCtrl.text.trim();
     final target = double.tryParse(_targetCtrl.text.replaceAll(',', ''));
-    final saved = double.tryParse(_savedCtrl.text.replaceAll(',', '')) ?? 0;
-    final monthly = double.tryParse(_monthlyCtrl.text.replaceAll(',', ''));
+    final current = double.tryParse(_savedCtrl.text.replaceAll(',', '')) ?? 0;
 
-    if (name.isEmpty) {
-      showInfaqSnack(context, 'Enter a name for your goal.');
+    if (title.isEmpty) {
+      showInfaqSnack(context, 'Enter a title for your goal.');
       return;
     }
     if (target == null || target <= 0) {
       showInfaqSnack(context, 'Enter a target amount greater than zero.');
       return;
     }
-    if (saved < 0 || saved > target) {
+    if (current < 0 || current > target) {
       showInfaqSnack(context, 'Current saved amount must be between 0 and the target.');
       return;
     }
@@ -117,28 +116,31 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
     setState(() => _saving = true);
     try {
       final d = _targetDate;
-      final row = <String, dynamic>{
-        'user_id': user.id,
-        'name': name,
-        'target_amount': target,
-        'saved_amount': saved,
-        'target_date':
-            '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}',
-      };
-      if (monthly != null && monthly > 0) {
-        row['monthly_saving_amount'] = monthly;
-      }
+      final deadline =
+          '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-      await Supabase.instance.client.from('goals').insert(row);
+      await Supabase.instance.client.from('goals').insert({
+        'created_by': user.id,
+        'title': title,
+        'target_amount': target,
+        'current_amount': current,
+        'deadline': deadline,
+      });
+
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      showInfaqSnack(
-        context,
-        'Could not save. Run supabase migrations (goals + optional columns). $e',
-      );
+      final msg = e.toString();
+      if (msg.contains('row-level security') || msg.contains('42501')) {
+        showInfaqSnack(
+          context,
+          'Database blocked the save: add RLS policies for goals (see supabase/migrations).',
+        );
+      } else {
+        showInfaqSnack(context, 'Could not save goal: $e');
+      }
     }
   }
 
@@ -172,7 +174,7 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     InfaqLabeledPillField(
-                      label: 'Name',
+                      label: 'Title',
                       child: InfaqPillTextField(
                         controller: _nameCtrl,
                         hintText: 'PhD, new car, emergency fund…',
