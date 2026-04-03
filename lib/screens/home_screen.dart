@@ -5,6 +5,8 @@ import 'package:infaq/ui/infaq_widgets.dart';
 import 'package:infaq/user_profile_sync.dart';
 
 const Color _kPrimary = Color(0xFF3F5F4A);
+/// Center CTA — slightly deeper green like the reference mock (~#3E5C45).
+const Color _kNavCenterGreen = Color(0xFF3E5C45);
 const Color _kHeaderGreen = Color(0xFFE8F2EA);
 const Color _kCardTint = Color(0xFFEEF5F0);
 
@@ -26,6 +28,8 @@ class _HomeScreenState extends State<HomeScreen> {
   double _balance = 0;
   double _spentToday = 0;
   List<Map<String, dynamic>> _transactions = [];
+  /// 0 home, 1 currency, 2 analytics, 3 profile (center + is separate action).
+  int _tabIndex = 0;
 
   @override
   void initState() {
@@ -233,150 +237,138 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       extendBody: true,
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _soon('Voice'),
-        backgroundColor: _kPrimary,
-        foregroundColor: Colors.white,
-        elevation: 4,
-        child: const Icon(Icons.mic_rounded, size: 28),
+      bottomNavigationBar: _InfaqBottomNavBar(
+        tabIndex: _tabIndex,
+        onHome: () => setState(() => _tabIndex = 0),
+        onCurrency: () => setState(() => _tabIndex = 1),
+        onAdd: () => _soon('Add transaction'),
+        onAnalytics: () => setState(() => _tabIndex = 2),
+        onProfile: () => setState(() => _tabIndex = 3),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: BottomAppBar(
-        height: 56,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        shape: const CircularNotchedRectangle(),
+      body: ColoredBox(
         color: Colors.white,
-        elevation: 12,
-        shadowColor: Colors.black26,
-        child: Row(
+        child: IndexedStack(
+          index: _tabIndex,
           children: [
-            IconButton(
-              tooltip: 'Home',
-              onPressed: () {},
-              icon: const Icon(Icons.home_rounded, color: _kPrimary),
-            ),
-            IconButton(
-              tooltip: 'Currency',
-              onPressed: () => _soon('Currency'),
-              icon: Icon(Icons.attach_money_rounded, color: Colors.grey.shade600),
-            ),
-            const Spacer(),
-            SizedBox(width: MediaQuery.sizeOf(context).width * 0.06),
-            const Spacer(),
-            IconButton(
-              tooltip: 'Analytics',
-              onPressed: () => _soon('Analytics'),
-              icon: Icon(Icons.show_chart_rounded, color: Colors.grey.shade600),
-            ),
-            IconButton(
-              tooltip: 'Profile',
-              onPressed: () => _soon('Profile'),
-              icon: Icon(Icons.person_outline_rounded, color: Colors.grey.shade600),
-            ),
-          ],
-        ),
-      ),
-      body: RefreshIndicator(
-        color: _kPrimary,
-        onRefresh: _bootstrap,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(
-              child: Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [_kHeaderGreen, Colors.white],
-                  ),
-                ),
-                child: SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 12, 22, 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _greetingLine(),
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.black.withValues(alpha: 0.55),
-                                  fontWeight: FontWeight.w600,
+            RefreshIndicator(
+              color: _kPrimary,
+              onRefresh: _bootstrap,
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Container(
+                      width: double.infinity,
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [_kHeaderGreen, Colors.white],
+                        ),
+                      ),
+                      child: SafeArea(
+                        bottom: false,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(22, 12, 22, 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      _greetingLine(),
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.black.withValues(alpha: 0.55),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Sign out',
+                                    onPressed: () => Supabase.instance.client.auth.signOut(),
+                                    icon: const Icon(Icons.logout_rounded, color: _kPrimary),
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                _firstName(),
+                                style: const TextStyle(
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.w800,
+                                  color: _kPrimary,
                                 ),
                               ),
-                            ),
-                            IconButton(
-                              tooltip: 'Sign out',
-                              onPressed: () => Supabase.instance.client.auth.signOut(),
-                              icon: const Icon(Icons.logout_rounded, color: _kPrimary),
-                            ),
-                          ],
-                        ),
-                        Text(
-                          _firstName(),
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w800,
-                            color: _kPrimary,
+                              const SizedBox(height: 18),
+                              _SummaryCard(
+                                monthLabel: _monthYearLabel(),
+                                dateDayLabel: _todayLabel(),
+                                spentToday: _spentToday,
+                                balance: _balance,
+                                remainingLabel: remainingLabel,
+                                progress: progress,
+                                format: _fmtMoney,
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 18),
-                        _SummaryCard(
-                          monthLabel: _monthYearLabel(),
-                          dateDayLabel: _todayLabel(),
-                          spentToday: _spentToday,
-                          balance: _balance,
-                          remainingLabel: remainingLabel,
-                          progress: progress,
-                          format: _fmtMoney,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(22, 22, 22, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Services',
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 14),
+                          _ServicesGrid(onTap: _soon),
+                          const SizedBox(height: 28),
+                          _SectionHeader(
+                            title: 'Insights',
+                            action: 'View all',
+                            onAction: () => _soon('Insights'),
+                          ),
+                          const SizedBox(height: 12),
+                          _InsightsPlaceholder(),
+                          const SizedBox(height: 28),
+                          _SectionHeader(
+                            title: 'Recent transactions',
+                            action: 'View all',
+                            onAction: () => _soon('Transactions'),
+                          ),
+                          const SizedBox(height: 12),
+                          _TransactionsList(
+                            transactions: _transactions,
+                            format: _fmtMoney,
+                          ),
+                          const SizedBox(height: 120),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(22, 22, 22, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Services',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 14),
-                    _ServicesGrid(onTap: _soon),
-                    const SizedBox(height: 28),
-                    _SectionHeader(
-                      title: 'Insights',
-                      action: 'View all',
-                      onAction: () => _soon('Insights'),
-                    ),
-                    const SizedBox(height: 12),
-                    _InsightsPlaceholder(),
-                    const SizedBox(height: 28),
-                    _SectionHeader(
-                      title: 'Recent transactions',
-                      action: 'View all',
-                      onAction: () => _soon('Transactions'),
-                    ),
-                    const SizedBox(height: 12),
-                    _TransactionsList(
-                      transactions: _transactions,
-                      format: _fmtMoney,
-                    ),
-                    const SizedBox(height: 88),
-                  ],
-                ),
-              ),
+            _PlaceholderTab(
+              title: 'Currency',
+              subtitle: 'Balances and exchange — ${_currency ?? 'BHD'}',
+              onBackHome: () => setState(() => _tabIndex = 0),
+            ),
+            _PlaceholderTab(
+              title: 'Analytics',
+              subtitle: 'Spending trends and insights will live here.',
+              onBackHome: () => setState(() => _tabIndex = 0),
+            ),
+            _PlaceholderTab(
+              title: 'Profile',
+              subtitle: _name != null && _name!.isNotEmpty ? _name! : 'Your account',
+              onBackHome: () => setState(() => _tabIndex = 0),
             ),
           ],
         ),
@@ -409,6 +401,206 @@ class _HomeScreenState extends State<HomeScreen> {
     // weekday 1 = Monday
     final wd = days[d.weekday - 1];
     return '$wd, ${d.day}/${d.month}/${d.year}';
+  }
+}
+
+class _InfaqBottomNavBar extends StatelessWidget {
+  const _InfaqBottomNavBar({
+    required this.tabIndex,
+    required this.onHome,
+    required this.onCurrency,
+    required this.onAdd,
+    required this.onAnalytics,
+    required this.onProfile,
+  });
+
+  final int tabIndex;
+  final VoidCallback onHome;
+  final VoidCallback onCurrency;
+  final VoidCallback onAdd;
+  final VoidCallback onAnalytics;
+  final VoidCallback onProfile;
+
+  Color _iconMuted(bool selected) => selected ? _kPrimary : const Color(0xFF4A5450);
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 24,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+        child: SizedBox(
+          height: 68,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _NavIconButton(
+                          tooltip: 'Home',
+                          selected: tabIndex == 0,
+                          onPressed: onHome,
+                          child: Icon(
+                            Icons.home_outlined,
+                            size: 26,
+                            color: _iconMuted(tabIndex == 0),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: _NavIconButton(
+                          tooltip: 'Currency',
+                          selected: tabIndex == 1,
+                          onPressed: onCurrency,
+                          child: Text(
+                            r'$',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w600,
+                              color: tabIndex == 1 ? _kPrimary : const Color(0xFF5A6B62),
+                              height: 1,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 64),
+                      Expanded(
+                        child: _NavIconButton(
+                          tooltip: 'Analytics',
+                          selected: tabIndex == 2,
+                          onPressed: onAnalytics,
+                          child: Icon(
+                            Icons.show_chart_rounded,
+                            size: 26,
+                            color: _iconMuted(tabIndex == 2),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: _NavIconButton(
+                          tooltip: 'Profile',
+                          selected: tabIndex == 3,
+                          onPressed: onProfile,
+                          child: Icon(
+                            Icons.person_outline_rounded,
+                            size: 26,
+                            color: _iconMuted(tabIndex == 3),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Transform.translate(
+                offset: const Offset(0, -18),
+                child: Material(
+                  color: _kNavCenterGreen,
+                  borderRadius: BorderRadius.circular(20),
+                  elevation: 6,
+                  shadowColor: Colors.black38,
+                  child: InkWell(
+                    onTap: onAdd,
+                    borderRadius: BorderRadius.circular(20),
+                    child: const SizedBox(
+                      width: 58,
+                      height: 58,
+                      child: Icon(Icons.add, color: Colors.white, size: 30),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavIconButton extends StatelessWidget {
+  const _NavIconButton({
+    required this.tooltip,
+    required this.selected,
+    required this.onPressed,
+    required this.child,
+  });
+
+  final String tooltip;
+  final bool selected;
+  final VoidCallback onPressed;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkResponse(
+        onTap: onPressed,
+        radius: 28,
+        child: SizedBox(
+          height: 48,
+          child: Center(child: child),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlaceholderTab extends StatelessWidget {
+  const _PlaceholderTab({
+    required this.title,
+    required this.subtitle,
+    required this.onBackHome,
+  });
+
+  final String title;
+  final String subtitle;
+  final VoidCallback onBackHome;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextButton.icon(
+              onPressed: onBackHome,
+              icon: const Icon(Icons.arrow_back_ios_rounded, size: 18),
+              label: const Text('Home'),
+              style: TextButton.styleFrom(foregroundColor: _kPrimary),
+            ),
+            const SizedBox(height: 24),
+            Text(title, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              style: TextStyle(fontSize: 15, color: Colors.black.withValues(alpha: 0.55), height: 1.35),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
