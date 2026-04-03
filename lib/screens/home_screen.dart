@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:infaq/screens/add_goal_screen.dart';
+import 'package:infaq/screens/add_subscription_screen.dart';
+import 'package:infaq/screens/add_transaction_screen.dart';
+import 'package:infaq/screens/manage_categories_screen.dart';
+import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 import 'package:infaq/user_profile_sync.dart';
 
 const Color _kPrimary = Color(0xFF3F5F4A);
-/// Center CTA — slightly deeper green like the reference mock (~#3E5C45).
-const Color _kNavCenterGreen = Color(0xFF3E5C45);
 const Color _kHeaderGreen = Color(0xFFE8F2EA);
 const Color _kCardTint = Color(0xFFEEF5F0);
 
@@ -119,12 +122,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<List<Map<String, dynamic>>> _fetchRecentTransactions(String userId) async {
     try {
-      final res = await Supabase.instance.client
-          .from('transactions')
-          .select()
-          .eq('user_id', userId)
-          .order('created_at', ascending: false)
-          .limit(100);
+      dynamic res;
+      try {
+        res = await Supabase.instance.client
+            .from('transactions')
+            .select('id, amount, description, date, created_at, category_id, categories(name, type)')
+            .eq('user_id', userId)
+            .order('created_at', ascending: false)
+            .limit(100);
+      } catch (_) {
+        res = await Supabase.instance.client
+            .from('transactions')
+            .select()
+            .eq('user_id', userId)
+            .order('created_at', ascending: false)
+            .limit(100);
+      }
       final list = res as List<dynamic>;
       return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
     } catch (_) {
@@ -137,17 +150,28 @@ class _HomeScreenState extends State<HomeScreen> {
     final start = DateTime(today.year, today.month, today.day);
     var sum = 0.0;
     for (final r in rows) {
-      final createdRaw = r['created_at'] ?? r['date'];
+      final createdRaw = r['date'] ?? r['created_at'];
       if (createdRaw == null) continue;
       final d = DateTime.tryParse(createdRaw.toString());
-      if (d == null || d.isBefore(start)) continue;
+      if (d == null) continue;
+      final day = DateTime(d.year, d.month, d.day);
+      if (day.isBefore(start)) continue;
 
-      final type = (r['type'] ?? r['transaction_type'] ?? '').toString().toLowerCase();
       final amount = _readAmount(r['amount']);
-      if (type == 'expense' || type == 'debit' || type == 'out') {
+      final cat = r['categories'];
+      String? catType;
+      if (cat is Map) {
+        catType = cat['type']?.toString().toLowerCase();
+      }
+      if (catType == 'expense') {
         sum += amount.abs();
-      } else if (type.isEmpty && amount < 0) {
-        sum += amount.abs();
+      } else if (catType == null || catType.isEmpty) {
+        final type = (r['type'] ?? r['transaction_type'] ?? '').toString().toLowerCase();
+        if (type == 'expense' || type == 'debit' || type == 'out') {
+          sum += amount.abs();
+        } else if (type.isEmpty && amount < 0) {
+          sum += amount.abs();
+        }
       }
     }
     return sum;
@@ -200,6 +224,130 @@ class _HomeScreenState extends State<HomeScreen> {
     showInfaqSnack(context, '$label — coming soon');
   }
 
+  Future<void> _openAddTransaction({bool? initialIncome}) async {
+    final result = await Navigator.of(context).push<dynamic>(
+      MaterialPageRoute<void>(
+        builder: (context) => AddTransactionScreen(
+          currencyCode: _currency,
+          initialIncome: initialIncome,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (result == true) {
+      await _bootstrap();
+    } else if (result is int && result >= 0 && result <= 3) {
+      setState(() => _tabIndex = result);
+    }
+  }
+
+  Future<void> _openEditTransaction(Map<String, dynamic> row) async {
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (context) => AddTransactionScreen(
+          currencyCode: _currency,
+          existingTransaction: row,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (result == true) await _bootstrap();
+  }
+
+  Future<void> _confirmDeleteTransaction(Map<String, dynamic> row) async {
+    final id = row['id']?.toString();
+    if (id == null || id.isEmpty) return;
+
+    final title = (row['description'] ?? 'This transaction').toString();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete transaction?'),
+        content: Text(
+          title.length > 80 ? '${title.substring(0, 80)}…' : title,
+          style: TextStyle(color: Colors.black.withValues(alpha: 0.7)),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    try {
+      await Supabase.instance.client.from('transactions').delete().eq('id', id).eq('user_id', user.id);
+      if (!mounted) return;
+      await _bootstrap();
+      if (mounted) showInfaqSnack(context, 'Transaction deleted');
+    } catch (e) {
+      if (mounted) showInfaqSnack(context, 'Could not delete: $e');
+    }
+  }
+
+  Future<void> _openAddSubscription() async {
+    final result = await Navigator.of(context).push<dynamic>(
+      MaterialPageRoute<void>(
+        builder: (context) => AddSubscriptionScreen(currencyCode: _currency),
+      ),
+    );
+    if (!mounted) return;
+    if (result == true) {
+      await _bootstrap();
+    } else if (result is int && result >= 0 && result <= 3) {
+      setState(() => _tabIndex = result);
+    }
+  }
+
+  Future<void> _openAddGoal() async {
+    final result = await Navigator.of(context).push<dynamic>(
+      MaterialPageRoute<void>(
+        builder: (context) => AddGoalScreen(currencyCode: _currency),
+      ),
+    );
+    if (!mounted) return;
+    if (result == true) {
+      await _bootstrap();
+    } else if (result is int && result >= 0 && result <= 3) {
+      setState(() => _tabIndex = result);
+    }
+  }
+
+  Future<void> _openManageCategories() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (context) => const ManageCategoriesScreen()),
+    );
+  }
+
+  void _onServiceTap(String key) {
+    switch (key) {
+      case 'income':
+        _openAddTransaction(initialIncome: true);
+        break;
+      case 'expense':
+        _openAddTransaction(initialIncome: false);
+        break;
+      case 'subs':
+        _openAddSubscription();
+        break;
+      case 'goals':
+        _openAddGoal();
+        break;
+      case 'categories':
+        _openManageCategories();
+        break;
+      default:
+        _soon(key);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -237,11 +385,11 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       extendBody: true,
-      bottomNavigationBar: _InfaqBottomNavBar(
+      bottomNavigationBar: InfaqBottomNavBar(
         tabIndex: _tabIndex,
         onHome: () => setState(() => _tabIndex = 0),
         onCurrency: () => setState(() => _tabIndex = 1),
-        onAdd: () => _soon('Add transaction'),
+        onAdd: _openAddTransaction,
         onAnalytics: () => setState(() => _tabIndex = 2),
         onProfile: () => setState(() => _tabIndex = 3),
       ),
@@ -327,7 +475,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
                           ),
                           const SizedBox(height: 14),
-                          _ServicesGrid(onTap: _soon),
+                          _ServicesGrid(onServiceTap: _onServiceTap),
                           const SizedBox(height: 28),
                           _SectionHeader(
                             title: 'Insights',
@@ -346,6 +494,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           _TransactionsList(
                             transactions: _transactions,
                             format: _fmtMoney,
+                            onEdit: _openEditTransaction,
+                            onDelete: _confirmDeleteTransaction,
                           ),
                           const SizedBox(height: 120),
                         ],
@@ -401,167 +551,6 @@ class _HomeScreenState extends State<HomeScreen> {
     // weekday 1 = Monday
     final wd = days[d.weekday - 1];
     return '$wd, ${d.day}/${d.month}/${d.year}';
-  }
-}
-
-class _InfaqBottomNavBar extends StatelessWidget {
-  const _InfaqBottomNavBar({
-    required this.tabIndex,
-    required this.onHome,
-    required this.onCurrency,
-    required this.onAdd,
-    required this.onAnalytics,
-    required this.onProfile,
-  });
-
-  final int tabIndex;
-  final VoidCallback onHome;
-  final VoidCallback onCurrency;
-  final VoidCallback onAdd;
-  final VoidCallback onAnalytics;
-  final VoidCallback onProfile;
-
-  Color _iconMuted(bool selected) => selected ? _kPrimary : const Color(0xFF4A5450);
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
-              blurRadius: 24,
-              offset: const Offset(0, -4),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-        child: SizedBox(
-          height: 68,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.center,
-            children: [
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _NavIconButton(
-                          tooltip: 'Home',
-                          selected: tabIndex == 0,
-                          onPressed: onHome,
-                          child: Icon(
-                            Icons.home_outlined,
-                            size: 26,
-                            color: _iconMuted(tabIndex == 0),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: _NavIconButton(
-                          tooltip: 'Currency',
-                          selected: tabIndex == 1,
-                          onPressed: onCurrency,
-                          child: Text(
-                            r'$',
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w600,
-                              color: tabIndex == 1 ? _kPrimary : const Color(0xFF5A6B62),
-                              height: 1,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 64),
-                      Expanded(
-                        child: _NavIconButton(
-                          tooltip: 'Analytics',
-                          selected: tabIndex == 2,
-                          onPressed: onAnalytics,
-                          child: Icon(
-                            Icons.show_chart_rounded,
-                            size: 26,
-                            color: _iconMuted(tabIndex == 2),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: _NavIconButton(
-                          tooltip: 'Profile',
-                          selected: tabIndex == 3,
-                          onPressed: onProfile,
-                          child: Icon(
-                            Icons.person_outline_rounded,
-                            size: 26,
-                            color: _iconMuted(tabIndex == 3),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Transform.translate(
-                offset: const Offset(0, -18),
-                child: Material(
-                  color: _kNavCenterGreen,
-                  borderRadius: BorderRadius.circular(20),
-                  elevation: 6,
-                  shadowColor: Colors.black38,
-                  child: InkWell(
-                    onTap: onAdd,
-                    borderRadius: BorderRadius.circular(20),
-                    child: const SizedBox(
-                      width: 58,
-                      height: 58,
-                      child: Icon(Icons.add, color: Colors.white, size: 30),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NavIconButton extends StatelessWidget {
-  const _NavIconButton({
-    required this.tooltip,
-    required this.selected,
-    required this.onPressed,
-    required this.child,
-  });
-
-  final String tooltip;
-  final bool selected;
-  final VoidCallback onPressed;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: InkResponse(
-        onTap: onPressed,
-        radius: 28,
-        child: SizedBox(
-          height: 48,
-          child: Center(child: child),
-        ),
-      ),
-    );
   }
 }
 
@@ -737,19 +726,19 @@ class _SummaryCard extends StatelessWidget {
 }
 
 class _ServicesGrid extends StatelessWidget {
-  const _ServicesGrid({required this.onTap});
+  const _ServicesGrid({required this.onServiceTap});
 
-  final void Function(String label) onTap;
+  final void Function(String serviceKey) onServiceTap;
 
   @override
   Widget build(BuildContext context) {
-    final items = [
-      (Icons.south_west_rounded, 'Income', 'Income'),
-      (Icons.north_east_rounded, 'Expense', 'Expense'),
-      (Icons.subscriptions_outlined, 'Subs', 'Subscriptions'),
-      (Icons.track_changes_rounded, 'Goals', 'Goals'),
-      (Icons.grid_view_rounded, 'Categories', 'Categories'),
-      (Icons.edit_calendar_rounded, 'Edit', 'Edits'),
+    final items = <(IconData, String, String)>[
+      (Icons.south_west_rounded, 'Income', 'income'),
+      (Icons.north_east_rounded, 'Expense', 'expense'),
+      (Icons.subscriptions_outlined, 'Subs', 'subs'),
+      (Icons.track_changes_rounded, 'Goals', 'goals'),
+      (Icons.grid_view_rounded, 'Categories', 'categories'),
+      (Icons.edit_calendar_rounded, 'Edit', 'edits'),
     ];
 
     return LayoutBuilder(
@@ -763,13 +752,13 @@ class _ServicesGrid extends StatelessWidget {
           spacing: spacing,
           runSpacing: spacing,
           children: [
-            for (final (icon, short, full) in items)
+            for (final (icon, short, key) in items)
               SizedBox(
                 width: cell,
                 child: _ServiceTile(
                   icon: icon,
                   label: short,
-                  onTap: () => onTap(full),
+                  onTap: () => onServiceTap(key),
                 ),
               ),
           ],
@@ -944,10 +933,14 @@ class _TransactionsList extends StatelessWidget {
   const _TransactionsList({
     required this.transactions,
     required this.format,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   final List<Map<String, dynamic>> transactions;
   final String Function(double) format;
+  final void Function(Map<String, dynamic> row) onEdit;
+  final void Function(Map<String, dynamic> row) onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -970,17 +963,30 @@ class _TransactionsList extends StatelessWidget {
 
     return Column(
       children: [
-        for (final t in transactions.take(8)) _TxRow(data: t, format: format),
+        for (final t in transactions.take(8))
+          _TxRow(
+            data: t,
+            format: format,
+            onEdit: () => onEdit(t),
+            onDelete: () => onDelete(t),
+          ),
       ],
     );
   }
 }
 
 class _TxRow extends StatelessWidget {
-  const _TxRow({required this.data, required this.format});
+  const _TxRow({
+    required this.data,
+    required this.format,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   final Map<String, dynamic> data;
   final String Function(double) format;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -990,7 +996,11 @@ class _TxRow extends StatelessWidget {
             data['name'] ??
             'Transaction')
         .toString();
-    final category = (data['category'] ?? data['category_name'] ?? '').toString();
+    var category = (data['category'] ?? data['category_name'] ?? '').toString();
+    final catMap = data['categories'];
+    if (catMap is Map && (catMap['name']?.toString().isNotEmpty ?? false)) {
+      category = catMap['name'].toString();
+    }
     final createdRaw = data['created_at'] ?? data['date'];
     final d = createdRaw != null ? DateTime.tryParse(createdRaw.toString()) : null;
     final sub = [
@@ -999,14 +1009,25 @@ class _TxRow extends StatelessWidget {
     ].join(' · ');
 
     final amount = _parseAmount(data['amount']);
-    final type = (data['type'] ?? data['transaction_type'] ?? '').toString().toLowerCase();
-    final isExpense =
-        type == 'expense' || type == 'debit' || type == 'out' || (type.isEmpty && amount < 0);
+    String? catType;
+    if (catMap is Map) {
+      catType = catMap['type']?.toString().toLowerCase();
+    }
+    final legacyType = (data['type'] ?? data['transaction_type'] ?? '').toString().toLowerCase();
+    final isExpense = catType == 'expense' ||
+        (catType == null &&
+            (legacyType == 'expense' ||
+                legacyType == 'debit' ||
+                legacyType == 'out' ||
+                (legacyType.isEmpty && amount < 0)));
     final displayAmount = isExpense ? -amount.abs() : amount.abs();
+    final txId = data['id']?.toString();
+    final canMutate = txId != null && txId.isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
             width: 46,
@@ -1046,6 +1067,24 @@ class _TxRow extends StatelessWidget {
               color: isExpense ? Colors.red.shade700 : _kPrimary,
             ),
           ),
+          if (canMutate) ...[
+            IconButton(
+              tooltip: 'Edit',
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit_outlined, color: _kPrimary, size: 22),
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              padding: EdgeInsets.zero,
+            ),
+            IconButton(
+              tooltip: 'Delete',
+              onPressed: onDelete,
+              icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade700, size: 22),
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              padding: EdgeInsets.zero,
+            ),
+          ],
         ],
       ),
     );
