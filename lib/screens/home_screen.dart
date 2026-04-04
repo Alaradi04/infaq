@@ -4,7 +4,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:infaq/screens/add_goal_screen.dart';
 import 'package:infaq/screens/add_subscription_screen.dart';
 import 'package:infaq/screens/add_transaction_screen.dart';
+import 'package:infaq/screens/edit_profile_screen.dart';
 import 'package:infaq/screens/manage_categories_screen.dart';
+import 'package:infaq/screens/management_screen.dart';
+import 'package:infaq/screens/profile_tab_screen.dart';
+import 'package:infaq/profile/avatar_storage.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 import 'package:infaq/user_profile_sync.dart';
@@ -31,6 +35,11 @@ class _HomeScreenState extends State<HomeScreen> {
   double _balance = 0;
   double _spentToday = 0;
   List<Map<String, dynamic>> _transactions = [];
+  /// Incremented after each successful `_bootstrap()` so [ManagementScreen] reloads its transaction list.
+  int _transactionsListRefreshToken = 0;
+  String? _profilePhotoStoragePath;
+  String? _profileAvatarPublicUrl;
+
   /// 0 home, 1 currency, 2 analytics, 3 profile (center + is separate action).
   int _tabIndex = 0;
 
@@ -52,7 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       var profile = await supabase
           .from('users')
-          .select('name,username,currency,Balance')
+          .select('name,username,currency,Balance,profile_photo_path')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -87,7 +96,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
         profile = await supabase
             .from('users')
-            .select('name,username,currency,Balance')
+            .select('name,username,currency,Balance,profile_photo_path')
             .eq('id', user.id)
             .maybeSingle();
       }
@@ -96,12 +105,16 @@ class _HomeScreenState extends State<HomeScreen> {
       final spent = _computeSpentToday(tx);
 
       if (!mounted) return;
+      final photoPath = (profile?['profile_photo_path'] as String?)?.trim();
       setState(() {
         _name = (profile?['name'] as String?)?.trim();
         _currency = (profile?['currency'] as String?)?.trim() ?? 'BHD';
         _balance = _readBalance(profile?['Balance']);
         _transactions = tx;
         _spentToday = spent;
+        _transactionsListRefreshToken++;
+        _profilePhotoStoragePath = photoPath != null && photoPath.isNotEmpty ? photoPath : null;
+        _profileAvatarPublicUrl = InfaqAvatarStorage.publicUrl(supabase, _profilePhotoStoragePath);
         _loading = false;
         _error = null;
       });
@@ -320,6 +333,23 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _openEditProfile() async {
+    final u = Supabase.instance.client.auth.currentUser;
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (context) => EditProfileScreen(
+          initialName: _name,
+          initialCurrency: _currency,
+          initialIncomeType: u?.userMetadata?['income_type']?.toString(),
+          initialProfilePhotoPath: _profilePhotoStoragePath,
+          initialAvatarPublicUrl: _profileAvatarPublicUrl,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (changed == true) await _bootstrap();
+  }
+
   Future<void> _openManageCategories() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(builder: (context) => const ManageCategoriesScreen()),
@@ -505,20 +535,25 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-            _PlaceholderTab(
-              title: 'Currency',
-              subtitle: 'Balances and exchange — ${_currency ?? 'BHD'}',
-              onBackHome: () => setState(() => _tabIndex = 0),
+            ManagementScreen(
+              currencyCode: _currency,
+              initialMonthlyBudget: _balance,
+              transactionsListRefreshToken: _transactionsListRefreshToken,
+              onDataChanged: _bootstrap,
+              onEditTransaction: _openEditTransaction,
             ),
             _PlaceholderTab(
               title: 'Analytics',
               subtitle: 'Spending trends and insights will live here.',
               onBackHome: () => setState(() => _tabIndex = 0),
             ),
-            _PlaceholderTab(
-              title: 'Profile',
-              subtitle: _name != null && _name!.isNotEmpty ? _name! : 'Your account',
-              onBackHome: () => setState(() => _tabIndex = 0),
+            ProfileTabScreen(
+              displayName: _name,
+              avatarPublicUrl: _profileAvatarPublicUrl,
+              onOpenEditProfile: _openEditProfile,
+              onDataRefresh: _bootstrap,
+              onHelpAndSupport: () => _soon('Help and support'),
+              onDataAndPrivacy: () => _soon('Data and privacy'),
             ),
           ],
         ),
