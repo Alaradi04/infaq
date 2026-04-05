@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:infaq/profile/subscription_icon_storage.dart';
 import 'package:infaq/screens/add_goal_screen.dart';
 import 'package:infaq/screens/add_subscription_screen.dart';
+import 'package:infaq/screens/edit_subscription_screen.dart';
+import 'package:infaq/subscription/subscription_analytics.dart';
+import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
 const Color _kMgmtMint = Color(0xFFE6F4EA);
-const Color _kPrimary = Color(0xFF3F5F4A);
+const Color _kSubTabCream = Color(0xFFFFF6E8);
+
+enum _SubFilter { all, activeOnly, inactiveOnly }
+
+enum _SubSort { none, amountHigh, amountLow, nameAz }
 
 enum _MgmtMainTab { transactions, subscriptions, goals }
 
@@ -59,6 +67,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
   /// `null` = all categories; [_kUncategorizedCategoryKey] = no category; else exact `categories.name`.
   String? _categoryFilterKey;
 
+  String _subSearchQuery = '';
+  _SubFilter _subFilter = _SubFilter.all;
+  _SubSort _subSort = _SubSort.none;
+
   List<Map<String, dynamic>> _transactions = [];
   List<Map<String, dynamic>> _subscriptions = [];
   List<Map<String, dynamic>> _goals = [];
@@ -82,6 +94,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
     }
     if (oldWidget.transactionsListRefreshToken != widget.transactionsListRefreshToken) {
       _loadTransactions();
+      _loadSubscriptions();
     }
   }
 
@@ -351,7 +364,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
   Future<void> _pickPeriodMode() async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) {
         return SafeArea(
@@ -499,7 +512,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
         title: const Text('Delete transaction?'),
         content: Text(
           title.length > 80 ? '${title.substring(0, 80)}…' : title,
-          style: TextStyle(color: Colors.black.withValues(alpha: 0.7)),
+          style: TextStyle(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.72)),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -529,21 +542,27 @@ class _ManagementScreenState extends State<ManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final spent = _totalSpentInPeriod();
     final budget = _monthlyBudget;
     final progress = budget > 0 ? (spent / budget).clamp(0.0, 1.0) : 0.0;
     final remaining = budget - spent;
 
+    final headerTint = _mainTab == _MgmtMainTab.subscriptions
+        ? (isDark ? Color.lerp(cs.tertiaryContainer, cs.surface, 0.35)! : _kSubTabCream)
+        : (isDark ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)! : _kMgmtMint);
+
     return ColoredBox(
-      color: Colors.white,
+      color: cs.surface,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
             width: double.infinity,
-            decoration: const BoxDecoration(
-              color: _kMgmtMint,
-              borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
+            decoration: BoxDecoration(
+              color: headerTint,
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
             ),
             child: SafeArea(
               bottom: false,
@@ -554,14 +573,14 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   children: [
                     Row(
                       children: [
-                        const Text(
+                        Text(
                           'Management',
-                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: _kPrimary),
+                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: cs.primary),
                         ),
                         const Spacer(),
                         IconButton(
                           onPressed: _pickPeriodMode,
-                          icon: const Icon(Icons.schedule_rounded, color: _kPrimary),
+                          icon: Icon(Icons.schedule_rounded, color: cs.primary),
                           tooltip: 'Date range',
                         ),
                       ],
@@ -578,7 +597,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
           ),
           Expanded(
             child: RefreshIndicator(
-              color: _kPrimary,
+              color: cs.primary,
               onRefresh: _refreshAll,
               child: _mainTab == _MgmtMainTab.transactions
                   ? _buildTransactionsTab(
@@ -604,7 +623,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
     required double remaining,
   }) {
     if (_loadingTx) {
-      return ListView(children: [SizedBox(height: 120), Center(child: CircularProgressIndicator(color: _kPrimary))]);
+      return ListView(children: [
+        SizedBox(height: 120),
+        Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
+      ]);
     }
 
     final list = _filteredTransactions;
@@ -641,6 +663,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
           onType: () => _showTypeSheet(),
           onFilter: _showCategoryFilterSheet,
           onSort: () => _showSortSheet(),
+          showTypeButton: true,
         ),
         const SizedBox(height: 14),
         if (list.isEmpty)
@@ -649,7 +672,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
             child: Text(
               'No transactions for this view. Change filters or add a transaction.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.black.withValues(alpha: 0.5)),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55)),
             ),
           )
         else
@@ -667,7 +690,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
   void _showTypeSheet() {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => SafeArea(
         child: Column(
@@ -726,17 +749,18 @@ class _ManagementScreenState extends State<ManagementScreen> {
 
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) {
+        final sheetOn = Theme.of(ctx).colorScheme.onSurface;
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
                 title: const Text('Category', style: TextStyle(fontWeight: FontWeight.w800)),
-                subtitle: Text('For: $typeLabel', style: TextStyle(color: Colors.black.withValues(alpha: 0.45), fontSize: 13)),
+                subtitle: Text('For: $typeLabel', style: TextStyle(color: sheetOn.withValues(alpha: 0.55), fontSize: 13)),
               ),
               Flexible(
                 child: ListView(
@@ -784,7 +808,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
   void _showSortSheet() {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => SafeArea(
         child: Column(
@@ -824,59 +848,330 @@ class _ManagementScreenState extends State<ManagementScreen> {
     );
   }
 
-  Widget _buildSubscriptionsTab() {
-    if (_loadingSub) {
-      return ListView(children: [SizedBox(height: 120), Center(child: CircularProgressIndicator(color: _kPrimary))]);
+  List<Map<String, dynamic>> get _filteredSubscriptionsList {
+    var list = List<Map<String, dynamic>>.from(_subscriptions);
+    final q = _subSearchQuery.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      list = list.where((s) => (s['name'] ?? '').toString().toLowerCase().contains(q)).toList();
     }
-    if (_subscriptions.isEmpty) {
-      return ListView(
-        children: [
-          const SizedBox(height: 48),
-          Center(
-            child: Column(
-              children: [
-                Text('No subscriptions yet', style: TextStyle(color: Colors.black.withValues(alpha: 0.5))),
-                const SizedBox(height: 12),
-                FilledButton(
-                  onPressed: () async {
-                    final ok =
-                        await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => AddSubscriptionScreen(currencyCode: widget.currencyCode)));
-                    if (ok == true && mounted) await _loadSubscriptions();
-                  },
-                  style: FilledButton.styleFrom(backgroundColor: _kPrimary),
-                  child: const Text('Add subscription'),
-                ),
-              ],
+    switch (_subFilter) {
+      case _SubFilter.activeOnly:
+        list = list.where((s) => parseSubscriptionIsActive(s['is_active'])).toList();
+        break;
+      case _SubFilter.inactiveOnly:
+        list = list.where((s) => !parseSubscriptionIsActive(s['is_active'])).toList();
+        break;
+      case _SubFilter.all:
+        break;
+    }
+    switch (_subSort) {
+      case _SubSort.amountHigh:
+        list.sort((a, b) => _readAmount(b['amount']).compareTo(_readAmount(a['amount'])));
+        break;
+      case _SubSort.amountLow:
+        list.sort((a, b) => _readAmount(a['amount']).compareTo(_readAmount(b['amount'])));
+        break;
+      case _SubSort.nameAz:
+        list.sort(
+          (a, b) =>
+              (a['name'] ?? '').toString().toLowerCase().compareTo((b['name'] ?? '').toString().toLowerCase()),
+        );
+        break;
+      case _SubSort.none:
+        break;
+    }
+    return list;
+  }
+
+  String _subscriptionSubtitle(Map<String, dynamic> s) {
+    final cycle = (s['billing_cycle'] ?? 'monthly').toString().toLowerCase();
+    final cycleLabel = cycle == 'yearly' ? 'Yearly' : 'Monthly';
+    final raw = s['next_payment'] ?? s['next_payment_date'];
+    final d = raw != null ? DateTime.tryParse(raw.toString()) : null;
+    final datePart = d != null ? formatGoalDateLong(d) : '—';
+    return '$cycleLabel - $datePart';
+  }
+
+  Future<void> _openEditSubscription(Map<String, dynamic> s) async {
+    if (_loadingTx) await _loadTransactions();
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => EditSubscriptionScreen(
+          subscription: Map<String, dynamic>.from(s),
+          allTransactions: List<Map<String, dynamic>>.from(_transactions),
+          currencyCode: widget.currencyCode,
+        ),
+      ),
+    );
+    if (changed == true && mounted) {
+      await _loadSubscriptions();
+      widget.onDataChanged();
+    }
+  }
+
+  void _showSubFilterSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(title: Text('Filter', style: TextStyle(fontWeight: FontWeight.w800))),
+            RadioListTile<_SubFilter>(
+              title: const Text('All'),
+              value: _SubFilter.all,
+              groupValue: _subFilter,
+              onChanged: (v) {
+                setState(() => _subFilter = v ?? _SubFilter.all);
+                Navigator.pop(ctx);
+              },
             ),
-          ),
-        ],
+            RadioListTile<_SubFilter>(
+              title: const Text('Active only'),
+              value: _SubFilter.activeOnly,
+              groupValue: _subFilter,
+              onChanged: (v) {
+                setState(() => _subFilter = v ?? _SubFilter.activeOnly);
+                Navigator.pop(ctx);
+              },
+            ),
+            RadioListTile<_SubFilter>(
+              title: const Text('Inactive only'),
+              value: _SubFilter.inactiveOnly,
+              groupValue: _subFilter,
+              onChanged: (v) {
+                setState(() => _subFilter = v ?? _SubFilter.inactiveOnly);
+                Navigator.pop(ctx);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSubSortSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(title: Text('Sort', style: TextStyle(fontWeight: FontWeight.w800))),
+            RadioListTile<_SubSort>(
+              title: const Text('Default'),
+              value: _SubSort.none,
+              groupValue: _subSort,
+              onChanged: (v) {
+                setState(() => _subSort = v ?? _SubSort.none);
+                Navigator.pop(ctx);
+              },
+            ),
+            RadioListTile<_SubSort>(
+              title: const Text('Amount (high to low)'),
+              value: _SubSort.amountHigh,
+              groupValue: _subSort,
+              onChanged: (v) {
+                setState(() => _subSort = v ?? _SubSort.amountHigh);
+                Navigator.pop(ctx);
+              },
+            ),
+            RadioListTile<_SubSort>(
+              title: const Text('Amount (low to high)'),
+              value: _SubSort.amountLow,
+              groupValue: _subSort,
+              onChanged: (v) {
+                setState(() => _subSort = v ?? _SubSort.amountLow);
+                Navigator.pop(ctx);
+              },
+            ),
+            RadioListTile<_SubSort>(
+              title: const Text('Name (A–Z)'),
+              value: _SubSort.nameAz,
+              groupValue: _subSort,
+              onChanged: (v) {
+                setState(() => _subSort = v ?? _SubSort.nameAz);
+                Navigator.pop(ctx);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _subscriptionSquircleIcon(Map<String, dynamic> s) {
+    final resolved = InfaqSubscriptionIconStorage.resolveDisplayUrl(
+      Supabase.instance.client,
+      s['icon_url']?.toString(),
+    );
+    final cs = Theme.of(context).colorScheme;
+    final placeholderIconColor = Color.lerp(cs.onSurfaceVariant, cs.primary, 0.35)!;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: 54,
+        height: 54,
+        color: Color.lerp(cs.primaryContainer, cs.surface, Theme.of(context).brightness == Brightness.dark ? 0.5 : 0.2)!,
+        child: resolved != null && resolved.isNotEmpty
+            ? Image.network(resolved, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Icon(Icons.subscriptions_outlined, color: placeholderIconColor))
+            : Icon(Icons.subscriptions_outlined, color: placeholderIconColor),
+      ),
+    );
+  }
+
+  Widget _buildSubscriptionsTab() {
+    final listBg = Theme.of(context).colorScheme.surface;
+    if (_loadingSub) {
+      return ColoredBox(
+        color: listBg,
+        child: ListView(children: [
+          SizedBox(height: 120),
+          Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
+        ]),
       );
     }
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
-      itemCount: _subscriptions.length,
-      itemBuilder: (context, i) {
-        final s = _subscriptions[i];
-        final sid = s['id']?.toString() ?? '$i';
-        return Dismissible(
-          key: ValueKey('sub-$sid'),
-          direction: DismissDirection.endToStart,
-          background: Container(
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.only(right: 20),
-            decoration: BoxDecoration(color: Colors.red.shade600, borderRadius: BorderRadius.circular(20)),
-            child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 28),
+    if (_subscriptions.isEmpty) {
+      return ColoredBox(
+        color: listBg,
+        child: ListView(
+          children: [
+            const SizedBox(height: 48),
+            Center(
+              child: Column(
+                children: [
+                  Text(
+                    'No subscriptions yet',
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55)),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: () async {
+                      final ok = await Navigator.of(context).push<bool>(
+                        MaterialPageRoute(builder: (_) => AddSubscriptionScreen(currencyCode: widget.currencyCode)),
+                      );
+                      if (ok == true && mounted) await _loadSubscriptions();
+                    },
+                    style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary),
+                    child: const Text('Add subscription'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final list = _filteredSubscriptionsList;
+
+    return ColoredBox(
+      color: listBg,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 120),
+        children: [
+          _SearchFilterBar(
+            searchHint: 'Search',
+            query: _subSearchQuery,
+            onQueryChanged: (v) => setState(() => _subSearchQuery = v),
+            onFilter: _showSubFilterSheet,
+            onSort: _showSubSortSheet,
+            showTypeButton: false,
           ),
-          confirmDismiss: (_) => _confirmDeleteSubscription(s),
-          child: ListTile(
-            tileColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: Colors.black.withValues(alpha: 0.06))),
-            leading: CircleAvatar(backgroundColor: _kMgmtMint, child: Icon(Icons.subscriptions_outlined, color: Colors.blueGrey.shade700)),
-            title: Text(s['name']?.toString() ?? 'Subscription', style: const TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: Text('${_fmtMoney(_readAmount(s['amount']))} · ${s['billing_cycle'] ?? ''}'),
+          const SizedBox(height: 14),
+          if (list.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'No subscriptions match your search or filters.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55)),
+              ),
+            )
+          else
+            for (final s in list) _buildSubscriptionDismissibleCard(s),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubscriptionDismissibleCard(Map<String, dynamic> s) {
+    final cs = Theme.of(context).colorScheme;
+    final sid = s['id']?.toString() ?? s.hashCode.toString();
+    final active = parseSubscriptionIsActive(s['is_active']);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Dismissible(
+        key: ValueKey('sub-$sid'),
+        direction: DismissDirection.endToStart,
+        background: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20),
+          decoration: BoxDecoration(color: Colors.red.shade600, borderRadius: BorderRadius.circular(20)),
+          child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 28),
+        ),
+        confirmDismiss: (_) => _confirmDeleteSubscription(s),
+        child: Opacity(
+          opacity: active ? 1 : 0.55,
+          child: Material(
+            color: cs.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(20),
+            elevation: 0,
+            shadowColor: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () => _openEditSubscription(s),
+              child: Ink(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  color: cs.surfaceContainerLow,
+                  boxShadow: [
+                    BoxShadow(
+                      color: cs.shadow.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.35 : 0.07),
+                      blurRadius: 14,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                  border: Border.all(color: cs.outline.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.35 : 0.12)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                  child: Row(
+                    children: [
+                      _subscriptionSquircleIcon(s),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        s['name']?.toString() ?? 'Subscription',
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: cs.onSurface),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _subscriptionSubtitle(s),
+                        style: TextStyle(fontSize: 13, color: cs.onSurface.withValues(alpha: 0.55)),
+                      ),
+                    ],
+                        ),
+                      ),
+                      Text(
+                        _fmtMoney(_readAmount(s['amount'])),
+                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: cs.onSurface),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -909,8 +1204,12 @@ class _ManagementScreenState extends State<ManagementScreen> {
   }
 
   Widget _buildGoalsTab() {
+    final cs = Theme.of(context).colorScheme;
     if (_loadingGoals) {
-      return ListView(children: [SizedBox(height: 120), Center(child: CircularProgressIndicator(color: _kPrimary))]);
+      return ListView(children: [
+        SizedBox(height: 120),
+        Center(child: CircularProgressIndicator(color: cs.primary)),
+      ]);
     }
     if (_goals.isEmpty) {
       return ListView(
@@ -919,14 +1218,14 @@ class _ManagementScreenState extends State<ManagementScreen> {
           Center(
             child: Column(
               children: [
-                Text('No goals yet', style: TextStyle(color: Colors.black.withValues(alpha: 0.5))),
+                Text('No goals yet', style: TextStyle(color: cs.onSurface.withValues(alpha: 0.55))),
                 const SizedBox(height: 12),
                 FilledButton(
                   onPressed: () async {
                     final ok = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => AddGoalScreen(currencyCode: widget.currencyCode)));
                     if (ok == true && mounted) await _loadGoals();
                   },
-                  style: FilledButton.styleFrom(backgroundColor: _kPrimary),
+                  style: FilledButton.styleFrom(backgroundColor: cs.primary),
                   child: const Text('Add goal'),
                 ),
               ],
@@ -952,9 +1251,15 @@ class _ManagementScreenState extends State<ManagementScreen> {
           ),
           confirmDismiss: (_) => _confirmDeleteGoal(g),
           child: ListTile(
-            tileColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: Colors.black.withValues(alpha: 0.06))),
-            leading: CircleAvatar(backgroundColor: const Color(0xFFE8E2F7), child: Icon(Icons.flag_outlined, color: Colors.deepPurple.shade400)),
+            tileColor: Theme.of(context).colorScheme.surfaceContainerLow,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.25)),
+            ),
+            leading: CircleAvatar(
+              backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
+              child: Icon(Icons.flag_outlined, color: Theme.of(context).colorScheme.onTertiaryContainer),
+            ),
             title: Text(g['title']?.toString() ?? 'Goal', style: const TextStyle(fontWeight: FontWeight.w700)),
             subtitle: Text(
               '${_fmtMoney(_readAmount(g['current_amount']))} / ${_fmtMoney(_readAmount(g['target_amount']))}',
@@ -1002,6 +1307,8 @@ class _MgmtPillTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     Widget seg(String label, _MgmtMainTab tab) {
       final on = selected == tab;
       return Expanded(
@@ -1014,9 +1321,17 @@ class _MgmtPillTabs extends StatelessWidget {
               duration: const Duration(milliseconds: 180),
               padding: const EdgeInsets.symmetric(vertical: 10),
               decoration: BoxDecoration(
-                color: on ? _kPrimary : Colors.white,
+                color: on ? cs.primary : cs.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(999),
-                boxShadow: on ? null : [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
+                boxShadow: on
+                    ? null
+                    : [
+                        BoxShadow(
+                          color: cs.shadow.withValues(alpha: isDark ? 0.25 : 0.06),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
               ),
               child: Center(
                 child: Text(
@@ -1024,7 +1339,7 @@ class _MgmtPillTabs extends StatelessWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 12,
-                    color: on ? Colors.white : _kPrimary,
+                    color: on ? cs.onPrimary : cs.primary,
                   ),
                 ),
               ),
@@ -1037,9 +1352,15 @@ class _MgmtPillTabs extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.85),
+        color: cs.surfaceContainerHighest.withValues(alpha: isDark ? 0.75 : 0.88),
         borderRadius: BorderRadius.circular(999),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: cs.shadow.withValues(alpha: isDark ? 0.2 : 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -1079,35 +1400,43 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(22),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 20, offset: const Offset(0, 8))],
+        boxShadow: [
+          BoxShadow(
+            color: cs.shadow.withValues(alpha: isDark ? 0.28 : 0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         children: [
           Row(
             children: [
               if (onPrev != null)
-                IconButton(onPressed: onPrev, icon: const Icon(Icons.chevron_left_rounded, color: _kPrimary))
+                IconButton(onPressed: onPrev, icon: Icon(Icons.chevron_left_rounded, color: cs.primary))
               else
                 const SizedBox(width: 48),
               Expanded(
                 child: Text(
                   periodTitle,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: _kPrimary),
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: cs.primary),
                 ),
               ),
               if (onNext != null)
-                IconButton(onPressed: onNext, icon: const Icon(Icons.chevron_right_rounded, color: _kPrimary))
+                IconButton(onPressed: onNext, icon: Icon(Icons.chevron_right_rounded, color: cs.primary))
               else
                 const SizedBox(width: 48),
               IconButton(
                 onPressed: onEditBudget,
-                icon: const Icon(Icons.edit_outlined, color: _kPrimary, size: 22),
+                icon: Icon(Icons.edit_outlined, color: cs.primary, size: 22),
                 tooltip: 'Edit budget',
               ),
             ],
@@ -1119,9 +1448,9 @@ class _SummaryCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Total spent', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black.withValues(alpha: 0.45))),
+                    Text('Total spent', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55))),
                     const SizedBox(height: 4),
-                    Text(format(spent), style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: _kPrimary)),
+                    Text(format(spent), style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: cs.primary)),
                   ],
                 ),
               ),
@@ -1129,11 +1458,11 @@ class _SummaryCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('Budget', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black.withValues(alpha: 0.45))),
+                    Text('Budget', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55))),
                     const SizedBox(height: 4),
                     Text(
                       budget > 0 ? format(budget) : '—',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.black.withValues(alpha: 0.35)),
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: cs.onSurface.withValues(alpha: 0.45)),
                     ),
                   ],
                 ),
@@ -1146,14 +1475,14 @@ class _SummaryCard extends StatelessWidget {
             child: LinearProgressIndicator(
               value: budget > 0 ? progress.clamp(0.0, 1.0) : 0,
               minHeight: 10,
-              backgroundColor: const Color(0xFFE5EAE6),
-              color: _kPrimary,
+              backgroundColor: cs.surfaceContainerHighest,
+              color: cs.primary,
             ),
           ),
           const SizedBox(height: 10),
           Align(
             alignment: Alignment.centerLeft,
-            child: Text(remainingLabel, style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black.withValues(alpha: 0.45))),
+            child: Text(remainingLabel, style: TextStyle(fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55))),
           ),
         ],
       ),
@@ -1166,45 +1495,66 @@ class _SearchFilterBar extends StatelessWidget {
     required this.searchHint,
     required this.query,
     required this.onQueryChanged,
-    required this.onType,
+    this.onType,
     required this.onFilter,
     required this.onSort,
+    this.showTypeButton = true,
   });
 
   final String searchHint;
   final String query;
   final ValueChanged<String> onQueryChanged;
-  final VoidCallback onType;
+  final VoidCallback? onType;
   final VoidCallback onFilter;
   final VoidCallback onSort;
+  final bool showTypeButton;
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(999),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.07), blurRadius: 14, offset: const Offset(0, 6))],
+        boxShadow: [
+          BoxShadow(
+            color: cs.shadow.withValues(alpha: isDark ? 0.22 : 0.07),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          const Icon(Icons.search_rounded, size: 22, color: _kPrimary),
+          Icon(Icons.search_rounded, size: 22, color: cs.primary),
           const SizedBox(width: 6),
           Expanded(
             child: TextField(
+              style: TextStyle(color: cs.onSurface),
               onChanged: onQueryChanged,
               decoration: InputDecoration(
                 hintText: searchHint,
                 border: InputBorder.none,
                 isDense: true,
-                hintStyle: TextStyle(color: Colors.black.withValues(alpha: 0.35)),
+                hintStyle: TextStyle(color: cs.onSurface.withValues(alpha: 0.42)),
               ),
             ),
           ),
-          TextButton(onPressed: onType, child: const Text('Type', style: TextStyle(fontWeight: FontWeight.w700, color: _kPrimary, fontSize: 13))),
-          TextButton(onPressed: onFilter, child: const Text('Filter', style: TextStyle(fontWeight: FontWeight.w700, color: _kPrimary, fontSize: 13))),
-          TextButton(onPressed: onSort, child: const Text('Sort', style: TextStyle(fontWeight: FontWeight.w700, color: _kPrimary, fontSize: 13))),
+          if (showTypeButton && onType != null)
+            TextButton(
+              onPressed: onType,
+              child: Text('Type', style: TextStyle(fontWeight: FontWeight.w700, color: cs.primary, fontSize: 13)),
+            ),
+          TextButton(
+            onPressed: onFilter,
+            child: Text('Filter', style: TextStyle(fontWeight: FontWeight.w700, color: cs.primary, fontSize: 13)),
+          ),
+          TextButton(
+            onPressed: onSort,
+            child: Text('Sort', style: TextStyle(fontWeight: FontWeight.w700, color: cs.primary, fontSize: 13)),
+          ),
         ],
       ),
     );
@@ -1269,6 +1619,8 @@ class _MgmtTxTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final title = (data['description'] ?? data['title'] ?? 'Transaction').toString();
     var category = (data['category'] ?? '').toString();
     final catMap = data['categories'];
@@ -1296,7 +1648,7 @@ class _MgmtTxTile extends StatelessWidget {
     }
 
     final tile = Material(
-      color: Colors.white,
+      color: cs.surfaceContainerLow,
       borderRadius: BorderRadius.circular(20),
       elevation: 0,
       shadowColor: Colors.transparent,
@@ -1306,8 +1658,14 @@ class _MgmtTxTile extends StatelessWidget {
         child: Ink(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            color: Colors.white,
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.07), blurRadius: 14, offset: const Offset(0, 5))],
+            color: cs.surfaceContainerLow,
+            boxShadow: [
+              BoxShadow(
+                color: cs.shadow.withValues(alpha: isDark ? 0.25 : 0.07),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
+              ),
+            ],
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -1322,7 +1680,7 @@ class _MgmtTxTile extends StatelessWidget {
                   ),
                   child: Icon(
                     isExpense ? Icons.shopping_bag_outlined : Icons.payments_outlined,
-                    color: isExpense ? Colors.deepOrange.shade700 : _kPrimary,
+                    color: isExpense ? Colors.deepOrange.shade700 : cs.primary,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1330,9 +1688,14 @@ class _MgmtTxTile extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: cs.onSurface),
+                      ),
                       if (subtitle.isNotEmpty)
-                        Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.black.withValues(alpha: 0.45))),
+                        Text(subtitle, style: TextStyle(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.55))),
                     ],
                   ),
                 ),
@@ -1343,7 +1706,7 @@ class _MgmtTxTile extends StatelessWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 15,
-                    color: isExpense ? Colors.red.shade700 : Colors.black87,
+                    color: isExpense ? Colors.red.shade700 : cs.onSurface,
                   ),
                 ),
               ],

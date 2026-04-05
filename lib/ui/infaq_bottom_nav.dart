@@ -25,22 +25,24 @@ class InfaqBottomNavBar extends StatelessWidget {
   final VoidCallback onAnalytics;
   final VoidCallback onProfile;
 
-  Color _iconMuted(bool selected) =>
-      selected ? kInfaqPrimaryGreen : const Color(0xFF4A5450);
-
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final primary = cs.primary;
+    final muted = cs.onSurface.withValues(alpha: 0.55);
+    Color iconColor(bool selected) => selected ? primary : muted;
+
     return SafeArea(
       top: false,
       child: Container(
         width: double.infinity,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: cs.surface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-          border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+          border: Border.all(color: cs.outline.withValues(alpha: 0.15)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
+              color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.45 : 0.12),
               blurRadius: 24,
               offset: const Offset(0, -4),
             ),
@@ -67,7 +69,7 @@ class InfaqBottomNavBar extends StatelessWidget {
                           child: Icon(
                             Icons.home_outlined,
                             size: 26,
-                            color: _iconMuted(tabIndex >= 0 && tabIndex == 0),
+                            color: iconColor(tabIndex >= 0 && tabIndex == 0),
                           ),
                         ),
                       ),
@@ -81,9 +83,7 @@ class InfaqBottomNavBar extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.w600,
-                              color: tabIndex >= 0 && tabIndex == 1
-                                  ? kInfaqPrimaryGreen
-                                  : const Color(0xFF5A6B62),
+                              color: iconColor(tabIndex >= 0 && tabIndex == 1),
                               height: 1,
                             ),
                           ),
@@ -98,7 +98,7 @@ class InfaqBottomNavBar extends StatelessWidget {
                           child: Icon(
                             Icons.show_chart_rounded,
                             size: 26,
-                            color: _iconMuted(tabIndex >= 0 && tabIndex == 2),
+                            color: iconColor(tabIndex >= 0 && tabIndex == 2),
                           ),
                         ),
                       ),
@@ -110,7 +110,7 @@ class InfaqBottomNavBar extends StatelessWidget {
                           child: Icon(
                             Icons.person_outline_rounded,
                             size: 26,
-                            color: _iconMuted(tabIndex >= 0 && tabIndex == 3),
+                            color: iconColor(tabIndex >= 0 && tabIndex == 3),
                           ),
                         ),
                       ),
@@ -121,7 +121,7 @@ class InfaqBottomNavBar extends StatelessWidget {
               Transform.translate(
                 offset: const Offset(0, -18),
                 child: Material(
-                  color: kInfaqNavCenterGreen,
+                  color: primary,
                   borderRadius: BorderRadius.circular(20),
                   elevation: 6,
                   shadowColor: Colors.black38,

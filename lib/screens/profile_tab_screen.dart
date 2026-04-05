@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:infaq/app_theme_mode.dart';
+
 const Color _kPrimary = Color(0xFF3F5F4A);
 const Color _kProfileHeaderGreen = Color(0xFFE8F5E9);
 const Color _kLogoutBg = Color(0xFF707070);
@@ -30,24 +32,31 @@ class ProfileTabScreen extends StatefulWidget {
 
 class _ProfileTabScreenState extends State<ProfileTabScreen> {
   bool _notificationsOn = true;
-  bool _darkModeOn = false;
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final name = widget.displayName?.trim();
     final label = (name != null && name.isNotEmpty) ? name : 'Your profile';
 
+    final headerBg = isDark ? const Color(0xFF1A2420) : _kProfileHeaderGreen;
+    final titleColor = isDark ? cs.primary : _kPrimary;
+    final pillBg = isDark ? cs.surfaceContainerHigh : Colors.white;
+    final pillBorder = isDark ? cs.outline.withValues(alpha: 0.35) : const Color(0xFF64B5F6);
+    final onSurface = cs.onSurface;
+
     return ColoredBox(
-      color: Colors.white,
+      color: cs.surface,
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverToBoxAdapter(
             child: Container(
               width: double.infinity,
-              decoration: const BoxDecoration(
-                color: _kProfileHeaderGreen,
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+              decoration: BoxDecoration(
+                color: headerBg,
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
               ),
               child: SafeArea(
                 bottom: false,
@@ -56,9 +65,9 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Profile',
-                        style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: _kPrimary),
+                        style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: titleColor),
                       ),
                       const SizedBox(height: 20),
                       Center(
@@ -73,12 +82,12 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: pillBg,
                                 borderRadius: BorderRadius.circular(999),
-                                border: Border.all(color: const Color(0xFF64B5F6), width: 1.2),
+                                border: Border.all(color: pillBorder, width: 1.2),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.08),
+                                    color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.08),
                                     blurRadius: 16,
                                     offset: const Offset(0, 6),
                                   ),
@@ -95,15 +104,15 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                                       label,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
-                                        color: Color(0xFF1A1A1A),
+                                        color: onSurface,
                                       ),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  Icon(Icons.chevron_right_rounded, color: Colors.black.withValues(alpha: 0.35)),
+                                  Icon(Icons.chevron_right_rounded, color: onSurface.withValues(alpha: 0.35)),
                                 ],
                               ),
                             ),
@@ -121,29 +130,33 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 _shadowCard(
+                  context,
                   child: Column(
                     children: [
                       _toggleTile(
+                        context,
                         title: 'Notifications',
                         value: _notificationsOn,
                         onChanged: (v) => setState(() => _notificationsOn = v),
                       ),
-                      Divider(height: 1, color: Colors.black.withValues(alpha: 0.06)),
+                      Divider(height: 1, color: cs.outline.withValues(alpha: 0.2)),
                       _toggleTile(
+                        context,
                         title: 'Dark mode',
-                        value: _darkModeOn,
-                        onChanged: (v) => setState(() => _darkModeOn = v),
+                        value: isDark,
+                        onChanged: (v) => AppThemeMode.instance.setDark(v),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 14),
                 _shadowCard(
+                  context,
                   child: Column(
                     children: [
-                      _navTile(title: 'Help and support', onTap: widget.onHelpAndSupport ?? () {}),
-                      Divider(height: 1, color: Colors.black.withValues(alpha: 0.06)),
-                      _navTile(title: 'Data and privacy', onTap: widget.onDataAndPrivacy ?? () {}),
+                      _navTile(context, title: 'Help and support', onTap: widget.onHelpAndSupport ?? () {}),
+                      Divider(height: 1, color: cs.outline.withValues(alpha: 0.2)),
+                      _navTile(context, title: 'Data and privacy', onTap: widget.onDataAndPrivacy ?? () {}),
                     ],
                   ),
                 ),
@@ -151,22 +164,26 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEEF7F0),
+                    color: isDark ? cs.surfaceContainerHigh : const Color(0xFFEEF7F0),
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: const Color(0xFFD4E3D8)),
+                    border: Border.all(color: isDark ? cs.outline.withValues(alpha: 0.35) : const Color(0xFFD4E3D8)),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.shield_outlined, color: _kPrimary, size: 28),
+                      Icon(Icons.shield_outlined, color: isDark ? cs.primary : _kPrimary, size: 28),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
+                            Text(
                               'Your Data is Private',
-                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: _kPrimary),
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                                color: isDark ? cs.primary : _kPrimary,
+                              ),
                             ),
                             const SizedBox(height: 6),
                             Text(
@@ -174,7 +191,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                               style: TextStyle(
                                 fontSize: 13,
                                 height: 1.35,
-                                color: Colors.black.withValues(alpha: 0.5),
+                                color: onSurface.withValues(alpha: 0.55),
                               ),
                             ),
                           ],
@@ -187,7 +204,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                 Text(
                   'v0.1.0',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: Colors.black.withValues(alpha: 0.35)),
+                  style: TextStyle(fontSize: 13, color: onSurface.withValues(alpha: 0.35)),
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
@@ -197,7 +214,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                     icon: const Icon(Icons.logout_rounded, color: Colors.white),
                     label: const Text('Log out'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: _kLogoutBg,
+                      backgroundColor: isDark ? const Color(0xFF5A5A5A) : _kLogoutBg,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
@@ -215,43 +232,54 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
     );
   }
 
-  static Widget _shadowCard({required Widget child}) {
+  static Widget _shadowCard(BuildContext context, {required Widget child}) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? cs.surfaceContainerHigh : Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.07),
+            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.07),
             blurRadius: 18,
             offset: const Offset(0, 6),
           ),
         ],
+        border: isDark ? Border.all(color: cs.outline.withValues(alpha: 0.2)) : null,
       ),
       child: ClipRRect(borderRadius: BorderRadius.circular(20), child: child),
     );
   }
 
-  Widget _toggleTile({
+  Widget _toggleTile(
+    BuildContext context, {
     required String title,
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
+    final cs = Theme.of(context).colorScheme;
     return SwitchListTile.adaptive(
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+      title: Text(
+        title,
+        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: cs.onSurface),
+      ),
       value: value,
       activeColor: Colors.white,
-      activeTrackColor: _kPrimary,
+      activeTrackColor: isDark(context) ? cs.primary : _kPrimary,
       inactiveThumbColor: Colors.grey.shade400,
       inactiveTrackColor: Colors.grey.shade300,
       onChanged: onChanged,
     );
   }
 
-  Widget _navTile({required String title, required VoidCallback onTap}) {
+  bool isDark(BuildContext context) => Theme.of(context).brightness == Brightness.dark;
+
+  Widget _navTile(BuildContext context, {required String title, required VoidCallback onTap}) {
+    final cs = Theme.of(context).colorScheme;
     return ListTile(
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-      trailing: Icon(Icons.chevron_right_rounded, color: Colors.black.withValues(alpha: 0.35)),
+      title: Text(title, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: cs.onSurface)),
+      trailing: Icon(Icons.chevron_right_rounded, color: cs.onSurface.withValues(alpha: 0.35)),
       onTap: onTap,
     );
   }
@@ -266,11 +294,12 @@ class _Avatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final u = url?.trim();
+    final muted = Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.35);
     return CircleAvatar(
       radius: radius,
-      backgroundColor: const Color(0xFFE0E0E0),
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
       backgroundImage: u != null && u.isNotEmpty ? NetworkImage(u) : null,
-      child: u == null || u.isEmpty ? Icon(Icons.person_rounded, size: radius * 1.1, color: Colors.white) : null,
+      child: u == null || u.isEmpty ? Icon(Icons.person_rounded, size: radius * 1.1, color: muted) : null,
     );
   }
 }

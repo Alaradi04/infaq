@@ -1,7 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:infaq/profile/subscription_icon_storage.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
@@ -25,6 +29,12 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
   String _cycle = 'monthly';
   DateTime _nextDate = DateTime.now();
   bool _saving = false;
+
+  final ImagePicker _imagePicker = ImagePicker();
+  Uint8List? _iconPreviewBytes;
+  /// Storage path inside `subscription-icon` bucket (saved to `icon_url`).
+  String? _iconStoragePath;
+  bool _uploadingIcon = false;
 
   static const _cycles = [
     ('monthly', 'Monthly'),
@@ -67,6 +77,79 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
     if (picked != null) setState(() => _nextDate = picked);
   }
 
+  Future<void> _pickIcon(ImageSource source) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    setState(() => _uploadingIcon = true);
+    try {
+      final x = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 88,
+      );
+      if (x == null || !mounted) {
+        setState(() => _uploadingIcon = false);
+        return;
+      }
+
+      final bytes = await x.readAsBytes();
+      final lower = x.name.toLowerCase();
+      final ext = lower.endsWith('.png') ? 'png' : 'jpg';
+      final mime = ext == 'png' ? 'image/png' : 'image/jpeg';
+      final path = '${user.id}/sub_${DateTime.now().millisecondsSinceEpoch}.$ext';
+
+      await Supabase.instance.client.storage.from(InfaqSubscriptionIconStorage.bucket).uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(contentType: mime, upsert: true),
+          );
+
+      if (!mounted) return;
+      setState(() {
+        _iconPreviewBytes = bytes;
+        _iconStoragePath = path;
+        _uploadingIcon = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _uploadingIcon = false);
+        showInfaqSnack(context, 'Could not upload icon: $e');
+      }
+    }
+  }
+
+  Future<void> _onIconFieldTap() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickIcon(ImageSource.gallery);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take a photo'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickIcon(ImageSource.camera);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _cancel() => Navigator.pop(context);
 
   Future<void> _save() async {
@@ -92,14 +175,19 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
       final dateStr =
           '${_nextDate.year.toString().padLeft(4, '0')}-${_nextDate.month.toString().padLeft(2, '0')}-${_nextDate.day.toString().padLeft(2, '0')}';
 
-      await Supabase.instance.client.from('subscriptions').insert({
+      final row = <String, Object?>{
         'user_id': user.id,
         'name': name,
         'amount': amount,
         'billing_cycle': _cycle,
         'next_payment': dateStr,
         'is_active': true,
-      });
+      };
+      if (_iconStoragePath != null && _iconStoragePath!.trim().isNotEmpty) {
+        row['icon_url'] = _iconStoragePath!.trim();
+      }
+
+      await Supabase.instance.client.from('subscriptions').insert(row);
 
       if (!mounted) return;
       Navigator.pop(context, true);
@@ -153,6 +241,72 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                       controller: _nameCtrl,
                       hintText: 'Netflix, gym, iCloud…',
                       textInputAction: TextInputAction.next,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  InfaqLabeledPillField(
+                    label: 'Icon',
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: _uploadingIcon ? null : _onIconFieldTap,
+                        borderRadius: BorderRadius.circular(22),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF7F8F7),
+                            borderRadius: BorderRadius.circular(22),
+                            border: Border.all(color: kServiceFormGreen.withValues(alpha: 0.2)),
+                          ),
+                          child: Row(
+                            children: [
+                              Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 28,
+                                    backgroundColor: Colors.white,
+                                    backgroundImage: _iconPreviewBytes != null
+                                        ? MemoryImage(_iconPreviewBytes!)
+                                        : (_iconStoragePath != null && _iconStoragePath!.isNotEmpty
+                                            ? NetworkImage(
+                                                InfaqSubscriptionIconStorage.publicUrl(
+                                                  Supabase.instance.client,
+                                                  _iconStoragePath!,
+                                                ),
+                                              )
+                                            : null),
+                                    child: _iconPreviewBytes == null &&
+                                            (_iconStoragePath == null || _iconStoragePath!.isEmpty)
+                                        ? Icon(Icons.add_photo_alternate_outlined, color: Colors.grey.shade500, size: 28)
+                                        : null,
+                                  ),
+                                  if (_uploadingIcon)
+                                    const SizedBox(
+                                      width: 26,
+                                      height: 26,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: kServiceFormGreen),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Text(
+                                  _iconStoragePath != null && _iconStoragePath!.isNotEmpty
+                                      ? 'Tap to change picture'
+                                      : 'Tap to add subscription icon',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black.withValues(alpha: 0.55),
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                              Icon(Icons.chevron_right_rounded, color: Colors.black.withValues(alpha: 0.25)),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 18),

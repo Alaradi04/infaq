@@ -6,17 +6,22 @@ import 'package:infaq/ui/infaq_bottom_nav.dart';
 /// Dark green for primary actions (mock ~#3D5C45 / app seed).
 const Color kServiceFormGreen = kInfaqPrimaryGreen;
 
-BoxDecoration infaqServicePillDecoration() => BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(24),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.09),
-          blurRadius: 18,
-          offset: const Offset(0, 6),
-        ),
-      ],
-    );
+BoxDecoration infaqServicePillDecoration(BuildContext context) {
+  final cs = Theme.of(context).colorScheme;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  return BoxDecoration(
+    color: isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLowest,
+    borderRadius: BorderRadius.circular(24),
+    border: isDark ? Border.all(color: cs.outline.withValues(alpha: 0.22)) : null,
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: isDark ? 0.32 : 0.09),
+        blurRadius: 18,
+        offset: const Offset(0, 6),
+      ),
+    ],
+  );
+}
 
 class InfaqServiceFormHeader extends StatelessWidget {
   const InfaqServiceFormHeader({
@@ -32,6 +37,7 @@ class InfaqServiceFormHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -53,16 +59,16 @@ class InfaqServiceFormHeader extends StatelessWidget {
             children: [
               IconButton(
                 onPressed: onBack,
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, color: kServiceFormGreen),
+                icon: Icon(Icons.arrow_back_ios_new_rounded, color: primary),
               ),
               Expanded(
                 child: Text(
                   title,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
-                    color: kServiceFormGreen,
+                    color: primary,
                   ),
                 ),
               ),
@@ -95,7 +101,7 @@ class InfaqLabeledPillField extends StatelessWidget {
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: Colors.black.withValues(alpha: 0.5),
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55),
           ),
         ),
         const SizedBox(height: 8),
@@ -125,8 +131,9 @@ class InfaqPillTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     return Container(
-      decoration: infaqServicePillDecoration(),
+      decoration: infaqServicePillDecoration(context),
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
       child: TextField(
         controller: controller,
@@ -134,11 +141,11 @@ class InfaqPillTextField extends StatelessWidget {
         inputFormatters: inputFormatters,
         textInputAction: textInputAction,
         onChanged: onChanged,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: onSurface),
         decoration: InputDecoration(
           hintText: hintText,
           border: InputBorder.none,
-          hintStyle: TextStyle(color: Colors.black.withValues(alpha: 0.35)),
+          hintStyle: TextStyle(color: onSurface.withValues(alpha: 0.4)),
         ),
       ),
     );
@@ -171,8 +178,10 @@ class InfaqPillAmountStepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final primary = Theme.of(context).colorScheme.primary;
     return Container(
-      decoration: infaqServicePillDecoration(),
+      decoration: infaqServicePillDecoration(context),
       padding: const EdgeInsets.only(left: 18, right: 4),
       child: Row(
         children: [
@@ -182,11 +191,11 @@ class InfaqPillAmountStepper extends StatelessWidget {
               onChanged: (_) => onChanged(),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: onSurface),
               decoration: InputDecoration(
                 border: InputBorder.none,
                 suffixText: currencySuffix,
-                suffixStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: kServiceFormGreen),
+                suffixStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: primary),
               ),
             ),
           ),
@@ -197,13 +206,13 @@ class InfaqPillAmountStepper extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 36, minHeight: 28),
                 onPressed: () => _nudge(1),
-                icon: Icon(Icons.keyboard_arrow_up_rounded, color: Colors.black.withValues(alpha: 0.55)),
+                icon: Icon(Icons.keyboard_arrow_up_rounded, color: onSurface.withValues(alpha: 0.55)),
               ),
               IconButton(
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 36, minHeight: 28),
                 onPressed: () => _nudge(-1),
-                icon: Icon(Icons.keyboard_arrow_down_rounded, color: Colors.black.withValues(alpha: 0.55)),
+                icon: Icon(Icons.keyboard_arrow_down_rounded, color: onSurface.withValues(alpha: 0.55)),
               ),
             ],
           ),
@@ -229,21 +238,21 @@ class InfaqPillDropdown<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final primary = Theme.of(context).colorScheme.primary;
     return Container(
-      decoration: infaqServicePillDecoration(),
+      decoration: infaqServicePillDecoration(context),
       padding: const EdgeInsets.symmetric(horizontal: 14),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<T>(
           value: value,
           isExpanded: true,
-          hint: hint != null
-              ? Text(hint!, style: TextStyle(color: Colors.black.withValues(alpha: 0.35)))
-              : null,
-          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: kServiceFormGreen),
+          hint: hint != null ? Text(hint!, style: TextStyle(color: onSurface.withValues(alpha: 0.4))) : null,
+          icon: Icon(Icons.keyboard_arrow_down_rounded, color: primary),
           borderRadius: BorderRadius.circular(16),
           items: items,
           onChanged: onChanged,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF2A2A2A)),
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: onSurface),
         ),
       ),
     );
@@ -268,7 +277,7 @@ class InfaqPillDateRow extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(24),
         child: Ink(
-          decoration: infaqServicePillDecoration(),
+          decoration: infaqServicePillDecoration(context),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
             child: Row(
@@ -276,10 +285,14 @@ class InfaqPillDateRow extends StatelessWidget {
                 Expanded(
                   child: Text(
                     labelText,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF2A2A2A)),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
                   ),
                 ),
-                const Icon(Icons.calendar_month_rounded, color: kServiceFormGreen),
+                Icon(Icons.calendar_month_rounded, color: Theme.of(context).colorScheme.primary),
               ],
             ),
           ),
@@ -305,8 +318,9 @@ class InfaqPillSwitchRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     return Container(
-      decoration: infaqServicePillDecoration(),
+      decoration: infaqServicePillDecoration(context),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
@@ -317,15 +331,14 @@ class InfaqPillSwitchRow extends StatelessWidget {
           Expanded(
             child: Text(
               title,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF2A2A2A)),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: onSurface),
             ),
           ),
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: Colors.white,
             activeTrackColor: kServiceFormGreen,
-            inactiveTrackColor: Colors.black.withValues(alpha: 0.12),
+            inactiveTrackColor: onSurface.withValues(alpha: 0.2),
           ),
         ],
       ),
