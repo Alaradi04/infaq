@@ -29,15 +29,18 @@ class InfaqServiceFormHeader extends StatelessWidget {
     required this.backgroundColor,
     required this.title,
     required this.onBack,
+    this.trailing,
   });
 
   final Color backgroundColor;
   final String title;
   final VoidCallback onBack;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -45,7 +48,7 @@ class InfaqServiceFormHeader extends StatelessWidget {
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
+            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.06),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -54,7 +57,7 @@ class InfaqServiceFormHeader extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(4, 4, 16, 18),
+          padding: const EdgeInsets.fromLTRB(4, 4, 8, 18),
           child: Row(
             children: [
               IconButton(
@@ -72,7 +75,10 @@ class InfaqServiceFormHeader extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 48),
+              SizedBox(
+                width: 48,
+                child: Center(child: trailing ?? const SizedBox.shrink()),
+              ),
             ],
           ),
         ),

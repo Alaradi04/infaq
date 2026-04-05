@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:infaq/profile/subscription_icon_storage.dart';
 import 'package:infaq/screens/add_goal_screen.dart';
 import 'package:infaq/screens/add_subscription_screen.dart';
+import 'package:infaq/screens/edit_goal_screen.dart';
 import 'package:infaq/screens/edit_subscription_screen.dart';
 import 'package:infaq/subscription/subscription_analytics.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
@@ -11,6 +12,7 @@ import 'package:infaq/ui/infaq_widgets.dart';
 
 const Color _kMgmtMint = Color(0xFFE6F4EA);
 const Color _kSubTabCream = Color(0xFFFFF6E8);
+const Color _kGoalsHeaderCyan = Color(0xFFE8F4FA);
 
 enum _SubFilter { all, activeOnly, inactiveOnly }
 
@@ -23,6 +25,8 @@ enum _PeriodMode { allTime, month, year }
 enum _TxTypeFilter { all, income, expense }
 
 enum _AmountSort { none, highToLow, lowToHigh }
+
+enum _GoalSort { none, targetHighToLow, targetLowToHigh }
 
 /// Sentinel for “Uncategorized” in [_ManagementScreenState._categoryFilterKey].
 const String _kUncategorizedCategoryKey = '__uncategorized__';
@@ -70,6 +74,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
   String _subSearchQuery = '';
   _SubFilter _subFilter = _SubFilter.all;
   _SubSort _subSort = _SubSort.none;
+
+  String _goalSearchQuery = '';
+  _GoalSort _goalSort = _GoalSort.none;
 
   List<Map<String, dynamic>> _transactions = [];
   List<Map<String, dynamic>> _subscriptions = [];
@@ -549,9 +556,15 @@ class _ManagementScreenState extends State<ManagementScreen> {
     final progress = budget > 0 ? (spent / budget).clamp(0.0, 1.0) : 0.0;
     final remaining = budget - spent;
 
-    final headerTint = _mainTab == _MgmtMainTab.subscriptions
-        ? (isDark ? Color.lerp(cs.tertiaryContainer, cs.surface, 0.35)! : _kSubTabCream)
-        : (isDark ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)! : _kMgmtMint);
+    final Color headerTint;
+    switch (_mainTab) {
+      case _MgmtMainTab.subscriptions:
+        headerTint = isDark ? Color.lerp(cs.tertiaryContainer, cs.surface, 0.35)! : _kSubTabCream;
+      case _MgmtMainTab.goals:
+        headerTint = isDark ? Color.lerp(cs.secondaryContainer, cs.surface, 0.4)! : _kGoalsHeaderCyan;
+      case _MgmtMainTab.transactions:
+        headerTint = isDark ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)! : _kMgmtMint;
+    }
 
     return ColoredBox(
       color: cs.surface,
@@ -1203,6 +1216,239 @@ class _ManagementScreenState extends State<ManagementScreen> {
     }
   }
 
+  List<Map<String, dynamic>> get _filteredGoalsList {
+    var list = List<Map<String, dynamic>>.from(_goals);
+    final q = _goalSearchQuery.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      list = list.where((g) => (g['title'] ?? '').toString().toLowerCase().contains(q)).toList();
+    }
+    switch (_goalSort) {
+      case _GoalSort.targetHighToLow:
+        list.sort((a, b) => _readAmount(b['target_amount']).compareTo(_readAmount(a['target_amount'])));
+        break;
+      case _GoalSort.targetLowToHigh:
+        list.sort((a, b) => _readAmount(a['target_amount']).compareTo(_readAmount(b['target_amount'])));
+        break;
+      case _GoalSort.none:
+        break;
+    }
+    return list;
+  }
+
+  ({double saved, double targets}) _goalsAggregateTotals() {
+    var saved = 0.0;
+    var targets = 0.0;
+    for (final g in _goals) {
+      saved += _readAmount(g['current_amount']);
+      targets += _readAmount(g['target_amount']);
+    }
+    return (saved: saved, targets: targets);
+  }
+
+  String _goalsHorizonLine() {
+    if (_goals.isEmpty) return '';
+    DateTime? latest;
+    for (final g in _goals) {
+      final raw = g['deadline'];
+      final d = raw != null ? DateTime.tryParse(raw.toString()) : null;
+      if (d == null) continue;
+      if (latest == null || d.isAfter(latest)) latest = d;
+    }
+    if (latest == null) return '';
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final end = DateTime(latest.year, latest.month, latest.day);
+    if (!end.isAfter(today)) return 'Target window ended';
+    var months = (end.year - today.year) * 12 + end.month - today.month;
+    if (end.day < today.day) months -= 1;
+    if (months < 0) months = 0;
+    final y = months ~/ 12;
+    final m = months % 12;
+    if (y > 0 && m > 0) return '$y ${y == 1 ? 'year' : 'years'} $m ${m == 1 ? 'month' : 'months'}';
+    if (y > 0) return '$y ${y == 1 ? 'year' : 'years'}';
+    return '$m ${m == 1 ? 'month' : 'months'}';
+  }
+
+  String _formatGoalDeadlineShort(dynamic raw) {
+    final d = raw != null ? DateTime.tryParse(raw.toString()) : null;
+    if (d == null) return '—';
+    const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+    return '${months[d.month - 1]} ${d.day} ${d.year}';
+  }
+
+  Color _accentForGoalTitle(String title) {
+    final h = title.hashCode.abs();
+    const colors = [
+      Color(0xFFFF9F6B),
+      Color(0xFF6BB3F0),
+      Color(0xFFFF8FB8),
+      Color(0xFF7FD8BE),
+      Color(0xFFB39DFF),
+      Color(0xFFFFB86C),
+    ];
+    return colors[h % colors.length];
+  }
+
+  void _showGoalSortSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(title: Text('Sort by target amount', style: TextStyle(fontWeight: FontWeight.w800))),
+            RadioListTile<_GoalSort>(
+              title: const Text('Default (newest first)'),
+              value: _GoalSort.none,
+              groupValue: _goalSort,
+              onChanged: (v) {
+                setState(() => _goalSort = v ?? _GoalSort.none);
+                Navigator.pop(ctx);
+              },
+            ),
+            RadioListTile<_GoalSort>(
+              title: const Text('High to low'),
+              value: _GoalSort.targetHighToLow,
+              groupValue: _goalSort,
+              onChanged: (v) {
+                setState(() => _goalSort = v ?? _GoalSort.targetHighToLow);
+                Navigator.pop(ctx);
+              },
+            ),
+            RadioListTile<_GoalSort>(
+              title: const Text('Low to high'),
+              value: _GoalSort.targetLowToHigh,
+              groupValue: _goalSort,
+              onChanged: (v) {
+                setState(() => _goalSort = v ?? _GoalSort.targetLowToHigh);
+                Navigator.pop(ctx);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGoalDismissibleCard(Map<String, dynamic> g) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final gid = g['id']?.toString() ?? g.hashCode.toString();
+    final title = g['title']?.toString() ?? 'Goal';
+    final current = _readAmount(g['current_amount']);
+    final target = _readAmount(g['target_amount']);
+    final progress = target > 0 ? (current / target).clamp(0.0, 1.0) : 0.0;
+    final accent = _accentForGoalTitle(title);
+    final deadline = _formatGoalDeadlineShort(g['deadline']);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Dismissible(
+        key: ValueKey('goal-$gid'),
+        direction: DismissDirection.endToStart,
+        background: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20),
+          decoration: BoxDecoration(color: Colors.red.shade600, borderRadius: BorderRadius.circular(20)),
+          child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 28),
+        ),
+        confirmDismiss: (_) => _confirmDeleteGoal(g),
+        child: Material(
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(20),
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () async {
+              final changed = await Navigator.of(context).push<bool>(
+                MaterialPageRoute<bool>(
+                  builder: (_) => EditGoalScreen(
+                    goal: Map<String, dynamic>.from(g),
+                    currencyCode: widget.currencyCode,
+                  ),
+                ),
+              );
+              if (changed == true && mounted) await _loadGoals();
+            },
+            child: Ink(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                color: cs.surfaceContainerLow,
+                boxShadow: [
+                  BoxShadow(
+                    color: cs.shadow.withValues(alpha: isDark ? 0.25 : 0.07),
+                    blurRadius: 14,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+                border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.35 : 0.12)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 14, 14, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: accent,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Icon(Icons.savings_outlined, color: Colors.white, size: 26),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: cs.onSurface),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${_fmtMoney(current)} · $deadline',
+                                style: TextStyle(fontSize: 13, color: cs.onSurface.withValues(alpha: 0.55)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _fmtMoney(target),
+                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: cs.onSurface),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: progress.clamp(0.0, 1.0),
+                        minHeight: 8,
+                        backgroundColor: cs.surfaceContainerHighest,
+                        color: accent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildGoalsTab() {
     final cs = Theme.of(context).colorScheme;
     if (_loadingGoals) {
@@ -1234,39 +1480,52 @@ class _ManagementScreenState extends State<ManagementScreen> {
         ],
       );
     }
-    return ListView.builder(
+    final totals = _goalsAggregateTotals();
+    final list = _filteredGoalsList;
+    final remaining = totals.targets - totals.saved;
+    final progress = totals.targets > 0 ? (totals.saved / totals.targets).clamp(0.0, 1.0) : 0.0;
+    final horizon = _goalsHorizonLine();
+
+    return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
-      itemCount: _goals.length,
-      itemBuilder: (context, i) {
-        final g = _goals[i];
-        final gid = g['id']?.toString() ?? '$i';
-        return Dismissible(
-          key: ValueKey('goal-$gid'),
-          direction: DismissDirection.endToStart,
-          background: Container(
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.only(right: 20),
-            decoration: BoxDecoration(color: Colors.red.shade600, borderRadius: BorderRadius.circular(20)),
-            child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 28),
-          ),
-          confirmDismiss: (_) => _confirmDeleteGoal(g),
-          child: ListTile(
-            tileColor: Theme.of(context).colorScheme.surfaceContainerLow,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-              side: BorderSide(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.25)),
+      children: [
+        _GoalsSummaryCard(
+          totalSaved: totals.saved,
+          totalTargets: totals.targets,
+          progress: progress,
+          format: _fmtMoney,
+          remainingMoneyLabel: remaining >= 0 ? '${_fmtMoney(remaining)} remaining' : '${_fmtMoney(-remaining)} over target',
+          horizonLine: horizon,
+          onEdit: () async {
+            final ok = await Navigator.of(context).push<bool>(
+              MaterialPageRoute(builder: (_) => AddGoalScreen(currencyCode: widget.currencyCode)),
+            );
+            if (ok == true && mounted) await _loadGoals();
+          },
+        ),
+        const SizedBox(height: 14),
+        _SearchFilterBar(
+          searchHint: 'Search',
+          query: _goalSearchQuery,
+          onQueryChanged: (v) => setState(() => _goalSearchQuery = v),
+          onFilter: () {},
+          onSort: _showGoalSortSheet,
+          showTypeButton: false,
+          showFilterButton: false,
+        ),
+        const SizedBox(height: 14),
+        if (list.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              'No goals match your search.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: cs.onSurface.withValues(alpha: 0.55)),
             ),
-            leading: CircleAvatar(
-              backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
-              child: Icon(Icons.flag_outlined, color: Theme.of(context).colorScheme.onTertiaryContainer),
-            ),
-            title: Text(g['title']?.toString() ?? 'Goal', style: const TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: Text(
-              '${_fmtMoney(_readAmount(g['current_amount']))} / ${_fmtMoney(_readAmount(g['target_amount']))}',
-            ),
-          ),
-        );
-      },
+          )
+        else
+          for (final g in list) _buildGoalDismissibleCard(g),
+      ],
     );
   }
 
@@ -1490,6 +1749,113 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
+class _GoalsSummaryCard extends StatelessWidget {
+  const _GoalsSummaryCard({
+    required this.totalSaved,
+    required this.totalTargets,
+    required this.progress,
+    required this.format,
+    required this.remainingMoneyLabel,
+    required this.horizonLine,
+    required this.onEdit,
+  });
+
+  final double totalSaved;
+  final double totalTargets;
+  final double progress;
+  final String Function(double) format;
+  final String remainingMoneyLabel;
+  final String horizonLine;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final subLine = horizonLine.isEmpty ? remainingMoneyLabel : '$remainingMoneyLabel · $horizonLine';
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: cs.shadow.withValues(alpha: isDark ? 0.28 : 0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Total saved',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55)),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(format(totalSaved), style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: cs.onSurface)),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Goals',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55)),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(format(totalTargets), style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: cs.onSurface)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: totalTargets > 0 ? progress.clamp(0.0, 1.0) : 0,
+              minHeight: 10,
+              backgroundColor: cs.surfaceContainerHighest,
+              color: cs.primary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  subLine,
+                  style: TextStyle(fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55), fontSize: 13),
+                ),
+              ),
+              IconButton(
+                onPressed: onEdit,
+                icon: Icon(Icons.edit_outlined, color: cs.primary, size: 22),
+                tooltip: 'Add goal',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SearchFilterBar extends StatelessWidget {
   const _SearchFilterBar({
     required this.searchHint,
@@ -1499,6 +1865,7 @@ class _SearchFilterBar extends StatelessWidget {
     required this.onFilter,
     required this.onSort,
     this.showTypeButton = true,
+    this.showFilterButton = true,
   });
 
   final String searchHint;
@@ -1508,6 +1875,7 @@ class _SearchFilterBar extends StatelessWidget {
   final VoidCallback onFilter;
   final VoidCallback onSort;
   final bool showTypeButton;
+  final bool showFilterButton;
 
   @override
   Widget build(BuildContext context) {
@@ -1547,10 +1915,11 @@ class _SearchFilterBar extends StatelessWidget {
               onPressed: onType,
               child: Text('Type', style: TextStyle(fontWeight: FontWeight.w700, color: cs.primary, fontSize: 13)),
             ),
-          TextButton(
-            onPressed: onFilter,
-            child: Text('Filter', style: TextStyle(fontWeight: FontWeight.w700, color: cs.primary, fontSize: 13)),
-          ),
+          if (showFilterButton)
+            TextButton(
+              onPressed: onFilter,
+              child: Text('Filter', style: TextStyle(fontWeight: FontWeight.w700, color: cs.primary, fontSize: 13)),
+            ),
           TextButton(
             onPressed: onSort,
             child: Text('Sort', style: TextStyle(fontWeight: FontWeight.w700, color: cs.primary, fontSize: 13)),
