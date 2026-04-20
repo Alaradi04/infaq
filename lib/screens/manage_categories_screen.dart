@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:infaq/category/category_icons.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
@@ -18,6 +19,7 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _rows = [];
+  bool _supportsCategoryIconKey = true;
 
   @override
   void initState() {
@@ -39,11 +41,24 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
     });
 
     try {
-      final res = await supabase
-          .from('categories')
-          .select('id,name,type,user_id')
-          .or('user_id.is.null,user_id.eq.${user.id}')
-          .order('name');
+      dynamic res;
+      try {
+        res = await supabase
+            .from('categories')
+            .select('id,name,type,user_id,icon_key')
+            .or('user_id.is.null,user_id.eq.${user.id}')
+            .order('name');
+        _supportsCategoryIconKey = true;
+      } on PostgrestException catch (e) {
+        // Older DB schema: categories.icon_key column does not exist yet.
+        if (e.code != '42703') rethrow;
+        res = await supabase
+            .from('categories')
+            .select('id,name,type,user_id')
+            .or('user_id.is.null,user_id.eq.${user.id}')
+            .order('name');
+        _supportsCategoryIconKey = false;
+      }
 
       final list = (res as List<dynamic>).map((e) => Map<String, dynamic>.from(e as Map)).toList();
       if (!mounted) return;
@@ -68,6 +83,7 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
   Future<void> _addCategory() async {
     final nameCtrl = TextEditingController();
     String type = 'expense';
+    String iconKey = kDefaultCategoryIconKey;
 
     final ok = await showDialog<bool>(
       context: context,
@@ -75,26 +91,34 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
         builder: (context, setLocal) {
           return AlertDialog(
             title: const Text('New category'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  controller: nameCtrl,
-                  autofocus: true,
-                  decoration: const InputDecoration(labelText: 'Name'),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: type,
-                  decoration: const InputDecoration(labelText: 'Type'),
-                  items: const [
-                    DropdownMenuItem(value: 'expense', child: Text('Expense')),
-                    DropdownMenuItem(value: 'income', child: Text('Income')),
-                  ],
-                  onChanged: (v) => setLocal(() => type = v ?? 'expense'),
-                ),
-              ],
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: nameCtrl,
+                    autofocus: true,
+                    decoration: const InputDecoration(labelText: 'Name'),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: type,
+                    decoration: const InputDecoration(labelText: 'Type'),
+                    items: const [
+                      DropdownMenuItem(value: 'expense', child: Text('Expense')),
+                      DropdownMenuItem(value: 'income', child: Text('Income')),
+                    ],
+                    onChanged: (v) => setLocal(() => type = v ?? 'expense'),
+                  ),
+                  const SizedBox(height: 16),
+                  CategoryIconPickerGrid(
+                    selectedKey: iconKey,
+                    accentColor: _primary,
+                    onSelected: (k) => setLocal(() => iconKey = k),
+                  ),
+                ],
+              ),
             ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -117,11 +141,15 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
     if (user == null) return;
 
     try {
-      await Supabase.instance.client.from('categories').insert({
+      final payload = <String, dynamic>{
         'user_id': user.id,
         'name': name,
         'type': type,
-      });
+      };
+      if (_supportsCategoryIconKey) {
+        payload['icon_key'] = validatedCategoryIconKey(iconKey);
+      }
+      await Supabase.instance.client.from('categories').insert(payload);
       if (mounted) {
         showInfaqSnack(context, 'Category added');
         await _load();
@@ -136,16 +164,39 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
     if (id == null) return;
 
     final nameCtrl = TextEditingController(text: row['name']?.toString() ?? '');
+    var iconKey = validatedCategoryIconKey(row['icon_key']?.toString());
 
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Rename category'),
-        content: TextField(controller: nameCtrl, autofocus: true, decoration: const InputDecoration(labelText: 'Name')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setLocal) {
+          return AlertDialog(
+            title: const Text('Edit category'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: nameCtrl,
+                    autofocus: true,
+                    decoration: const InputDecoration(labelText: 'Name'),
+                  ),
+                  const SizedBox(height: 16),
+                  CategoryIconPickerGrid(
+                    selectedKey: iconKey,
+                    accentColor: _primary,
+                    onSelected: (k) => setLocal(() => iconKey = k),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+            ],
+          );
+        },
       ),
     );
 
@@ -158,7 +209,11 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
     if (user == null) return;
 
     try {
-      await Supabase.instance.client.from('categories').update({'name': name}).eq('id', id).eq('user_id', user.id);
+      final payload = <String, dynamic>{'name': name};
+      if (_supportsCategoryIconKey) {
+        payload['icon_key'] = validatedCategoryIconKey(iconKey);
+      }
+      await Supabase.instance.client.from('categories').update(payload).eq('id', id).eq('user_id', user.id);
       if (mounted) {
         showInfaqSnack(context, 'Updated');
         await _load();
@@ -250,8 +305,18 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
                       final def = _isDefault(row);
                       final type = (row['type']?.toString() ?? '').toUpperCase();
                       final name = row['name']?.toString() ?? '';
+                      final iconData = categoryIconForDisplay(
+                        iconKey: row['icon_key']?.toString(),
+                        name: name,
+                        type: row['type']?.toString() ?? 'expense',
+                      );
 
                       return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: _kMint,
+                          foregroundColor: _primary,
+                          child: Icon(iconData, size: 22),
+                        ),
                         title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
                         subtitle: Text('$type · ${def ? 'Default' : 'Yours'}'),
                         trailing: def

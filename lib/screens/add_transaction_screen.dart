@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:infaq/category/category_icons.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
@@ -21,10 +22,17 @@ BoxDecoration _addTxPillDecoration() => BoxDecoration(
     );
 
 class _CategoryRow {
-  _CategoryRow({required this.id, required this.name, required this.type});
+  _CategoryRow({required this.id, required this.name, required this.type, this.iconKey});
   final String id;
   final String name;
   final String type;
+  final String? iconKey;
+
+  IconData get displayIcon => categoryIconForDisplay(
+        iconKey: iconKey,
+        name: name,
+        type: type,
+      );
 }
 
 /// Full-screen add or edit flow. Pops with `true` if a transaction was saved,
@@ -61,6 +69,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   bool _loadingCategories = true;
   bool _saving = false;
   String? _categoryError;
+  bool _supportsCategoryIconKey = true;
 
   static const _primary = kInfaqPrimaryGreen;
 
@@ -137,11 +146,24 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     });
 
     try {
-      final res = await supabase
-          .from('categories')
-          .select('id,name,type')
-          .or('user_id.is.null,user_id.eq.${user.id}')
-          .order('name');
+      dynamic res;
+      try {
+        res = await supabase
+            .from('categories')
+            .select('id,name,type,icon_key')
+            .or('user_id.is.null,user_id.eq.${user.id}')
+            .order('name');
+        _supportsCategoryIconKey = true;
+      } on PostgrestException catch (e) {
+        // Backward compatibility before icon_key migration is applied.
+        if (e.code != '42703') rethrow;
+        res = await supabase
+            .from('categories')
+            .select('id,name,type')
+            .or('user_id.is.null,user_id.eq.${user.id}')
+            .order('name');
+        _supportsCategoryIconKey = false;
+      }
 
       final list = res as List<dynamic>;
       final rows = list
@@ -150,8 +172,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             final id = m['id']?.toString();
             final name = m['name']?.toString() ?? '';
             final type = (m['type']?.toString() ?? 'expense').toLowerCase();
+            final iconKey = _supportsCategoryIconKey ? m['icon_key']?.toString() : null;
             if (id == null) return null;
-            return _CategoryRow(id: id, name: name, type: type);
+            return _CategoryRow(id: id, name: name, type: type, iconKey: iconKey);
           })
           .whereType<_CategoryRow>()
           .toList();
@@ -274,6 +297,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     itemBuilder: (context, i) {
                       final c = _filteredCategories[i];
                       return ListTile(
+                        leading: Icon(c.displayIcon, color: _primary, size: 26),
                         title: Text(c.name),
                         trailing: _categoryId == c.id
                             ? const Icon(Icons.check_circle_rounded, color: _primary)
@@ -507,6 +531,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                             child: Row(
                               children: [
+                                if (_selectedCategory != null && !_loadingCategories) ...[
+                                  Icon(_selectedCategory!.displayIcon, color: _primary, size: 22),
+                                  const SizedBox(width: 12),
+                                ],
                                 Expanded(
                                   child: _loadingCategories
                                       ? Text(

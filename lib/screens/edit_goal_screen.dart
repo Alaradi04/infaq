@@ -10,12 +10,6 @@ import 'package:infaq/ui/infaq_widgets.dart';
 
 const Color _kGoalHeaderCyan = Color(0xFFE8F4FA);
 
-class _GoalParticipant {
-  _GoalParticipant({required this.name, required this.amount});
-  String name;
-  double amount;
-}
-
 class EditGoalScreen extends StatefulWidget {
   const EditGoalScreen({super.key, required this.goal, this.currencyCode});
 
@@ -34,8 +28,6 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
 
   late DateTime _deadline;
   IconData _goalIcon = Icons.menu_book_rounded;
-  bool _shared = false;
-  final List<_GoalParticipant> _participants = [];
   bool _saving = false;
   bool _extrasLoaded = false;
 
@@ -90,24 +82,9 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
         if (monthly != null && monthly > 0) {
           _monthlyCtrl.text = monthly % 1 == 0 ? monthly.toStringAsFixed(0) : monthly.toStringAsFixed(2);
         }
-        final shared = m['shared'] == true;
         final iconCp = (m['icon'] as num?)?.toInt();
-        final pl = <_GoalParticipant>[];
-        for (final e in (m['participants'] as List<dynamic>? ?? [])) {
-          if (e is Map<String, dynamic>) {
-            pl.add(
-              _GoalParticipant(
-                name: e['name']?.toString() ?? '',
-                amount: (e['amount'] as num?)?.toDouble() ?? 0,
-              ),
-            );
-          }
-        }
         if (mounted) {
           setState(() {
-            _shared = shared;
-            _participants.clear();
-            _participants.addAll(pl);
             if (iconCp != null) {
               _goalIcon = IconData(iconCp, fontFamily: 'MaterialIcons');
             }
@@ -133,9 +110,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
       _extrasKey(id),
       jsonEncode({
         'monthly': monthly,
-        'shared': _shared,
         'icon': _goalIcon.codePoint,
-        'participants': _participants.map((e) => {'name': e.name, 'amount': e.amount}).toList(),
       }),
     );
   }
@@ -346,64 +321,6 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
         );
       },
     );
-  }
-
-  Future<void> _addParticipant() async {
-    final nameCtrl = TextEditingController();
-    final amtCtrl = TextEditingController();
-    try {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) {
-          final cs = Theme.of(ctx).colorScheme;
-          return AlertDialog(
-            title: const Text('Add participant'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'Name',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: amtCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(
-                    labelText: 'Amount',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    suffixText: _currencySuffix(),
-                    suffixStyle: TextStyle(color: cs.primary, fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Add')),
-            ],
-          );
-        },
-      );
-      if (ok != true || !mounted) return;
-      final name = nameCtrl.text.trim();
-      final amount = double.tryParse(amtCtrl.text.replaceAll(',', '')) ?? 0;
-      if (name.isEmpty) {
-        showInfaqSnack(context, 'Enter a name.');
-        return;
-      }
-      setState(() => _participants.add(_GoalParticipant(name: name, amount: amount)));
-    } finally {
-      nameCtrl.dispose();
-      amtCtrl.dispose();
-    }
-  }
-
-  void _removeParticipant(int index) {
-    setState(() => _participants.removeAt(index));
   }
 
   @override
@@ -626,76 +543,6 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                             onChanged: () => setState(() {}),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                    decoration: BoxDecoration(
-                      color: cs.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(22),
-                      boxShadow: [
-                        BoxShadow(
-                          color: cs.shadow.withValues(alpha: isDark ? 0.25 : 0.08),
-                          blurRadius: 18,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        InfaqPillSwitchRow(
-                          title: 'Shared goal',
-                          leading: Icon(Icons.people_outline_rounded, color: cs.primary, size: 22),
-                          value: _shared,
-                          onChanged: (v) => setState(() => _shared = v),
-                        ),
-                        if (_shared) ...[
-                          const SizedBox(height: 14),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: _addParticipant,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: cs.primary,
-                                foregroundColor: cs.onPrimary,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                              ),
-                              icon: const Icon(Icons.person_add_alt_1_rounded),
-                              label: const Text('Add participant', style: TextStyle(fontWeight: FontWeight.w700)),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          for (var i = 0; i < _participants.length; i++)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: cs.surface,
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: cs.outline.withValues(alpha: 0.2)),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        '${_participants[i].name} - ${_fmtMoney(_participants[i].amount)}',
-                                        style: TextStyle(fontWeight: FontWeight.w600, color: cs.onSurface),
-                                      ),
-                                    ),
-                                    IconButton(
-                                      onPressed: () => _removeParticipant(i),
-                                      icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade600),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
                       ],
                     ),
                   ),

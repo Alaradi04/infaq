@@ -90,23 +90,31 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
 
   Future<void> _next() async {
     if (_step == 1) {
-      if (_fullName.text.trim().isEmpty ||
-          _email.text.trim().isEmpty ||
-          !_isValidEmail(_email.text.trim()) ||
-          _password.text.isEmpty ||
-          _passwordTier != _PasswordTier.strong) {
-        if (_email.text.trim().isNotEmpty && !_isValidEmail(_email.text.trim())) {
-          showInfaqSnack(context, 'Please enter a valid email address.');
-          return;
-        }
+      final name = _fullName.text.trim();
+      final email = _email.text.trim();
+
+      if (name.isEmpty) {
+        showInfaqSnack(context, 'Name is empty. Please enter your full name.');
+        return;
+      }
+      if (email.isEmpty) {
+        showInfaqSnack(context, 'Email is empty. Please enter your email address.');
+        return;
+      }
+      if (!_isValidEmail(email)) {
+        showInfaqSnack(context, 'Please enter a valid email address.');
+        return;
+      }
+      if (_password.text.isEmpty) {
+        showInfaqSnack(context, 'Password is empty. Please create a password.');
+        return;
+      }
+      if (_passwordTier != _PasswordTier.strong) {
         final tier = _passwordTier;
         final message = tier == _PasswordTier.moderate
             ? 'Password is moderate. Add one more type (uppercase, lowercase, number, or symbol) to make it strong.'
             : 'Password is too weak. Use at least 8 characters and include at least 2 of: uppercase, lowercase, number, symbol.';
-        showInfaqSnack(
-          context,
-          message,
-        );
+        showInfaqSnack(context, message);
         return;
       }
       setState(() => _step = 2);
