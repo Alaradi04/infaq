@@ -1996,7 +1996,8 @@ class _MgmtTxTile extends StatelessWidget {
     if (catMap is Map && (catMap['name']?.toString().isNotEmpty ?? false)) {
       category = catMap['name'].toString();
     }
-    final createdRaw = data['created_at'] ?? data['date'];
+    // Use the transaction date selected by user; fallback for old rows.
+    final createdRaw = data['date'] ?? data['created_at'];
     final d = createdRaw != null ? DateTime.tryParse(createdRaw.toString()) : null;
     final subtitle = [
       if (category.isNotEmpty) category,

@@ -535,7 +535,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           _SectionHeader(
                             title: 'Recent transactions',
                             action: 'View all',
-                            onAction: () => _soon('Transactions'),
+                            onAction: () => setState(() => _tabIndex = 1),
                           ),
                           const SizedBox(height: 12),
                           _TransactionsList(
@@ -1064,7 +1064,8 @@ class _TxRow extends StatelessWidget {
     if (catMap is Map && (catMap['name']?.toString().isNotEmpty ?? false)) {
       category = catMap['name'].toString();
     }
-    final createdRaw = data['created_at'] ?? data['date'];
+    // Prefer user-selected transaction date; fallback to created_at for legacy rows.
+    final createdRaw = data['date'] ?? data['created_at'];
     final d = createdRaw != null ? DateTime.tryParse(createdRaw.toString()) : null;
     final sub = [
       if (category.isNotEmpty) category,
