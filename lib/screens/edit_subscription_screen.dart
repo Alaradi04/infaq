@@ -110,7 +110,7 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
       await Supabase.instance.client.storage.from(InfaqSubscriptionIconStorage.bucket).uploadBinary(
             path,
             bytes,
-            fileOptions: FileOptions(contentType: mime, upsert: true),
+            fileOptions: FileOptions(contentType: mime),
           );
       if (!mounted) return;
       setState(() {

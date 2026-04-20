@@ -92,12 +92,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final name = x.name.toLowerCase();
       final ext = name.endsWith('.png') ? 'png' : 'jpg';
       final mime = ext == 'png' ? 'image/png' : 'image/jpeg';
-      final storagePath = '${user.id}/avatar.$ext';
+      final previousPath = _photoPathInStorage;
+      final storagePath = '${user.id}/avatar_${DateTime.now().millisecondsSinceEpoch}.$ext';
 
       await Supabase.instance.client.storage.from(InfaqAvatarStorage.bucket).uploadBinary(
             storagePath,
             bytes,
-            fileOptions: FileOptions(contentType: mime, upsert: true),
+            fileOptions: FileOptions(contentType: mime),
           );
 
       if (!mounted) return;
@@ -109,6 +110,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       });
 
       await Supabase.instance.client.from('users').update({'profile_photo_path': storagePath}).eq('id', user.id);
+      if (previousPath != null && previousPath.isNotEmpty && previousPath != storagePath) {
+        try {
+          await Supabase.instance.client.storage.from(InfaqAvatarStorage.bucket).remove([previousPath]);
+        } catch (_) {
+          // Ignore cleanup failure; profile now points to the new photo.
+        }
+      }
     } catch (e) {
       if (mounted) {
         showInfaqSnack(context, 'Could not update photo: $e');

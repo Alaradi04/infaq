@@ -1,8 +1,10 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Supabase Storage bucket for subscription row images. Create a **public** bucket `subscription-icon` in the dashboard.
+/// Supabase Storage bucket for subscription row images.
+/// Reuses `avatars` to avoid missing-bucket failures in environments
+/// where a separate `subscription-icon` bucket was not created.
 class InfaqSubscriptionIconStorage {
-  static const String bucket = 'subscription-icon';
+  static const String bucket = 'avatars';
 
   static String publicUrl(SupabaseClient client, String path) {
     return client.storage.from(bucket).getPublicUrl(path.trim());

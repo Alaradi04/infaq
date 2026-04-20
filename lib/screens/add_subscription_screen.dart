@@ -32,7 +32,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
 
   final ImagePicker _imagePicker = ImagePicker();
   Uint8List? _iconPreviewBytes;
-  /// Storage path inside `subscription-icon` bucket (saved to `icon_url`).
+  /// Storage path inside the configured storage bucket (saved to `icon_url`).
   String? _iconStoragePath;
   bool _uploadingIcon = false;
 
@@ -103,7 +103,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
       await Supabase.instance.client.storage.from(InfaqSubscriptionIconStorage.bucket).uploadBinary(
             path,
             bytes,
-            fileOptions: FileOptions(contentType: mime, upsert: true),
+            fileOptions: FileOptions(contentType: mime),
           );
 
       if (!mounted) return;
