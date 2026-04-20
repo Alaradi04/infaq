@@ -144,10 +144,63 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                 _pickIcon(ImageSource.camera);
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.link_rounded),
+              title: const Text('Use image URL'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _enterImageUrl();
+              },
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _enterImageUrl() async {
+    final ctrl = TextEditingController(
+      text: _iconStoragePath != null && _iconStoragePath!.startsWith('http')
+          ? _iconStoragePath
+          : '',
+    );
+    final value = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Image URL'),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.url,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'https://example.com/icon.png',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Use URL'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || value == null) return;
+    final uri = Uri.tryParse(value);
+    final valid = uri != null &&
+        (uri.scheme == 'http' || uri.scheme == 'https') &&
+        (uri.host.isNotEmpty);
+    if (!valid) {
+      showInfaqSnack(context, 'Please enter a valid http/https image URL.');
+      return;
+    }
+    setState(() {
+      _iconPreviewBytes = null;
+      _iconStoragePath = value;
+    });
   }
 
   void _cancel() => Navigator.pop(context);
@@ -270,10 +323,10 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                                         ? MemoryImage(_iconPreviewBytes!)
                                         : (_iconStoragePath != null && _iconStoragePath!.isNotEmpty
                                             ? NetworkImage(
-                                                InfaqSubscriptionIconStorage.publicUrl(
+                                                InfaqSubscriptionIconStorage.resolveDisplayUrl(
                                                   Supabase.instance.client,
                                                   _iconStoragePath!,
-                                                ),
+                                                )!,
                                               )
                                             : null),
                                     child: _iconPreviewBytes == null &&

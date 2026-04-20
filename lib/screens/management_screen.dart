@@ -20,7 +20,7 @@ enum _SubSort { none, amountHigh, amountLow, nameAz }
 
 enum _MgmtMainTab { transactions, subscriptions, goals }
 
-enum _PeriodMode { allTime, month, year }
+enum _PeriodMode { today, allTime, month, year }
 
 enum _TxTypeFilter { all, income, expense }
 
@@ -286,6 +286,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
   bool _inPeriod(DateTime? d) {
     if (d == null) return false;
     switch (_periodMode) {
+      case _PeriodMode.today:
+        final now = DateTime.now();
+        return d.year == now.year && d.month == now.month && d.day == now.day;
       case _PeriodMode.allTime:
         return true;
       case _PeriodMode.month:
@@ -345,6 +348,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
 
   String _periodTitle() {
     switch (_periodMode) {
+      case _PeriodMode.today:
+        return 'Today';
       case _PeriodMode.allTime:
         return 'All time';
       case _PeriodMode.month:
@@ -379,6 +384,13 @@ class _ManagementScreenState extends State<ManagementScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const ListTile(title: Text('Show transactions', style: TextStyle(fontWeight: FontWeight.w800))),
+              ListTile(
+                title: const Text('Today'),
+                onTap: () {
+                  setState(() => _periodMode = _PeriodMode.today);
+                  Navigator.pop(ctx);
+                },
+              ),
               ListTile(
                 title: const Text('All time'),
                 onTap: () {
