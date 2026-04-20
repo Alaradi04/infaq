@@ -3,7 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/ui/infaq_widgets.dart';
 
-enum _PasswordTier { weak, moderate, strong }
+/// Strong password: at least this many characters (12–16+ recommended in UI copy).
+const int _kPasswordMinLength = 12;
 
 class RegisterFlowScreen extends StatefulWidget {
   const RegisterFlowScreen({super.key});
@@ -50,20 +51,27 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
     return RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email);
   }
 
-  _PasswordTier get _passwordTier {
+  bool get _passwordStrong {
     final p = _password.text;
-    if (p.isEmpty) return _PasswordTier.weak;
+    if (p.length < _kPasswordMinLength) return false;
+    if (!RegExp(r'[A-Z]').hasMatch(p)) return false;
+    if (!RegExp(r'[a-z]').hasMatch(p)) return false;
+    if (!RegExp(r'\d').hasMatch(p)) return false;
+    return true;
+  }
 
-    final hasLower = RegExp(r'[a-z]').hasMatch(p);
-    final hasUpper = RegExp(r'[A-Z]').hasMatch(p);
-    final hasDigit = RegExp(r'\d').hasMatch(p);
-    final hasSymbol = RegExp(r'[^A-Za-z0-9]').hasMatch(p);
-
-    final categories = [hasLower, hasUpper, hasDigit, hasSymbol].where((v) => v).length;
-
-    if (p.length < 8 || categories < 2) return _PasswordTier.weak;
-    if (categories == 2) return _PasswordTier.moderate;
-    return _PasswordTier.strong; // categories >= 3 (and length >= 8 by previous checks)
+  String? _passwordRequirementHint() {
+    final p = _password.text;
+    if (p.isEmpty) return null;
+    final missing = <String>[];
+    if (p.length < _kPasswordMinLength) {
+      missing.add('at least $_kPasswordMinLength characters (longer is better)');
+    }
+    if (!RegExp(r'[A-Z]').hasMatch(p)) missing.add('an uppercase letter');
+    if (!RegExp(r'[a-z]').hasMatch(p)) missing.add('a lowercase letter');
+    if (!RegExp(r'\d').hasMatch(p)) missing.add('a number');
+    if (missing.isEmpty) return null;
+    return 'Add: ${missing.join(', ')}.';
   }
 
   void _showPasswordHelpDialog(BuildContext context) {
@@ -72,10 +80,11 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Strong password tips'),
-          content: const Text(
-            'Strong passwords are at least 8 characters and include at least 3 of: '
-            'uppercase (A-Z), lowercase (a-z), a number (0-9), and a symbol (!@#\$...).\n\n'
-            'Example: Abcdef1!',
+          content: Text(
+            'Length: use at least $_kPasswordMinLength characters; 12–16 or longer is recommended.\n\n'
+            'Complexity: include uppercase (A–Z), lowercase (a–z), and numbers (0–9). '
+            'Adding symbols (!@#\$%^&*, etc.) is optional but improves strength.\n\n'
+            'Example: MyFamilyBudget2026',
           ),
           actions: [
             TextButton(
@@ -109,12 +118,13 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
         showInfaqSnack(context, 'Password is empty. Please create a password.');
         return;
       }
-      if (_passwordTier != _PasswordTier.strong) {
-        final tier = _passwordTier;
-        final message = tier == _PasswordTier.moderate
-            ? 'Password is moderate. Add one more type (uppercase, lowercase, number, or symbol) to make it strong.'
-            : 'Password is too weak. Use at least 8 characters and include at least 2 of: uppercase, lowercase, number, symbol.';
-        showInfaqSnack(context, message);
+      if (!_passwordStrong) {
+        final hint = _passwordRequirementHint();
+        showInfaqSnack(
+          context,
+          hint ??
+              'Password must be at least $_kPasswordMinLength characters with uppercase, lowercase, and a number.',
+        );
         return;
       }
       setState(() => _step = 2);
@@ -316,17 +326,15 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
       Align(
         alignment: Alignment.center,
         child: Text(
-          _passwordTier == _PasswordTier.strong
-              ? 'strong'
-              : _passwordTier == _PasswordTier.moderate
-                  ? 'moderate'
+          _password.text.isEmpty
+              ? 'weak'
+              : _passwordStrong
+                  ? 'strong'
                   : 'weak',
           style: TextStyle(
-            color: _passwordTier == _PasswordTier.strong
-                ? Colors.green.withValues(alpha: 0.85)
-                : _passwordTier == _PasswordTier.moderate
-                    ? Colors.orange.withValues(alpha: 0.85)
-                    : Colors.red.withValues(alpha: 0.85),
+            color: _password.text.isEmpty || !_passwordStrong
+                ? Colors.red.withValues(alpha: 0.85)
+                : Colors.green.withValues(alpha: 0.85),
             fontWeight: FontWeight.w700,
           ),
         ),
