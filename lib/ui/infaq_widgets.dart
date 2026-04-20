@@ -1,26 +1,38 @@
 import 'package:flutter/material.dart';
 
 class InfaqHeader extends StatelessWidget {
-  const InfaqHeader({super.key, this.showBack = false});
+  const InfaqHeader({super.key, this.showBack = false, this.onBack});
 
   final bool showBack;
+  /// When set, replaces the default [Navigator.maybePop] behavior (e.g. multi-step flows).
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
     final canPop = Navigator.of(context).canPop();
+    final Widget leading;
+    if (!showBack) {
+      leading = const SizedBox(width: 48);
+    } else if (onBack != null) {
+      leading = IconButton(
+        onPressed: onBack,
+        icon: const Icon(Icons.arrow_back_ios_new_rounded),
+      );
+    } else if (canPop) {
+      leading = IconButton(
+        onPressed: () => Navigator.of(context).maybePop(),
+        icon: const Icon(Icons.arrow_back_ios_new_rounded),
+      );
+    } else {
+      leading = const SizedBox(width: 48);
+    }
     return SafeArea(
       bottom: false,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
-            if (showBack && canPop)
-              IconButton(
-                onPressed: () => Navigator.of(context).maybePop(),
-                icon: const Icon(Icons.arrow_back_ios_new_rounded),
-              )
-            else
-              const SizedBox(width: 48),
+            leading,
             const Spacer(),
             const Icon(Icons.folder_rounded, size: 22, color: Color(0xFF3F5F4A)),
             const SizedBox(width: 8),

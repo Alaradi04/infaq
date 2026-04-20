@@ -206,13 +206,28 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
     );
   }
 
+  void _onRegistrationBack() {
+    if (_step > 1) {
+      setState(() => _step--);
+    } else {
+      Navigator.of(context).maybePop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
-        children: [
-          const InfaqHeader(showBack: true),
+    return PopScope(
+      canPop: _step == 1,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _step > 1) {
+          setState(() => _step--);
+        }
+      },
+      child: Scaffold(
+        body: ListView(
+          padding: const EdgeInsets.only(bottom: 24),
+          children: [
+            InfaqHeader(showBack: true, onBack: _onRegistrationBack),
           const SizedBox(height: 10),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 22),
@@ -261,6 +276,7 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
