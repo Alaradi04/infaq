@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:infaq/screens/add_goal_screen.dart';
 import 'package:infaq/screens/add_subscription_screen.dart';
 import 'package:infaq/screens/add_transaction_screen.dart';
+import 'package:infaq/screens/data_privacy_screen.dart';
 import 'package:infaq/screens/edit_profile_screen.dart';
 import 'package:infaq/screens/help_support_screen.dart';
 import 'package:infaq/screens/manage_categories_screen.dart';
@@ -366,6 +367,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _openDataAndPrivacy() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (context) => const DataPrivacyScreen()),
+    );
+  }
+
   Future<void> _openEditProfile() async {
     final u = Supabase.instance.client.auth.currentUser;
     final changed = await Navigator.of(context).push<bool>(
@@ -597,7 +604,7 @@ class _HomeScreenState extends State<HomeScreen> {
               onOpenEditProfile: _openEditProfile,
               onDataRefresh: _bootstrap,
               onHelpAndSupport: _openHelpSupport,
-              onDataAndPrivacy: () => _soon('Data and privacy'),
+              onDataAndPrivacy: _openDataAndPrivacy,
             ),
           ],
         ),
