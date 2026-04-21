@@ -43,6 +43,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// 0 home, 1 currency, 2 analytics, 3 profile (center + is separate action).
   int _tabIndex = 0;
+  /// Mirrors Management tab: 0 transactions, 1 subscriptions, 2 goals.
+  int _managementTabIndex = 0;
 
   @override
   void initState() {
@@ -334,6 +336,30 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _handleBottomAdd() async {
+    if (_tabIndex == 0) {
+      await _openAddTransaction();
+      return;
+    }
+
+    if (_tabIndex == 1) {
+      switch (_managementTabIndex) {
+        case 1:
+          await _openAddSubscription();
+          return;
+        case 2:
+          await _openAddGoal();
+          return;
+        case 0:
+        default:
+          await _openAddTransaction();
+          return;
+      }
+    }
+
+    await _openAddTransaction();
+  }
+
   void _openHelpSupport() {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(builder: (context) => const HelpSupportScreen()),
@@ -433,7 +459,7 @@ class _HomeScreenState extends State<HomeScreen> {
         tabIndex: _tabIndex,
         onHome: () => setState(() => _tabIndex = 0),
         onCurrency: () => setState(() => _tabIndex = 1),
-        onAdd: _openAddTransaction,
+        onAdd: _handleBottomAdd,
         onAnalytics: () => setState(() => _tabIndex = 2),
         onProfile: () => setState(() => _tabIndex = 3),
       ),
@@ -558,6 +584,7 @@ class _HomeScreenState extends State<HomeScreen> {
               transactionsListRefreshToken: _transactionsListRefreshToken,
               onDataChanged: _bootstrap,
               onEditTransaction: _openEditTransaction,
+              onMainTabIndexChanged: (index) => setState(() => _managementTabIndex = index),
             ),
             _PlaceholderTab(
               title: 'Analytics',

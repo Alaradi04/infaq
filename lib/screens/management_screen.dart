@@ -40,6 +40,7 @@ class ManagementScreen extends StatefulWidget {
     this.transactionsListRefreshToken = 0,
     required this.onDataChanged,
     required this.onEditTransaction,
+    this.onMainTabIndexChanged,
   });
 
   final String? currencyCode;
@@ -47,6 +48,7 @@ class ManagementScreen extends StatefulWidget {
   final int transactionsListRefreshToken;
   final VoidCallback onDataChanged;
   final void Function(Map<String, dynamic> row) onEditTransaction;
+  final ValueChanged<int>? onMainTabIndexChanged;
 
   @override
   State<ManagementScreen> createState() => _ManagementScreenState();
@@ -186,6 +188,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
 
   void _onMainTabChanged(_MgmtMainTab t) {
     setState(() => _mainTab = t);
+    widget.onMainTabIndexChanged?.call(t.index);
     if (t == _MgmtMainTab.subscriptions && _subscriptions.isEmpty && !_loadingSub) _loadSubscriptions();
     if (t == _MgmtMainTab.goals && _goals.isEmpty && !_loadingGoals) _loadGoals();
   }
