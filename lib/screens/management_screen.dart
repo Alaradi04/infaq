@@ -11,8 +11,6 @@ import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
 const Color _kMgmtMint = Color(0xFFE6F4EA);
-const Color _kSubTabCream = Color(0xFFFFF6E8);
-const Color _kGoalsHeaderCyan = Color(0xFFE8F4FA);
 
 enum _SubFilter { all, activeOnly, inactiveOnly }
 
@@ -571,9 +569,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
     final Color headerTint;
     switch (_mainTab) {
       case _MgmtMainTab.subscriptions:
-        headerTint = isDark ? Color.lerp(cs.tertiaryContainer, cs.surface, 0.35)! : _kSubTabCream;
+        headerTint = isDark ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)! : _kMgmtMint;
       case _MgmtMainTab.goals:
-        headerTint = isDark ? Color.lerp(cs.secondaryContainer, cs.surface, 0.4)! : _kGoalsHeaderCyan;
+        headerTint = isDark ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)! : _kMgmtMint;
       case _MgmtMainTab.transactions:
         headerTint = isDark ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)! : _kMgmtMint;
     }
