@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:infaq/app_theme_mode.dart';
 import 'package:infaq/screens/home_screen.dart';
 import 'package:infaq/screens/login_screen.dart';
+import 'package:infaq/screens/oauth_profile_setup_screen.dart';
 
 const String _kSupabaseUrl = String.fromEnvironment(
   'SUPABASE_URL',
@@ -197,12 +198,34 @@ class MainApp extends StatelessWidget {
   }
 }
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  /// Bumped after [OAuthProfileSetupScreen] saves so [FutureBuilder] re-checks the `users` row.
+  int _profileGateEpoch = 0;
+
+  Future<bool> _userRowExists(String userId) async {
+    try {
+      final row = await Supabase.instance.client
+          .from('users')
+          .select('id')
+          .eq('id', userId)
+          .maybeSingle();
+      return row != null;
+    } catch (_) {
+      return false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final supabase = Supabase.instance.client;
+    final cs = Theme.of(context).colorScheme;
 
     return StreamBuilder<AuthState>(
       stream: supabase.auth.onAuthStateChange,
@@ -217,7 +240,27 @@ class AuthGate extends StatelessWidget {
           return const LoginScreen();
         }
 
-        return const HomeScreen();
+        final userId = session.user.id;
+        return FutureBuilder<bool>(
+          key: ValueKey<String>('${userId}_$_profileGateEpoch'),
+          future: _userRowExists(userId),
+          builder: (context, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return Scaffold(
+                body: Center(child: CircularProgressIndicator(color: cs.primary)),
+              );
+            }
+            final exists = snap.data ?? false;
+            if (!exists) {
+              return OAuthProfileSetupScreen(
+                onComplete: () {
+                  if (mounted) setState(() => _profileGateEpoch++);
+                },
+              );
+            }
+            return const HomeScreen();
+          },
+        );
       },
     );
   }
