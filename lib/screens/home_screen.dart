@@ -283,9 +283,10 @@ class _HomeScreenState extends State<HomeScreen> {
     if (result == true) await _bootstrap();
   }
 
-  Future<void> _confirmDeleteTransaction(Map<String, dynamic> row) async {
+  /// For [Dismissible]: returns `true` if the row should be removed, `false` to snap back.
+  Future<bool> _confirmDeleteTransactionDismissible(Map<String, dynamic> row) async {
     final id = row['id']?.toString();
-    if (id == null || id.isEmpty) return;
+    if (id == null || id.isEmpty) return false;
 
     final title = (row['description'] ?? 'This transaction').toString();
     final ok = await showDialog<bool>(
@@ -306,18 +307,20 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
-    if (ok != true || !mounted) return;
+    if (ok != true || !mounted) return false;
 
     final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return;
+    if (user == null) return false;
 
     try {
       await Supabase.instance.client.from('transactions').delete().eq('id', id).eq('user_id', user.id);
-      if (!mounted) return;
+      if (!mounted) return false;
       await _bootstrap();
       if (mounted) showInfaqSnack(context, 'Transaction deleted');
+      return true;
     } catch (e) {
       if (mounted) showInfaqSnack(context, 'Could not delete: $e');
+      return false;
     }
   }
 
@@ -582,7 +585,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             transactions: _transactions,
                             format: _fmtMoney,
                             onEdit: _openEditTransaction,
-                            onDelete: _confirmDeleteTransaction,
+                            onConfirmDismissDelete: _confirmDeleteTransactionDismissible,
                           ),
                           const SizedBox(height: 120),
                         ],
@@ -1053,13 +1056,13 @@ class _TransactionsList extends StatelessWidget {
     required this.transactions,
     required this.format,
     required this.onEdit,
-    required this.onDelete,
+    required this.onConfirmDismissDelete,
   });
 
   final List<Map<String, dynamic>> transactions;
   final String Function(double) format;
   final void Function(Map<String, dynamic> row) onEdit;
-  final void Function(Map<String, dynamic> row) onDelete;
+  final Future<bool> Function(Map<String, dynamic> row) onConfirmDismissDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1087,8 +1090,8 @@ class _TransactionsList extends StatelessWidget {
           _TxRow(
             data: t,
             format: format,
-            onEdit: () => onEdit(t),
-            onDelete: () => onDelete(t),
+            onTap: () => onEdit(t),
+            confirmDismissDelete: () => onConfirmDismissDelete(t),
           ),
       ],
     );
@@ -1099,126 +1102,179 @@ class _TxRow extends StatelessWidget {
   const _TxRow({
     required this.data,
     required this.format,
-    required this.onEdit,
-    required this.onDelete,
+    required this.onTap,
+    required this.confirmDismissDelete,
   });
 
   final Map<String, dynamic> data;
   final String Function(double) format;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final VoidCallback onTap;
+  final Future<bool> Function() confirmDismissDelete;
 
-  @override
-  Widget build(BuildContext context) {
-    final title = (data['title'] ??
-            data['description'] ??
-            data['merchant'] ??
-            data['name'] ??
-            'Transaction')
-        .toString();
-    var category = (data['category'] ?? data['category_name'] ?? '').toString();
-    final catMap = data['categories'];
-    if (catMap is Map && (catMap['name']?.toString().isNotEmpty ?? false)) {
-      category = catMap['name'].toString();
-    }
-    // Prefer user-selected transaction date; fallback to created_at for legacy rows.
-    final createdRaw = data['date'] ?? data['created_at'];
-    final d = createdRaw != null ? DateTime.tryParse(createdRaw.toString()) : null;
-    final sub = [
-      if (category.isNotEmpty) category,
-      if (d != null) _shortDate(d),
-    ].join(' · ');
-
-    final amount = _parseAmount(data['amount']);
-    String? catType;
-    if (catMap is Map) {
-      catType = catMap['type']?.toString().toLowerCase();
-    }
-    final legacyType = (data['type'] ?? data['transaction_type'] ?? '').toString().toLowerCase();
-    final isExpense = catType == 'expense' ||
-        (catType == null &&
-            (legacyType == 'expense' ||
-                legacyType == 'debit' ||
-                legacyType == 'out' ||
-                (legacyType.isEmpty && amount < 0)));
-    final displayAmount = isExpense ? -amount.abs() : amount.abs();
-    final txId = data['id']?.toString();
-    final canMutate = txId != null && txId.isNotEmpty;
-
-    final cs = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: isExpense ? Colors.deepOrange.withValues(alpha: 0.18) : cs.primary.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              isExpense ? Icons.shopping_bag_outlined : Icons.payments_outlined,
-              color: isExpense ? Colors.orangeAccent : cs.primary,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: cs.onSurface),
-                ),
-                if (sub.isNotEmpty)
-                  Text(
-                    sub,
-                    style: TextStyle(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.45)),
-                  ),
-              ],
-            ),
-          ),
-          Text(
-            isExpense ? '-${format(displayAmount.abs())}' : '+${format(displayAmount)}',
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              color: isExpense ? Colors.red.shade300 : cs.primary,
-            ),
-          ),
-          if (canMutate) ...[
-            IconButton(
-              tooltip: 'Edit',
-              onPressed: onEdit,
-              icon: Icon(Icons.edit_outlined, color: cs.primary, size: 22),
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-              padding: EdgeInsets.zero,
-            ),
-            IconButton(
-              tooltip: 'Delete',
-              onPressed: onDelete,
-              icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade700, size: 22),
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-              padding: EdgeInsets.zero,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  double _parseAmount(dynamic raw) {
+  static double _parseAmount(dynamic raw) {
     if (raw == null) return 0;
     if (raw is num) return raw.toDouble();
     return double.tryParse(raw.toString()) ?? 0;
   }
 
-  String _shortDate(DateTime d) {
-    return '${d.day}/${d.month}';
+  static bool _isExpense(Map<String, dynamic> data, double amount) {
+    final catMap = data['categories'];
+    String? catType;
+    if (catMap is Map) catType = catMap['type']?.toString().toLowerCase();
+    final legacyType = (data['type'] ?? data['transaction_type'] ?? '').toString().toLowerCase();
+    return catType == 'expense' ||
+        (catType == null &&
+            (legacyType == 'expense' ||
+                legacyType == 'debit' ||
+                legacyType == 'out' ||
+                (legacyType.isEmpty && amount < 0)));
+  }
+
+  String _prettyDate(DateTime d) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yest = today.subtract(const Duration(days: 1));
+    final asDay = DateTime(d.year, d.month, d.day);
+    if (asDay == today) return 'today';
+    if (asDay == yest) return 'yesterday';
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[d.month - 1]} ${d.day} ${d.year}';
+  }
+
+  static Color _accentFromTitle(String title) {
+    final h = title.hashCode.abs();
+    const colors = [
+      Color(0xFF6BB3F0),
+      Color(0xFFFF8FB8),
+      Color(0xFFFFB86C),
+      Color(0xFF7FD8BE),
+      Color(0xFFB39DFF),
+      Color(0xFFB0BEC5),
+    ];
+    return colors[h % colors.length];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final title = (data['description'] ?? data['title'] ?? data['merchant'] ?? data['name'] ?? 'Transaction').toString();
+    var category = (data['category'] ?? data['category_name'] ?? '').toString();
+    final catMap = data['categories'];
+    if (catMap is Map && (catMap['name']?.toString().isNotEmpty ?? false)) {
+      category = catMap['name'].toString();
+    }
+    final createdRaw = data['date'] ?? data['created_at'];
+    final d = createdRaw != null ? DateTime.tryParse(createdRaw.toString()) : null;
+    final subtitle = [
+      if (category.isNotEmpty) category,
+      if (d != null) _prettyDate(d),
+    ].join(' - ');
+
+    final amount = _parseAmount(data['amount']);
+    final isExpense = _isExpense(data, amount);
+
+    IconData leafIcon;
+    Color leafColor;
+    if (isExpense) {
+      leafIcon = Icons.eco_outlined;
+      leafColor = Colors.orange.shade700;
+    } else {
+      leafIcon = Icons.eco_outlined;
+      leafColor = Colors.green.shade700;
+    }
+
+    final txId = data['id']?.toString() ?? '';
+    final canMutate = txId.isNotEmpty;
+
+    final tile = Material(
+      color: cs.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(20),
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      child: InkWell(
+        onTap: canMutate ? onTap : null,
+        borderRadius: BorderRadius.circular(20),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            color: cs.surfaceContainerLow,
+            boxShadow: [
+              BoxShadow(
+                color: cs.shadow.withValues(alpha: isDark ? 0.25 : 0.07),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: _accentFromTitle(title).withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    isExpense ? Icons.shopping_bag_outlined : Icons.payments_outlined,
+                    color: isExpense ? Colors.deepOrange.shade700 : cs.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: cs.onSurface),
+                      ),
+                      if (subtitle.isNotEmpty)
+                        Text(
+                          subtitle,
+                          style: TextStyle(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.55)),
+                        ),
+                    ],
+                  ),
+                ),
+                Icon(leafIcon, size: 18, color: leafColor),
+                const SizedBox(width: 6),
+                Text(
+                  isExpense ? '-${format(amount.abs())}' : '+${format(amount.abs())}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: isExpense ? Colors.red.shade700 : cs.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: canMutate
+          ? Dismissible(
+              key: Key('home-tx-$txId-${title.hashCode}'),
+              direction: DismissDirection.endToStart,
+              background: Container(
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.only(right: 20),
+                decoration: BoxDecoration(color: Colors.red.shade600, borderRadius: BorderRadius.circular(20)),
+                child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 28),
+              ),
+              confirmDismiss: (_) => confirmDismissDelete(),
+              child: tile,
+            )
+          : tile,
+    );
   }
 }
