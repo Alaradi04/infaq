@@ -386,13 +386,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openEditProfile() async {
-    final u = Supabase.instance.client.auth.currentUser;
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (context) => EditProfileScreen(
           initialName: _name,
           initialCurrency: _currency,
-          initialIncomeType: u?.userMetadata?['income_type']?.toString(),
           initialProfilePhotoPath: _profilePhotoStoragePath,
           initialAvatarPublicUrl: _profileAvatarPublicUrl,
         ),

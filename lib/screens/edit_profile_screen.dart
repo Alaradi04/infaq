@@ -13,28 +13,18 @@ const Color _kLogoutGrey = Color(0xFF707070);
 
 const List<String> _kCurrencyCodes = ['BHD', 'USD', 'EUR', 'SAR', 'GBP'];
 
-const List<String> _kIncomeTypeOptions = [
-  'Salary',
-  'Freelance',
-  'Business',
-  'Investment',
-  'Other',
-];
-
-/// Full-screen **Edit Profile**: avatar, name, currency, income type (auth metadata), save, password, logout, delete.
+/// Full-screen **Edit Profile**: avatar, name, currency, save, password, logout, delete.
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({
     super.key,
     required this.initialName,
     required this.initialCurrency,
-    required this.initialIncomeType,
     required this.initialProfilePhotoPath,
     required this.initialAvatarPublicUrl,
   });
 
   final String? initialName;
   final String? initialCurrency;
-  final String? initialIncomeType;
   final String? initialProfilePhotoPath;
   final String? initialAvatarPublicUrl;
 
@@ -45,7 +35,6 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _nameCtrl;
   late String _currency;
-  String? _incomeType;
   final ImagePicker _picker = ImagePicker();
 
   String? _photoPathInStorage;
@@ -61,7 +50,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _currency = (widget.initialCurrency != null && widget.initialCurrency!.trim().isNotEmpty)
         ? widget.initialCurrency!.trim().toUpperCase()
         : 'BHD';
-    _incomeType = widget.initialIncomeType?.trim().isNotEmpty == true ? widget.initialIncomeType!.trim() : null;
     _photoPathInStorage = widget.initialProfilePhotoPath?.trim().isNotEmpty == true
         ? widget.initialProfilePhotoPath!.trim()
         : null;
@@ -176,12 +164,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
 
       await Supabase.instance.client.from('users').update(patch).eq('id', user.id);
-
-      if (_incomeType != null && _incomeType!.isNotEmpty) {
-        await Supabase.instance.client.auth.updateUser(
-          UserAttributes(data: {'income_type': _incomeType}),
-        );
-      }
 
       if (!mounted) return;
       showInfaqSnack(context, 'Profile saved');
@@ -428,26 +410,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       onChanged: (v) {
                         if (v != null) setState(() => _currency = v);
                       },
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                const Text('Edit Income type', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                const SizedBox(height: 8),
-                _pillField(
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _incomeType != null && _kIncomeTypeOptions.contains(_incomeType)
-                          ? _incomeType
-                          : null,
-                      hint: Text('Choose type', style: TextStyle(color: Colors.black.withValues(alpha: 0.4))),
-                      isExpanded: true,
-                      icon: const Icon(Icons.keyboard_arrow_down_rounded, color: _kPrimary),
-                      items: [
-                        for (final t in _kIncomeTypeOptions)
-                          DropdownMenuItem(value: t, child: Text(t)),
-                      ],
-                      onChanged: (v) => setState(() => _incomeType = v),
                     ),
                   ),
                 ),
