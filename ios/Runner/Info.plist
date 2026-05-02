@@ -49,5 +49,18 @@
 	<string>Infaq needs camera access to take a profile photo.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Infaq needs photo library access to set your profile picture.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.infaq.app.oauth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.infaq.app</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

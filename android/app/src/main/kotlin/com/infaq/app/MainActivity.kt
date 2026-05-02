@@ -1,4 +1,4 @@
-package com.example.infaq
+package com.infaq.app
 
 import io.flutter.embedding.android.FlutterActivity
 

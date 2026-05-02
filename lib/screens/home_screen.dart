@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -63,64 +65,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     try {
-      var profile = await supabase
-          .from('users')
-          .select('name,username,currency,Balance,profile_photo_path')
-          .eq('id', user.id)
-          .maybeSingle();
-
-      if (profile != null) {
-        await syncRegistrationMetadataToUsersRow(supabase, user);
-      } else {
-        final meta = (user.userMetadata ?? const <String, dynamic>{});
-        final rawUsername = (meta['username'] ?? '').toString().trim();
-        final rawName = (meta['name'] ?? meta['full_name'] ?? '').toString().trim();
-        final email = (user.email ?? '').toString().trim();
-        final derivedUsername = rawUsername.isNotEmpty
-            ? rawUsername
-            : (email.contains('@') ? email.split('@').first : email);
-        final derivedName = rawName.isNotEmpty ? rawName : email;
-        final safeUsername =
-            derivedUsername.isNotEmpty ? derivedUsername : 'user_${user.id.substring(0, 6)}';
-        final rawCurrency = (meta['currency'] ?? 'BHD').toString().trim();
-        final currency = rawCurrency.isNotEmpty ? rawCurrency : 'BHD';
-        final balance = balanceFromMetadata(meta['balance']);
-
-        await supabase.from('users').upsert(
-          <String, Object?>{
-            'id': user.id,
-            'name': derivedName,
-            'username': safeUsername,
-            'currency': currency,
-            'Balance': balance.toDouble(),
-          },
-          onConflict: 'id',
-        );
-        await syncRegistrationMetadataToUsersRow(supabase, user);
-
-        profile = await supabase
-            .from('users')
-            .select('name,username,currency,Balance,profile_photo_path')
-            .eq('id', user.id)
-            .maybeSingle();
-      }
-
-      final tx = await _fetchRecentTransactions(user.id);
-      final spent = _computeSpentToday(tx);
-
+      await _bootstrapLoadUserData(supabase, user).timeout(const Duration(seconds: 30));
+    } on TimeoutException {
       if (!mounted) return;
-      final photoPath = (profile?['profile_photo_path'] as String?)?.trim();
       setState(() {
-        _name = (profile?['name'] as String?)?.trim();
-        _currency = (profile?['currency'] as String?)?.trim() ?? 'BHD';
-        _balance = _readBalance(profile?['Balance']);
-        _transactions = tx;
-        _spentToday = spent;
-        _transactionsListRefreshToken++;
-        _profilePhotoStoragePath = photoPath != null && photoPath.isNotEmpty ? photoPath : null;
-        _profileAvatarPublicUrl = InfaqAvatarStorage.publicUrl(supabase, _profilePhotoStoragePath);
+        _error = 'Loading your dashboard timed out. Check your connection and tap Retry on the error screen if shown, or pull to refresh.';
         _loading = false;
-        _error = null;
       });
     } catch (e) {
       if (!mounted) return;
@@ -129,6 +79,68 @@ class _HomeScreenState extends State<HomeScreen> {
         _loading = false;
       });
     }
+  }
+
+  Future<void> _bootstrapLoadUserData(SupabaseClient supabase, User user) async {
+    var profile = await supabase
+        .from('users')
+        .select('name,username,currency,Balance,profile_photo_path')
+        .eq('id', user.id)
+        .maybeSingle();
+
+    if (profile != null) {
+      await syncRegistrationMetadataToUsersRow(supabase, user);
+    } else {
+      final meta = (user.userMetadata ?? const <String, dynamic>{});
+      final rawUsername = (meta['username'] ?? '').toString().trim();
+      final rawName = (meta['name'] ?? meta['full_name'] ?? '').toString().trim();
+      final email = (user.email ?? '').toString().trim();
+      final derivedUsername = rawUsername.isNotEmpty
+          ? rawUsername
+          : (email.contains('@') ? email.split('@').first : email);
+      final derivedName = rawName.isNotEmpty ? rawName : email;
+      final safeUsername =
+          derivedUsername.isNotEmpty ? derivedUsername : 'user_${user.id.substring(0, 6)}';
+      final rawCurrency = (meta['currency'] ?? 'BHD').toString().trim();
+      final currency = rawCurrency.isNotEmpty ? rawCurrency : 'BHD';
+      final balance = balanceFromMetadata(meta['balance']);
+
+      await supabase.from('users').upsert(
+        <String, Object?>{
+          'id': user.id,
+          'name': derivedName,
+          'username': safeUsername,
+          'currency': currency,
+          'Balance': balance.toDouble(),
+        },
+        onConflict: 'id',
+      );
+      await syncRegistrationMetadataToUsersRow(supabase, user);
+
+      profile = await supabase
+          .from('users')
+          .select('name,username,currency,Balance,profile_photo_path')
+          .eq('id', user.id)
+          .maybeSingle();
+    }
+
+    final tx = await _fetchRecentTransactions(user.id);
+    final spent = _computeSpentToday(tx);
+
+    if (!mounted) return;
+    final photoPath = (profile?['profile_photo_path'] as String?)?.trim();
+    setState(() {
+      _name = (profile?['name'] as String?)?.trim();
+      _currency = (profile?['currency'] as String?)?.trim() ?? 'BHD';
+      _balance = _readBalance(profile?['Balance']);
+      _transactions = tx;
+      _spentToday = spent;
+      _transactionsListRefreshToken++;
+      _profilePhotoStoragePath = photoPath != null && photoPath.isNotEmpty ? photoPath : null;
+      _profileAvatarPublicUrl = InfaqAvatarStorage.publicUrl(supabase, _profilePhotoStoragePath);
+      _loading = false;
+      _error = null;
+    });
   }
 
   double _readBalance(dynamic raw) {

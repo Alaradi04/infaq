@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:infaq/oauth_redirect.dart';
 import 'package:infaq/screens/register_flow_screen.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
@@ -17,6 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _password = TextEditingController();
   bool _obscure = true;
   bool _loading = false;
+  bool _googleLoading = false;
 
   @override
   void dispose() {
@@ -48,6 +50,24 @@ class _LoginScreenState extends State<LoginScreen> {
       showInfaqSnack(context, 'Sign in failed. Please try again.');
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => _googleLoading = true);
+    try {
+      await Supabase.instance.client.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: kOAuthRedirectTo,
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      showInfaqSnack(context, e.message);
+    } catch (e) {
+      if (!mounted) return;
+      showInfaqSnack(context, e.toString());
+    } finally {
+      if (mounted) setState(() => _googleLoading = false);
     }
   }
 
@@ -120,12 +140,22 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    _SocialIcon(icon: FontAwesomeIcons.apple),
-                    SizedBox(width: 20),
-                    _SocialIcon(icon: FontAwesomeIcons.google),
-                    SizedBox(width: 20),
-                    _SocialIcon(icon: FontAwesomeIcons.facebookF),
+                  children: [
+                    _SocialIcon(
+                      icon: FontAwesomeIcons.apple,
+                      onTap: () => showInfaqSnack(context, 'Apple sign-in is not available yet.'),
+                    ),
+                    const SizedBox(width: 20),
+                    _SocialIcon(
+                      icon: FontAwesomeIcons.google,
+                      onTap: _loading ? null : _signInWithGoogle,
+                      loading: _googleLoading,
+                    ),
+                    const SizedBox(width: 20),
+                    _SocialIcon(
+                      icon: FontAwesomeIcons.facebookF,
+                      onTap: () => showInfaqSnack(context, 'Facebook sign-in is not available yet.'),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -147,7 +177,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 InfaqPrimaryButton(
                   label: 'Sign in',
                   isLoading: _loading,
-                  onPressed: _signIn,
+                  onPressed: _googleLoading ? null : _signIn,
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -172,14 +202,20 @@ class _LoginScreenState extends State<LoginScreen> {
 }
 
 class _SocialIcon extends StatelessWidget {
-  const _SocialIcon({required this.icon});
+  const _SocialIcon({
+    required this.icon,
+    this.onTap,
+    this.loading = false,
+  });
 
   final IconData icon;
+  final VoidCallback? onTap;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
     return InkResponse(
-      onTap: () => showInfaqSnack(context, 'Social login not wired yet.'),
+      onTap: loading || onTap == null ? null : onTap,
       radius: 26,
       child: Container(
         width: 44,
@@ -192,7 +228,13 @@ class _SocialIcon extends StatelessWidget {
             BoxShadow(color: Color(0x11000000), blurRadius: 12, offset: Offset(0, 6)),
           ],
         ),
-        child: FaIcon(icon, size: 20, color: Colors.black87),
+        child: loading
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF3F5F4A)),
+              )
+            : FaIcon(icon, size: 20, color: Colors.black87),
       ),
     );
   }
