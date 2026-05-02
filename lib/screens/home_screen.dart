@@ -453,11 +453,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    final remaining = _balance - _spentToday;
     final progress = _balance > 0 ? (_spentToday / _balance).clamp(0.0, 1.0) : 0.0;
-    final remainingLabel = remaining >= 0
-        ? '${_fmtMoney(remaining)} remaining'
-        : 'Over by ${_fmtMoney(remaining.abs())}';
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -534,7 +530,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 dateDayLabel: _todayLabel(),
                                 spentToday: _spentToday,
                                 balance: _balance,
-                                remainingLabel: remainingLabel,
                                 progress: progress,
                                 format: _fmtMoney,
                               ),
@@ -689,7 +684,6 @@ class _SummaryCard extends StatelessWidget {
     required this.dateDayLabel,
     required this.spentToday,
     required this.balance,
-    required this.remainingLabel,
     required this.progress,
     required this.format,
   });
@@ -698,7 +692,6 @@ class _SummaryCard extends StatelessWidget {
   final String dateDayLabel;
   final double spentToday;
   final double balance;
-  final String remainingLabel;
   final double progress;
   final String Function(double) format;
 
@@ -799,17 +792,6 @@ class _SummaryCard extends StatelessWidget {
               minHeight: 10,
               backgroundColor: cs.surfaceContainerHigh,
               color: cs.primary,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              remainingLabel,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: onSurface.withValues(alpha: 0.45),
-              ),
             ),
           ),
         ],

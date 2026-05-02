@@ -567,7 +567,6 @@ class _ManagementScreenState extends State<ManagementScreen> {
     final spent = _totalSpentInPeriod();
     final budget = _monthlyBudget;
     final progress = budget > 0 ? (spent / budget).clamp(0.0, 1.0) : 0.0;
-    final remaining = budget - spent;
 
     final Color headerTint;
     switch (_mainTab) {
@@ -630,7 +629,6 @@ class _ManagementScreenState extends State<ManagementScreen> {
                       spent: spent,
                       budget: budget,
                       progress: progress,
-                      remaining: remaining,
                     )
                   : _mainTab == _MgmtMainTab.subscriptions
                       ? _buildSubscriptionsTab()
@@ -646,7 +644,6 @@ class _ManagementScreenState extends State<ManagementScreen> {
     required double spent,
     required double budget,
     required double progress,
-    required double remaining,
   }) {
     if (_loadingTx) {
       return ListView(children: [
@@ -676,9 +673,6 @@ class _ManagementScreenState extends State<ManagementScreen> {
           spent: spent,
           budget: budget,
           progress: progress,
-          remainingLabel: budget > 0
-              ? (remaining >= 0 ? '${_fmtMoney(remaining)} remaining' : 'Over by ${_fmtMoney(remaining.abs())}')
-              : 'Set a budget to track spending',
           format: _fmtMoney,
         ),
         const SizedBox(height: 14),
@@ -1656,7 +1650,6 @@ class _SummaryCard extends StatelessWidget {
     required this.spent,
     required this.budget,
     required this.progress,
-    required this.remainingLabel,
     required this.format,
   });
 
@@ -1667,7 +1660,6 @@ class _SummaryCard extends StatelessWidget {
   final double spent;
   final double budget;
   final double progress;
-  final String remainingLabel;
   final String Function(double) format;
 
   @override
@@ -1750,11 +1742,6 @@ class _SummaryCard extends StatelessWidget {
               backgroundColor: cs.surfaceContainerHighest,
               color: cs.primary,
             ),
-          ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(remainingLabel, style: TextStyle(fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55))),
           ),
         ],
       ),

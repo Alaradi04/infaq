@@ -33,6 +33,22 @@ const List<CategoryIconChoice> kCategoryIconChoices = [
   CategoryIconChoice(key: 'trending_up', icon: Icons.trending_up_rounded, label: 'Income'),
   CategoryIconChoice(key: 'payments', icon: Icons.payments_outlined, label: 'Payments'),
   CategoryIconChoice(key: 'more', icon: Icons.more_horiz_rounded, label: 'Other'),
+  CategoryIconChoice(key: 'subscriptions', icon: Icons.subscriptions_outlined, label: 'Subscriptions'),
+  CategoryIconChoice(key: 'local_grocery_store', icon: Icons.local_grocery_store_outlined, label: 'Groceries'),
+  CategoryIconChoice(key: 'local_gas_station', icon: Icons.local_gas_station_outlined, label: 'Fuel'),
+  CategoryIconChoice(key: 'medical_services', icon: Icons.medical_services_outlined, label: 'Medical'),
+  CategoryIconChoice(key: 'phone_iphone', icon: Icons.phone_iphone_outlined, label: 'Phone'),
+  CategoryIconChoice(key: 'child_care', icon: Icons.child_care_outlined, label: 'Family'),
+  CategoryIconChoice(key: 'volunteer_activism', icon: Icons.volunteer_activism_outlined, label: 'Charity'),
+  CategoryIconChoice(key: 'shield', icon: Icons.shield_outlined, label: 'Insurance'),
+  CategoryIconChoice(key: 'account_balance', icon: Icons.account_balance_outlined, label: 'Banking'),
+  CategoryIconChoice(key: 'currency_exchange', icon: Icons.currency_exchange_rounded, label: 'Transfer'),
+  CategoryIconChoice(key: 'sports_esports', icon: Icons.sports_esports_outlined, label: 'Gaming'),
+  CategoryIconChoice(key: 'headphones', icon: Icons.headphones_outlined, label: 'Audio'),
+  CategoryIconChoice(key: 'beach_access', icon: Icons.beach_access_outlined, label: 'Leisure'),
+  CategoryIconChoice(key: 'handyman', icon: Icons.handyman_outlined, label: 'Repairs'),
+  CategoryIconChoice(key: 'local_pharmacy', icon: Icons.local_pharmacy_outlined, label: 'Pharmacy'),
+  CategoryIconChoice(key: 'emoji_events', icon: Icons.emoji_events_outlined, label: 'Awards'),
 ];
 
 final Map<String, IconData> _categoryIconByKey = {
@@ -51,20 +67,43 @@ IconData? _iconFromStoredKey(String? key) {
   return _categoryIconByKey[key];
 }
 
-/// Icon for list UI: uses DB [iconKey] when set, otherwise guesses from [name] / [type].
+/// Icon for list UI: uses DB [iconKey] when set, otherwise guesses from [name] / [type],
+/// then a stable icon from [categoryId] (or name) so each category can look distinct.
+bool _nameSuggestsTravel(String name) {
+  final n = name.toLowerCase();
+  return n.contains('travel') ||
+      n.contains('flight') ||
+      n.contains('airline') ||
+      n.contains('vacation') ||
+      n.contains('holiday') ||
+      n.contains('hotel') ||
+      n.contains('passport') ||
+      n.contains('luggage');
+}
+
 IconData categoryIconForDisplay({
   String? iconKey,
   required String name,
   required String type,
+  String? categoryId,
 }) {
   final fromDb = _iconFromStoredKey(iconKey);
-  if (fromDb != null) return fromDb;
-  return _categoryIconFallback(name, type);
+  if (fromDb != null) {
+    final useDefaultKey = iconKey == null || iconKey.isEmpty || iconKey == kDefaultCategoryIconKey;
+    if (useDefaultKey && _nameSuggestsTravel(name)) {
+      return Icons.flight_outlined;
+    }
+    return fromDb;
+  }
+  return _categoryIconFallback(name, type, categoryId);
 }
 
-IconData _categoryIconFallback(String name, String type) {
+IconData _categoryIconFallback(String name, String type, String? categoryId) {
   final n = name.toLowerCase();
   final t = type.toLowerCase();
+  if (_nameSuggestsTravel(name)) {
+    return Icons.flight_outlined;
+  }
   if (t == 'income') {
     if (n.contains('salary') || n.contains('wage')) return Icons.payments_outlined;
     if (n.contains('freelance') || n.contains('business')) return Icons.work_outline_rounded;
@@ -75,20 +114,32 @@ IconData _categoryIconFallback(String name, String type) {
   if (n.contains('food') || n.contains('grocer') || n.contains('dining') || n.contains('restaurant')) {
     return Icons.restaurant_outlined;
   }
-  if (n.contains('transport') || n.contains('car') || n.contains('fuel') || n.contains('parking')) {
+  if (n.contains('grocery') || n.contains('supermarket')) {
+    return Icons.local_grocery_store_outlined;
+  }
+  if (n.contains('gas') || n.contains('fuel') || n.contains('petrol')) {
+    return Icons.local_gas_station_outlined;
+  }
+  if (n.contains('subscri') || n.contains('streaming') || n.contains('netflix') || n.contains('spotify')) {
+    return Icons.subscriptions_outlined;
+  }
+  if (n.contains('transport') || n.contains('car') || n.contains('parking') || n.contains('uber') || n.contains('taxi')) {
     return Icons.directions_car_outlined;
   }
   if (n.contains('shop') || n.contains('clothes') || n.contains('retail')) {
     return Icons.shopping_cart_outlined;
   }
-  if (n.contains('entertain') || n.contains('game') || n.contains('stream')) {
+  if (n.contains('entertain') || n.contains('game') || n.contains('stream') || n.contains('cinema')) {
     return Icons.movie_outlined;
   }
   if (n.contains('bill') || n.contains('util') || n.contains('electric') || n.contains('water')) {
     return Icons.receipt_long_outlined;
   }
-  if (n.contains('health') || n.contains('medical') || n.contains('pharm')) {
+  if (n.contains('health') || n.contains('medical')) {
     return Icons.favorite_border_rounded;
+  }
+  if (n.contains('pharm')) {
+    return Icons.local_pharmacy_outlined;
   }
   if (n.contains('home') || n.contains('rent') || n.contains('mortgage')) {
     return Icons.home_outlined;
@@ -96,7 +147,29 @@ IconData _categoryIconFallback(String name, String type) {
   if (n.contains('education') || n.contains('school') || n.contains('tuition')) {
     return Icons.school_outlined;
   }
-  return Icons.folder_outlined;
+  if (n.contains('insur')) {
+    return Icons.shield_outlined;
+  }
+  if (n.contains('charity') || n.contains('donat')) {
+    return Icons.volunteer_activism_outlined;
+  }
+  return _iconFromStableCategorySeed(type: t, name: n, categoryId: categoryId);
+}
+
+/// Picks a deterministic icon from [kCategoryIconChoices] so different categories
+/// usually get different icons even without a stored [icon_key].
+IconData _iconFromStableCategorySeed({
+  required String type,
+  required String name,
+  String? categoryId,
+}) {
+  final seed = (categoryId != null && categoryId.isNotEmpty) ? '${type}|$categoryId' : '${type}|$name';
+  var h = 5381;
+  for (final unit in seed.codeUnits) {
+    h = ((h << 5) + h + unit) & 0x7fffffff;
+  }
+  final choices = kCategoryIconChoices;
+  return choices[h.abs() % choices.length].icon;
 }
 
 /// Compact grid of icon choices for dialogs.

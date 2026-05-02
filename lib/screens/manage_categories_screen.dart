@@ -309,6 +309,7 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
                         iconKey: row['icon_key']?.toString(),
                         name: name,
                         type: row['type']?.toString() ?? 'expense',
+                        categoryId: row['id']?.toString(),
                       );
 
                       return ListTile(

@@ -32,6 +32,7 @@ class _CategoryRow {
         iconKey: iconKey,
         name: name,
         type: type,
+        categoryId: id,
       );
 }
 
