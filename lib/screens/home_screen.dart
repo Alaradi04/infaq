@@ -493,7 +493,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: SafeArea(
                         bottom: false,
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(22, 12, 22, 8),
+                          padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -503,7 +503,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     child: Text(
                                       _greetingLine(),
                                       style: TextStyle(
-                                        fontSize: 16,
+                                        fontSize: 14,
                                         color: cs.onSurface.withValues(alpha: 0.55),
                                         fontWeight: FontWeight.w600,
                                       ),
@@ -511,20 +511,22 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                   IconButton(
                                     tooltip: 'Sign out',
+                                    visualDensity: VisualDensity.compact,
                                     onPressed: () => Supabase.instance.client.auth.signOut(),
-                                    icon: Icon(Icons.logout_rounded, color: cs.primary),
+                                    icon: Icon(Icons.logout_rounded, color: cs.primary, size: 22),
                                   ),
                                 ],
                               ),
                               Text(
                                 _firstName(),
                                 style: TextStyle(
-                                  fontSize: 32,
+                                  fontSize: 26,
                                   fontWeight: FontWeight.w800,
                                   color: cs.primary,
+                                  height: 1.15,
                                 ),
                               ),
-                              const SizedBox(height: 18),
+                              const SizedBox(height: 14),
                               _SummaryCard(
                                 monthLabel: _monthYearLabel(),
                                 dateDayLabel: _todayLabel(),
@@ -541,15 +543,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(22, 22, 22, 0),
+                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             'Services',
-                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: cs.onSurface),
+                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: cs.onSurface),
                           ),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 12),
                           _ServicesGrid(onServiceTap: _onServiceTap),
                           const SizedBox(height: 28),
                           _SectionHeader(
@@ -688,6 +690,9 @@ class _SummaryCard extends StatelessWidget {
     required this.format,
   });
 
+  static const double _cardRadius = 16;
+  static const double _amountSize = 17;
+
   final String monthLabel;
   final String dateDayLabel;
   final double spentToday;
@@ -698,19 +703,20 @@ class _SummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final onSurface = cs.onSurface;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: cs.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(24),
-        border: Theme.of(context).brightness == Brightness.dark ? Border.all(color: cs.outline.withValues(alpha: 0.2)) : null,
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(_cardRadius),
+        border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.22 : 0.12)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.4 : 0.12),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
+            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -719,20 +725,22 @@ class _SummaryCard extends StatelessWidget {
           Text(
             monthLabel,
             style: TextStyle(
+              fontSize: 13,
               fontWeight: FontWeight.w700,
               color: onSurface.withValues(alpha: 0.45),
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             dateDayLabel,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 11,
               color: onSurface.withValues(alpha: 0.38),
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: Column(
@@ -741,21 +749,39 @@ class _SummaryCard extends StatelessWidget {
                     Text(
                       'Total spent (today)',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: onSurface.withValues(alpha: 0.5),
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      format(spentToday),
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        color: cs.primary,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        format(spentToday),
+                        style: TextStyle(
+                          fontSize: _amountSize,
+                          fontWeight: FontWeight.w800,
+                          color: cs.primary,
+                          height: 1.1,
+                        ),
                       ),
                     ),
                   ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 2, 10, 0),
+                child: SizedBox(
+                  height: 40,
+                  child: Center(
+                    child: Container(
+                      width: 1,
+                      height: 36,
+                      color: cs.outline.withValues(alpha: 0.14),
+                    ),
+                  ),
                 ),
               ),
               Expanded(
@@ -765,18 +791,23 @@ class _SummaryCard extends StatelessWidget {
                     Text(
                       'Balance',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: onSurface.withValues(alpha: 0.5),
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      format(balance),
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        color: onSurface.withValues(alpha: 0.45),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        format(balance),
+                        style: TextStyle(
+                          fontSize: _amountSize,
+                          fontWeight: FontWeight.w800,
+                          color: onSurface.withValues(alpha: 0.5),
+                          height: 1.1,
+                        ),
                       ),
                     ),
                   ],
@@ -784,13 +815,13 @@ class _SummaryCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(999),
             child: LinearProgressIndicator(
               value: progress.clamp(0.0, 1.0),
-              minHeight: 10,
-              backgroundColor: cs.surfaceContainerHigh,
+              minHeight: 6,
+              backgroundColor: cs.surfaceContainerHighest,
               color: cs.primary,
             ),
           ),
@@ -819,7 +850,7 @@ class _ServicesGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, c) {
         final w = c.maxWidth;
-        final spacing = 12.0;
+        final spacing = 10.0;
         final cols = 3;
         final cell = (w - spacing * (cols - 1)) / cols;
 
@@ -858,26 +889,26 @@ class _ServiceTile extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.symmetric(vertical: 8),
           child: Column(
             children: [
               Container(
-                width: 56,
-                height: 56,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
                   color: isDark ? cs.surfaceContainerHigh : _kHeaderGreen,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.35 : 0.25)),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.35 : 0.22)),
                 ),
-                child: Icon(icon, color: cs.primary, size: 26),
+                child: Icon(icon, color: cs.primary, size: 22),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text(
                 label,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: cs.onSurface),
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cs.onSurface),
               ),
             ],
           ),
@@ -905,7 +936,7 @@ class _SectionHeader extends StatelessWidget {
         Expanded(
           child: Text(
             title,
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface),
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface),
           ),
         ),
         TextButton(

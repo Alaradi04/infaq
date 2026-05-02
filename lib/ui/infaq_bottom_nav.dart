@@ -48,9 +48,9 @@ class InfaqBottomNavBar extends StatelessWidget {
             ),
           ],
         ),
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+        padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
         child: SizedBox(
-          height: 68,
+          height: 62,
           child: Stack(
             clipBehavior: Clip.none,
             alignment: Alignment.center,
@@ -68,7 +68,7 @@ class InfaqBottomNavBar extends StatelessWidget {
                           onPressed: onHome,
                           child: Icon(
                             Icons.home_outlined,
-                            size: 26,
+                            size: 24,
                             color: iconColor(tabIndex >= 0 && tabIndex == 0),
                           ),
                         ),
@@ -81,7 +81,7 @@ class InfaqBottomNavBar extends StatelessWidget {
                           child: Text(
                             r'$',
                             style: TextStyle(
-                              fontSize: 24,
+                              fontSize: 22,
                               fontWeight: FontWeight.w600,
                               color: iconColor(tabIndex >= 0 && tabIndex == 1),
                               height: 1,
@@ -89,7 +89,7 @@ class InfaqBottomNavBar extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 64),
+                      const SizedBox(width: 56),
                       Expanded(
                         child: InfaqNavIconButton(
                           tooltip: 'Analytics',
@@ -97,7 +97,7 @@ class InfaqBottomNavBar extends StatelessWidget {
                           onPressed: onAnalytics,
                           child: Icon(
                             Icons.show_chart_rounded,
-                            size: 26,
+                            size: 24,
                             color: iconColor(tabIndex >= 0 && tabIndex == 2),
                           ),
                         ),
@@ -109,7 +109,7 @@ class InfaqBottomNavBar extends StatelessWidget {
                           onPressed: onProfile,
                           child: Icon(
                             Icons.person_outline_rounded,
-                            size: 26,
+                            size: 24,
                             color: iconColor(tabIndex >= 0 && tabIndex == 3),
                           ),
                         ),
@@ -119,19 +119,19 @@ class InfaqBottomNavBar extends StatelessWidget {
                 ),
               ),
               Transform.translate(
-                offset: const Offset(0, -18),
+                offset: const Offset(0, -14),
                 child: Material(
                   color: primary,
-                  borderRadius: BorderRadius.circular(20),
-                  elevation: 6,
+                  borderRadius: BorderRadius.circular(18),
+                  elevation: 5,
                   shadowColor: Colors.black38,
                   child: InkWell(
                     onTap: onAdd,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(18),
                     child: const SizedBox(
-                      width: 58,
-                      height: 58,
-                      child: Icon(Icons.add, color: Colors.white, size: 30),
+                      width: 52,
+                      height: 52,
+                      child: Icon(Icons.add, color: Colors.white, size: 26),
                     ),
                   ),
                 ),
@@ -166,7 +166,7 @@ class InfaqNavIconButton extends StatelessWidget {
         onTap: onPressed,
         radius: 28,
         child: SizedBox(
-          height: 48,
+          height: 44,
           child: Center(child: child),
         ),
       ),

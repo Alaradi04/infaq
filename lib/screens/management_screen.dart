@@ -600,7 +600,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
                       children: [
                         Text(
                           'Management',
-                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: cs.primary),
+                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: cs.primary),
                         ),
                         const Spacer(),
                         IconButton(
@@ -1653,6 +1653,9 @@ class _SummaryCard extends StatelessWidget {
     required this.format,
   });
 
+  static const double _cardRadius = 16;
+  static const double _amountSize = 17;
+
   final String periodTitle;
   final VoidCallback? onPrev;
   final VoidCallback? onNext;
@@ -1666,16 +1669,18 @@ class _SummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final onSurface = cs.onSurface;
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(_cardRadius),
+        border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.22 : 0.12)),
         boxShadow: [
           BoxShadow(
-            color: cs.shadow.withValues(alpha: isDark ? 0.28 : 0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            color: cs.shadow.withValues(alpha: isDark ? 0.22 : 0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -1684,61 +1689,106 @@ class _SummaryCard extends StatelessWidget {
           Row(
             children: [
               if (onPrev != null)
-                IconButton(onPressed: onPrev, icon: Icon(Icons.chevron_left_rounded, color: cs.primary))
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onPrev,
+                  icon: Icon(Icons.chevron_left_rounded, color: cs.primary, size: 22),
+                )
               else
-                const SizedBox(width: 48),
+                const SizedBox(width: 40),
               Expanded(
                 child: Text(
                   periodTitle,
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: cs.primary),
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: cs.primary),
                 ),
               ),
               if (onNext != null)
-                IconButton(onPressed: onNext, icon: Icon(Icons.chevron_right_rounded, color: cs.primary))
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onNext,
+                  icon: Icon(Icons.chevron_right_rounded, color: cs.primary, size: 22),
+                )
               else
-                const SizedBox(width: 48),
+                const SizedBox(width: 40),
               IconButton(
+                visualDensity: VisualDensity.compact,
                 onPressed: onEditBudget,
-                icon: Icon(Icons.edit_outlined, color: cs.primary, size: 22),
+                icon: Icon(Icons.edit_outlined, color: cs.primary, size: 20),
                 tooltip: 'Edit budget',
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Total spent', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55))),
+                    Text(
+                      'Total spent',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: onSurface.withValues(alpha: 0.55)),
+                    ),
                     const SizedBox(height: 4),
-                    Text(format(spent), style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: cs.primary)),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        format(spent),
+                        style: TextStyle(fontSize: _amountSize, fontWeight: FontWeight.w800, color: cs.primary, height: 1.1),
+                      ),
+                    ),
                   ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 2, 10, 0),
+                child: SizedBox(
+                  height: 40,
+                  child: Center(
+                    child: Container(
+                      width: 1,
+                      height: 36,
+                      color: cs.outline.withValues(alpha: 0.14),
+                    ),
+                  ),
                 ),
               ),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('Budget', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55))),
-                    const SizedBox(height: 4),
                     Text(
-                      budget > 0 ? format(budget) : '—',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: cs.onSurface.withValues(alpha: 0.45)),
+                      'Budget',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: onSurface.withValues(alpha: 0.55)),
+                    ),
+                    const SizedBox(height: 4),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        budget > 0 ? format(budget) : '—',
+                        style: TextStyle(
+                          fontSize: _amountSize,
+                          fontWeight: FontWeight.w800,
+                          color: onSurface.withValues(alpha: 0.5),
+                          height: 1.1,
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           ClipRRect(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(999),
             child: LinearProgressIndicator(
               value: budget > 0 ? progress.clamp(0.0, 1.0) : 0,
-              minHeight: 10,
+              minHeight: 6,
               backgroundColor: cs.surfaceContainerHighest,
               color: cs.primary,
             ),
@@ -1775,15 +1825,16 @@ class _GoalsSummaryCard extends StatelessWidget {
     final subLine = horizonLine.isEmpty ? remainingMoneyLabel : '$remainingMoneyLabel · $horizonLine';
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.22 : 0.12)),
         boxShadow: [
           BoxShadow(
-            color: cs.shadow.withValues(alpha: isDark ? 0.28 : 0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            color: cs.shadow.withValues(alpha: isDark ? 0.22 : 0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -1799,11 +1850,31 @@ class _GoalsSummaryCard extends StatelessWidget {
                   children: [
                     Text(
                       'Total saved',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55)),
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55)),
                     ),
                     const SizedBox(height: 4),
-                    Text(format(totalSaved), style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: cs.onSurface)),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        format(totalSaved),
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, height: 1.1, color: cs.onSurface),
+                      ),
+                    ),
                   ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 2, 10, 0),
+                child: SizedBox(
+                  height: 40,
+                  child: Center(
+                    child: Container(
+                      width: 1,
+                      height: 36,
+                      color: cs.outline.withValues(alpha: 0.14),
+                    ),
+                  ),
                 ),
               ),
               Expanded(
@@ -1812,21 +1883,28 @@ class _GoalsSummaryCard extends StatelessWidget {
                   children: [
                     Text(
                       'Goals',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55)),
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55)),
                     ),
                     const SizedBox(height: 4),
-                    Text(format(totalTargets), style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: cs.onSurface)),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        format(totalTargets),
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, height: 1.1, color: cs.onSurface),
+                      ),
+                    ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           ClipRRect(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(999),
             child: LinearProgressIndicator(
               value: totalTargets > 0 ? progress.clamp(0.0, 1.0) : 0,
-              minHeight: 10,
+              minHeight: 6,
               backgroundColor: cs.surfaceContainerHighest,
               color: cs.primary,
             ),
