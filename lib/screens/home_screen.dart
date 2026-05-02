@@ -1158,6 +1158,7 @@ class _TxRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final amountMaxWidth = (MediaQuery.sizeOf(context).width * 0.28).clamp(90.0, 132.0);
     final title = (data['description'] ?? data['title'] ?? data['merchant'] ?? data['name'] ?? 'Transaction').toString();
     var category = (data['category'] ?? data['category_name'] ?? '').toString();
     final catMap = data['categories'];
@@ -1208,48 +1209,82 @@ class _TxRow extends StatelessWidget {
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
-                  width: 50,
-                  height: 50,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: _accentFromTitle(title).withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(
                     isExpense ? Icons.shopping_bag_outlined : Icons.payments_outlined,
+                    size: 22,
                     color: isExpense ? Colors.deepOrange.shade700 : cs.primary,
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         title,
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: cs.onSurface),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          height: 1.25,
+                          letterSpacing: -0.1,
+                          color: cs.onSurface,
+                        ),
                       ),
-                      if (subtitle.isNotEmpty)
+                      if (subtitle.isNotEmpty) ...[
+                        const SizedBox(height: 3),
                         Text(
                           subtitle,
-                          style: TextStyle(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.55)),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            height: 1.2,
+                            color: cs.onSurface.withValues(alpha: 0.55),
+                          ),
                         ),
+                      ],
                     ],
                   ),
                 ),
-                Icon(leafIcon, size: 18, color: leafColor),
                 const SizedBox(width: 6),
-                Text(
-                  isExpense ? '-${format(amount.abs())}' : '+${format(amount.abs())}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                    color: isExpense ? Colors.red.shade700 : cs.onSurface,
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Icon(leafIcon, size: 15, color: leafColor),
+                      const SizedBox(width: 4),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: amountMaxWidth),
+                        child: Text(
+                          isExpense ? '-${format(amount.abs())}' : '+${format(amount.abs())}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12.5,
+                            height: 1.1,
+                            letterSpacing: -0.15,
+                            color: isExpense ? Colors.red.shade700 : cs.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],

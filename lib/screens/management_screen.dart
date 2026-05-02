@@ -7,6 +7,7 @@ import 'package:infaq/screens/add_subscription_screen.dart';
 import 'package:infaq/screens/edit_goal_screen.dart';
 import 'package:infaq/screens/edit_subscription_screen.dart';
 import 'package:infaq/subscription/subscription_analytics.dart';
+import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
@@ -592,7 +593,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 8, 18, 16),
+                padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -600,17 +601,24 @@ class _ManagementScreenState extends State<ManagementScreen> {
                       children: [
                         Text(
                           'Management',
-                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: cs.primary),
+                          style: TextStyle(
+                            fontSize: 23,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.25,
+                            height: 1.15,
+                            color: cs.primary,
+                          ),
                         ),
                         const Spacer(),
                         IconButton(
                           onPressed: _pickPeriodMode,
+                          iconSize: 25,
                           icon: Icon(Icons.schedule_rounded, color: cs.primary),
                           tooltip: 'Date range',
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
                     _MgmtPillTabs(
                       selected: _mainTab,
                       onChanged: _onMainTabChanged,
@@ -1573,8 +1581,10 @@ class _MgmtPillTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
+
+    /// Same shell as [AddTransactionScreen] Expense / Income toggle.
     Widget seg(String label, _MgmtMainTab tab) {
       final on = selected == tab;
       return Expanded(
@@ -1584,28 +1594,26 @@ class _MgmtPillTabs extends StatelessWidget {
             onTap: () => onChanged(tab),
             borderRadius: BorderRadius.circular(999),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
               padding: const EdgeInsets.symmetric(vertical: 10),
               decoration: BoxDecoration(
-                color: on ? cs.primary : cs.surfaceContainerLow,
+                color: on ? kInfaqPrimaryGreen : Colors.transparent,
                 borderRadius: BorderRadius.circular(999),
-                boxShadow: on
-                    ? null
-                    : [
-                        BoxShadow(
-                          color: cs.shadow.withValues(alpha: isDark ? 0.25 : 0.06),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
               ),
               child: Center(
                 child: Text(
                   label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12,
-                    color: on ? cs.onPrimary : cs.primary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12.5,
+                    height: 1.12,
+                    letterSpacing: -0.12,
+                    color: on
+                        ? Colors.white
+                        : (isDark ? cs.onSurface.withValues(alpha: 0.65) : Colors.black.withValues(alpha: 0.65)),
                   ),
                 ),
               ),
@@ -1616,15 +1624,15 @@ class _MgmtPillTabs extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: isDark ? 0.75 : 0.88),
+        color: isDark ? cs.surfaceContainerHigh : Colors.white,
         borderRadius: BorderRadius.circular(999),
         boxShadow: [
           BoxShadow(
-            color: cs.shadow.withValues(alpha: isDark ? 0.2 : 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.12),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -2068,6 +2076,7 @@ class _MgmtTxTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final amountMaxWidth = (MediaQuery.sizeOf(context).width * 0.28).clamp(90.0, 132.0);
     final title = (data['description'] ?? data['title'] ?? 'Transaction').toString();
     var category = (data['category'] ?? '').toString();
     final catMap = data['categories'];
@@ -2116,45 +2125,82 @@ class _MgmtTxTile extends StatelessWidget {
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
-                  width: 50,
-                  height: 50,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: _accentFromTitle(title).withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(
                     isExpense ? Icons.shopping_bag_outlined : Icons.payments_outlined,
+                    size: 22,
                     color: isExpense ? Colors.deepOrange.shade700 : cs.primary,
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         title,
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: cs.onSurface),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          height: 1.25,
+                          letterSpacing: -0.1,
+                          color: cs.onSurface,
+                        ),
                       ),
-                      if (subtitle.isNotEmpty)
-                        Text(subtitle, style: TextStyle(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.55))),
+                      if (subtitle.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          subtitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            height: 1.2,
+                            color: cs.onSurface.withValues(alpha: 0.55),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                Icon(leafIcon, size: 18, color: leafColor),
                 const SizedBox(width: 6),
-                Text(
-                  isExpense ? '-${format(amount.abs())}' : '+${format(amount.abs())}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                    color: isExpense ? Colors.red.shade700 : cs.onSurface,
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Icon(leafIcon, size: 15, color: leafColor),
+                      const SizedBox(width: 4),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: amountMaxWidth),
+                        child: Text(
+                          isExpense ? '-${format(amount.abs())}' : '+${format(amount.abs())}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12.5,
+                            height: 1.1,
+                            letterSpacing: -0.15,
+                            color: isExpense ? Colors.red.shade700 : cs.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
