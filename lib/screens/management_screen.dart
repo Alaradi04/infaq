@@ -1528,12 +1528,6 @@ class _ManagementScreenState extends State<ManagementScreen> {
           format: _fmtMoney,
           remainingMoneyLabel: remaining >= 0 ? '${_fmtMoney(remaining)} remaining' : '${_fmtMoney(-remaining)} over target',
           horizonLine: horizon,
-          onEdit: () async {
-            final ok = await Navigator.of(context).push<bool>(
-              MaterialPageRoute(builder: (_) => AddGoalScreen(currencyCode: widget.currencyCode)),
-            );
-            if (ok == true && mounted) await _loadGoals();
-          },
         ),
         const SizedBox(height: 14),
         _SearchFilterBar(
@@ -1832,7 +1826,6 @@ class _GoalsSummaryCard extends StatelessWidget {
     required this.format,
     required this.remainingMoneyLabel,
     required this.horizonLine,
-    required this.onEdit,
   });
 
   final double totalSaved;
@@ -1841,7 +1834,6 @@ class _GoalsSummaryCard extends StatelessWidget {
   final String Function(double) format;
   final String remainingMoneyLabel;
   final String horizonLine;
-  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -1935,23 +1927,9 @@ class _GoalsSummaryCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  subLine,
-                  style: TextStyle(fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55), fontSize: 13),
-                ),
-              ),
-              IconButton(
-                onPressed: onEdit,
-                icon: Icon(Icons.edit_outlined, color: cs.primary, size: 22),
-                tooltip: 'Add goal',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              ),
-            ],
+          Text(
+            subLine,
+            style: TextStyle(fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55), fontSize: 13),
           ),
         ],
       ),
