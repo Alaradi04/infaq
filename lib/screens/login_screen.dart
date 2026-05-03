@@ -96,7 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
       body: ListView(
         padding: const EdgeInsets.only(bottom: 24),
         children: [
-          const InfaqHeader(showBack: false),
+          InfaqHeader(showBack: Navigator.of(context).canPop()),
           const SizedBox(height: 28),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 22),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:infaq/ui/infaq_widgets.dart';
+
 const Color _kPrimary = Color(0xFF3F5F4A);
 const Color _kMintHeader = Color(0xFFF0F8F0);
 
@@ -193,32 +195,44 @@ class HelpSupportScreen extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'v0.1.0',
-                    style: TextStyle(fontSize: 14, color: Colors.black.withValues(alpha: 0.35)),
-                  ),
-                  const SizedBox(height: 28),
-                  _InfaqLogoMark(size: 88),
-                  const SizedBox(height: 16),
-                  Text(
-                    'INFAQ',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 36,
-                      fontWeight: FontWeight.w800,
-                      color: _kPrimary,
-                      fontFamily: 'Georgia',
-                      letterSpacing: 1.2,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'v0.1.0',
+                          style: TextStyle(fontSize: 14, color: Colors.black.withValues(alpha: 0.35)),
+                        ),
+                        const SizedBox(height: 20),
+                        Image.asset(
+                          kInfaqBrandIconAsset,
+                          height: 88,
+                          fit: BoxFit.contain,
+                          filterQuality: FilterQuality.high,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'INFAQ',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 36,
+                            fontWeight: FontWeight.w800,
+                            color: _kPrimary,
+                            fontFamily: 'Georgia',
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 48),
-                ],
-              ),
+                );
+              },
             ),
           ),
         ],
@@ -272,59 +286,6 @@ class _ContactInkRow extends StatelessWidget {
             trailing,
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// Wallet-style mark: deep green base with lighter “cards” on top.
-class _InfaqLogoMark extends StatelessWidget {
-  const _InfaqLogoMark({required this.size});
-
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size * 0.85,
-      child: Stack(
-        alignment: Alignment.center,
-        clipBehavior: Clip.none,
-        children: [
-          Positioned(
-            top: size * 0.06,
-            child: Container(
-              width: size * 0.72,
-              height: size * 0.22,
-              decoration: BoxDecoration(
-                color: const Color(0xFFB8D4BE),
-                borderRadius: BorderRadius.circular(size * 0.05),
-                border: Border.all(color: const Color(0xFF8FB896), width: 1.5),
-              ),
-            ),
-          ),
-          Positioned(
-            top: size * 0.02,
-            child: Container(
-              width: size * 0.78,
-              height: size * 0.2,
-              decoration: BoxDecoration(
-                color: const Color(0xFFD4EAD8),
-                borderRadius: BorderRadius.circular(size * 0.05),
-                border: Border.all(color: const Color(0xFF9BC4A3), width: 1.5),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 0,
-            child: Icon(
-              Icons.account_balance_wallet_rounded,
-              size: size * 0.72,
-              color: _kPrimary,
-            ),
-          ),
-        ],
       ),
     );
   }

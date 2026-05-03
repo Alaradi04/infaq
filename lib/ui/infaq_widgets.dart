@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+/// Bundled wallet brand mark (`assets/`).
+const String kInfaqBrandIconAsset = 'assets/infaq_icon.jpeg';
+
 class InfaqHeader extends StatelessWidget {
   const InfaqHeader({super.key, this.showBack = false, this.onBack});
 
@@ -7,46 +10,62 @@ class InfaqHeader extends StatelessWidget {
   /// When set, replaces the default [Navigator.maybePop] behavior (e.g. multi-step flows).
   final VoidCallback? onBack;
 
+  static const Color _kBrandGreen = Color(0xFF3F5F4A);
+
   @override
   Widget build(BuildContext context) {
     final canPop = Navigator.of(context).canPop();
     final Widget leading;
+    var hasBackControl = false;
     if (!showBack) {
-      leading = const SizedBox(width: 48);
+      leading = const SizedBox.shrink();
     } else if (onBack != null) {
+      hasBackControl = true;
       leading = IconButton(
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
         onPressed: onBack,
-        icon: const Icon(Icons.arrow_back_ios_new_rounded),
+        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: _kBrandGreen),
       );
     } else if (canPop) {
+      hasBackControl = true;
       leading = IconButton(
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
         onPressed: () => Navigator.of(context).maybePop(),
-        icon: const Icon(Icons.arrow_back_ios_new_rounded),
+        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: _kBrandGreen),
       );
     } else {
-      leading = const SizedBox(width: 48);
+      leading = const SizedBox.shrink();
     }
+
     return SafeArea(
       bottom: false,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.fromLTRB(12, 8, 16, 8),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             leading,
-            const Spacer(),
-            const Icon(Icons.folder_rounded, size: 22, color: Color(0xFF3F5F4A)),
-            const SizedBox(width: 8),
+            if (hasBackControl) const SizedBox(width: 8),
+            Image.asset(
+              kInfaqBrandIconAsset,
+              height: 38,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.high,
+            ),
+            const SizedBox(width: 10),
             const Text(
               'INFAQ',
               style: TextStyle(
-                fontSize: 20,
-                letterSpacing: 1.2,
+                fontSize: 22,
+                letterSpacing: 0.6,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF3F5F4A),
+                color: _kBrandGreen,
+                fontFamily: 'Georgia',
               ),
             ),
             const Spacer(),
-            const SizedBox(width: 48),
           ],
         ),
       ),

@@ -6,8 +6,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/app_theme_mode.dart';
 import 'package:infaq/screens/home_screen.dart';
-import 'package:infaq/screens/login_screen.dart';
 import 'package:infaq/screens/oauth_profile_setup_screen.dart';
+import 'package:infaq/screens/welcome_screen.dart';
 
 const String _kSupabaseUrl = String.fromEnvironment(
   'SUPABASE_URL',
@@ -237,7 +237,7 @@ class _AuthGateState extends State<AuthGate> {
         final session = snapshot.data?.session ?? supabase.auth.currentSession;
 
         if (session == null) {
-          return const LoginScreen();
+          return const WelcomeScreen();
         }
 
         final userId = session.user.id;
