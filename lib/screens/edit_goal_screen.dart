@@ -1,9 +1,11 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:infaq/goal_accent.dart';
+import 'package:infaq/goal_icon_picker.dart';
+import 'package:infaq/goal_local_storage.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
@@ -39,18 +41,6 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
     return double.tryParse(raw.toString()) ?? 0;
   }
 
-  Color _accentForTitle(String title) {
-    final h = title.hashCode.abs();
-    const colors = [
-      Color(0xFF6BB3F0),
-      Color(0xFFFF9F6B),
-      Color(0xFFFF8FB8),
-      Color(0xFF7FD8BE),
-      Color(0xFFB39DFF),
-    ];
-    return colors[h % colors.length];
-  }
-
   @override
   void initState() {
     super.initState();
@@ -73,8 +63,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
       if (mounted) setState(() => _extrasLoaded = true);
       return;
     }
-    final p = await SharedPreferences.getInstance();
-    final raw = p.getString(_extrasKey(id));
+    final raw = await readGoalLocalExtrasJson(id);
     if (raw != null) {
       try {
         final m = jsonDecode(raw) as Map<String, dynamic>;
@@ -99,27 +88,21 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
     }
   }
 
-  String _extrasKey(String id) => 'goal_local_v1_$id';
-
   Future<void> _persistExtras() async {
     final id = _goalId;
     if (id == null || id.isEmpty) return;
-    final p = await SharedPreferences.getInstance();
     final monthly = double.tryParse(_monthlyCtrl.text.replaceAll(',', ''));
-    await p.setString(
-      _extrasKey(id),
-      jsonEncode({
-        'monthly': monthly,
-        'icon': _goalIcon.codePoint,
-      }),
+    await persistGoalLocalExtras(
+      goalId: id,
+      iconCodePoint: _goalIcon.codePoint,
+      monthly: monthly,
     );
   }
 
   Future<void> _clearExtras() async {
     final id = _goalId;
     if (id == null || id.isEmpty) return;
-    final p = await SharedPreferences.getInstance();
-    await p.remove(_extrasKey(id));
+    await clearGoalLocalExtras(id);
   }
 
   @override
@@ -267,59 +250,9 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
   }
 
   void _showIconPicker() {
-    final opts = <IconData>[
-      Icons.menu_book_rounded,
-      Icons.phone_iphone_rounded,
-      Icons.directions_car_filled_rounded,
-      Icons.flight_takeoff_rounded,
-      Icons.home_rounded,
-      Icons.savings_outlined,
-      Icons.school_rounded,
-      Icons.favorite_rounded,
-      Icons.laptop_mac_rounded,
-    ];
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text('Goal icon', style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    for (final ic in opts)
-                      InkWell(
-                        onTap: () {
-                          setState(() => _goalIcon = ic);
-                          Navigator.pop(ctx);
-                        },
-                        borderRadius: BorderRadius.circular(16),
-                        child: Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Theme.of(ctx).colorScheme.outline.withValues(alpha: 0.25)),
-                          ),
-                          child: Icon(ic, color: Theme.of(ctx).colorScheme.primary),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+    showGoalIconPickerSheet(
+      context,
+      onSelected: (ic) => setState(() => _goalIcon = ic),
     );
   }
 
@@ -333,7 +266,9 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
     final reached = double.tryParse(_reachedCtrl.text.replaceAll(',', '')) ?? 0;
     final t = target != null && target > 0 ? target : 0.0;
     final progress = t > 0 ? (reached / t).clamp(0.0, 1.0) : 0.0;
-    final accent = _accentForTitle(_titleCtrl.text.isEmpty ? 'x' : _titleCtrl.text);
+    final accent = accentColorForGoalTitle(
+      _titleCtrl.text.trim().isEmpty ? 'x' : _titleCtrl.text.trim(),
+    );
 
     if (!_extrasLoaded) {
       return Scaffold(

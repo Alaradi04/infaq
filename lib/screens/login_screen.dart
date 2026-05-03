@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -20,8 +22,29 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
   bool _googleLoading = false;
 
+  StreamSubscription<AuthState>? _authSub;
+
+  @override
+  void initState() {
+    super.initState();
+    // Google (and other OAuth) can set the session after the browser returns; pop this route then.
+    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.session == null) return;
+      if (!mounted) return;
+      if (!Navigator.of(context).canPop()) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final nav = Navigator.of(context);
+        if (nav.canPop()) {
+          nav.popUntil((route) => route.isFirst);
+        }
+      });
+    });
+  }
+
   @override
   void dispose() {
+    _authSub?.cancel();
     _email.dispose();
     _password.dispose();
     super.dispose();
@@ -37,11 +60,18 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     setState(() => _loading = true);
+    var signedIn = false;
     try {
       await Supabase.instance.client.auth.signInWithPassword(
         email: email,
         password: password,
       );
+      if (!mounted) return;
+      if (Supabase.instance.client.auth.currentSession == null) {
+        showInfaqSnack(context, 'No active session. Confirm your email if sign-up required verification.');
+        return;
+      }
+      signedIn = true;
     } on AuthException catch (e) {
       if (!mounted) return;
       showInfaqSnack(context, e.message);
@@ -51,6 +81,9 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+    if (!mounted || !signedIn) return;
+    // AuthGate shows home under this route, but login was pushed above welcome — clear the stack.
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   Future<void> _signInWithGoogle() async {

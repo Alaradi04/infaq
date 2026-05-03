@@ -1,6 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:infaq/goal_accent.dart';
+import 'package:infaq/goal_local_storage.dart';
 import 'package:infaq/profile/subscription_icon_storage.dart';
 import 'package:infaq/screens/add_goal_screen.dart';
 import 'package:infaq/screens/add_subscription_screen.dart';
@@ -82,6 +87,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
   List<Map<String, dynamic>> _transactions = [];
   List<Map<String, dynamic>> _subscriptions = [];
   List<Map<String, dynamic>> _goals = [];
+
+  /// Goal id → Material icon codePoint; same storage as [EditGoalScreen] (`goal_local_v1_<id>` JSON).
+  Map<String, int> _goalIconCodePoints = {};
 
   bool _loadingTx = true;
   bool _loadingSub = false;
@@ -182,9 +190,28 @@ class _ManagementScreenState extends State<ManagementScreen> {
         _goals = list;
         _loadingGoals = false;
       });
+      await _syncGoalIconsFromPrefs();
     } catch (_) {
       if (mounted) setState(() => _loadingGoals = false);
     }
+  }
+
+  /// Reads per-goal icon from local prefs so list cards match [EditGoalScreen].
+  Future<void> _syncGoalIconsFromPrefs() async {
+    final p = await SharedPreferences.getInstance();
+    final next = <String, int>{};
+    for (final g in _goals) {
+      final id = g['id']?.toString();
+      if (id == null || id.isEmpty) continue;
+      final raw = p.getString(goalLocalExtrasPrefsKey(id));
+      if (raw == null) continue;
+      try {
+        final m = jsonDecode(raw) as Map<String, dynamic>;
+        final cp = (m['icon'] as num?)?.toInt();
+        if (cp != null) next[id] = cp;
+      } catch (_) {}
+    }
+    if (mounted) setState(() => _goalIconCodePoints = next);
   }
 
   void _onMainTabChanged(_MgmtMainTab t) {
@@ -1291,19 +1318,6 @@ class _ManagementScreenState extends State<ManagementScreen> {
     return '${months[d.month - 1]} ${d.day} ${d.year}';
   }
 
-  Color _accentForGoalTitle(String title) {
-    final h = title.hashCode.abs();
-    const colors = [
-      Color(0xFFFF9F6B),
-      Color(0xFF6BB3F0),
-      Color(0xFFFF8FB8),
-      Color(0xFF7FD8BE),
-      Color(0xFFB39DFF),
-      Color(0xFFFFB86C),
-    ];
-    return colors[h % colors.length];
-  }
-
   void _showGoalSortSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -1350,13 +1364,16 @@ class _ManagementScreenState extends State<ManagementScreen> {
   Widget _buildGoalDismissibleCard(Map<String, dynamic> g) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final gid = g['id']?.toString() ?? g.hashCode.toString();
+    final idStr = g['id']?.toString();
+    final gid = idStr ?? g.hashCode.toString();
     final title = g['title']?.toString() ?? 'Goal';
     final current = _readAmount(g['current_amount']);
     final target = _readAmount(g['target_amount']);
     final progress = target > 0 ? (current / target).clamp(0.0, 1.0) : 0.0;
-    final accent = _accentForGoalTitle(title);
+    final accent = accentColorForGoalTitle(title);
     final deadline = _formatGoalDeadlineShort(g['deadline']);
+    final iconCp = idStr != null ? _goalIconCodePoints[idStr] : null;
+    final goalIcon = iconCp != null ? IconData(iconCp, fontFamily: 'MaterialIcons') : Icons.menu_book_rounded;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -1416,7 +1433,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
                             color: accent,
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          child: const Icon(Icons.savings_outlined, color: Colors.white, size: 26),
+                          child: Icon(goalIcon, color: Colors.white, size: 26),
                         ),
                         const SizedBox(width: 12),
                         Expanded(

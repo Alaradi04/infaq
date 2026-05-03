@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:infaq/goal_accent.dart';
+import 'package:infaq/goal_icon_picker.dart';
+import 'package:infaq/goal_local_storage.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
@@ -25,6 +28,7 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
 
   DateTime _targetDate = DateTime.now().add(const Duration(days: 365));
   bool _saving = false;
+  IconData _goalIcon = Icons.menu_book_rounded;
 
   @override
   void dispose() {
@@ -119,13 +123,30 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
       final deadline =
           '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-      await Supabase.instance.client.from('goals').insert({
-        'created_by': user.id,
-        'title': title,
-        'target_amount': target,
-        'current_amount': current,
-        'deadline': deadline,
-      });
+      final row = await Supabase.instance.client
+          .from('goals')
+          .insert({
+            'created_by': user.id,
+            'title': title,
+            'target_amount': target,
+            'current_amount': current,
+            'deadline': deadline,
+          })
+          .select('id')
+          .single();
+
+      final newId = row['id']?.toString();
+      if (newId != null && newId.isNotEmpty) {
+        try {
+          await persistGoalLocalExtras(
+            goalId: newId,
+            iconCodePoint: _goalIcon.codePoint,
+            monthly: double.tryParse(_monthlyCtrl.text.replaceAll(',', '')),
+          );
+        } catch (_) {
+          // Row exists; user can set icon later in edit if prefs fail.
+        }
+      }
 
       if (!mounted) return;
       Navigator.pop(context, true);
@@ -180,6 +201,54 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
                         hintText: 'PhD, new car, emergency fund…',
                         textInputAction: TextInputAction.next,
                         onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      'Goal icon',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black.withValues(alpha: 0.65),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: InkWell(
+                        onTap: () {
+                          showGoalIconPickerSheet(
+                            context,
+                            onSelected: (ic) => setState(() => _goalIcon = ic),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(20),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 64,
+                              height: 64,
+                              decoration: BoxDecoration(
+                                color: accentColorForGoalTitle(
+                                  _nameCtrl.text.trim().isEmpty ? 'x' : _nameCtrl.text.trim(),
+                                ),
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: Icon(_goalIcon, color: Colors.white, size: 32),
+                            ),
+                            const SizedBox(width: 14),
+                            Text(
+                              'Tap to choose icon',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: kServiceFormGreen,
+                                decoration: TextDecoration.underline,
+                                decorationColor: kServiceFormGreen.withValues(alpha: 0.5),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 18),
