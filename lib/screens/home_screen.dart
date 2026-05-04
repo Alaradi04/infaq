@@ -9,6 +9,7 @@ import 'package:infaq/screens/add_transaction_screen.dart';
 import 'package:infaq/screens/data_privacy_screen.dart';
 import 'package:infaq/screens/edit_profile_screen.dart';
 import 'package:infaq/screens/help_support_screen.dart';
+import 'package:infaq/screens/insights_screen.dart';
 import 'package:infaq/screens/manage_categories_screen.dart';
 import 'package:infaq/screens/management_screen.dart';
 import 'package:infaq/screens/profile_tab_screen.dart';
@@ -570,7 +571,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           _SectionHeader(
                             title: 'Insights',
                             action: 'View all',
-                            onAction: () => _soon('Insights'),
+                            onAction: () => setState(() => _tabIndex = 2),
                           ),
                           const SizedBox(height: 12),
                           _InsightsPlaceholder(),
@@ -603,10 +604,9 @@ class _HomeScreenState extends State<HomeScreen> {
               onEditTransaction: _openEditTransaction,
               onMainTabIndexChanged: (index) => setState(() => _managementTabIndex = index),
             ),
-            _PlaceholderTab(
-              title: 'Analytics',
-              subtitle: 'Spending trends and insights will live here.',
-              onBackHome: () => setState(() => _tabIndex = 0),
+            InsightsScreen(
+              refreshToken: _transactionsListRefreshToken,
+              currencyCode: _currency,
             ),
             ProfileTabScreen(
               displayName: _name,
@@ -647,49 +647,6 @@ class _HomeScreenState extends State<HomeScreen> {
     // weekday 1 = Monday
     final wd = days[d.weekday - 1];
     return '$wd, ${d.day}/${d.month}/${d.year}';
-  }
-}
-
-class _PlaceholderTab extends StatelessWidget {
-  const _PlaceholderTab({
-    required this.title,
-    required this.subtitle,
-    required this.onBackHome,
-  });
-
-  final String title;
-  final String subtitle;
-  final VoidCallback onBackHome;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return ColoredBox(
-      color: cs.surface,
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextButton.icon(
-                onPressed: onBackHome,
-                icon: const Icon(Icons.arrow_back_ios_rounded, size: 18),
-                label: const Text('Home'),
-                style: TextButton.styleFrom(foregroundColor: cs.primary),
-              ),
-              const SizedBox(height: 24),
-              Text(title, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: cs.onSurface)),
-              const SizedBox(height: 8),
-              Text(
-                subtitle,
-                style: TextStyle(fontSize: 15, color: cs.onSurface.withValues(alpha: 0.55), height: 1.35),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
 
