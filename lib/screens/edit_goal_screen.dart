@@ -10,8 +10,6 @@ import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
-const Color _kGoalHeaderCyan = Color(0xFFE8F4FA);
-
 class EditGoalScreen extends StatefulWidget {
   const EditGoalScreen({super.key, required this.goal, this.currencyCode});
 
@@ -260,7 +258,8 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final headerBg = isDark ? Color.lerp(cs.surfaceContainerHigh, cs.secondaryContainer, 0.25)! : _kGoalHeaderCyan;
+    final headerBg =
+        isDark ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)! : kInfaqMgmtHeaderMint;
     final suffix = _currencySuffix();
     final target = double.tryParse(_targetCtrl.text.replaceAll(',', ''));
     final reached = double.tryParse(_reachedCtrl.text.replaceAll(',', '')) ?? 0;

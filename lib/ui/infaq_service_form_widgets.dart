@@ -6,6 +6,9 @@ import 'package:infaq/ui/infaq_bottom_nav.dart';
 /// Dark green for primary actions (mock ~#3D5C45 / app seed).
 const Color kServiceFormGreen = kInfaqPrimaryGreen;
 
+/// Pale mint header background (Management screen and add/edit goal & subscription flows).
+const Color kInfaqMgmtHeaderMint = Color(0xFFE6F4EA);
+
 BoxDecoration infaqServicePillDecoration(BuildContext context) {
   final cs = Theme.of(context).colorScheme;
   final isDark = Theme.of(context).brightness == Brightness.dark;

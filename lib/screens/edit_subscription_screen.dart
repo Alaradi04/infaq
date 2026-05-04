@@ -11,8 +11,6 @@ import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
-const Color _kCream = Color(0xFFFFF6E8);
-
 class EditSubscriptionScreen extends StatefulWidget {
   const EditSubscriptionScreen({
     super.key,
@@ -270,6 +268,10 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final headerBg =
+        isDark ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)! : kInfaqMgmtHeaderMint;
     final suffix = _currencySuffix();
     final subName = (widget.subscription['name'] ?? 'Subscription').toString();
     final now = DateTime.now();
@@ -293,10 +295,10 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            decoration: const BoxDecoration(
-              color: _kCream,
-              borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
-              boxShadow: [
+            decoration: BoxDecoration(
+              color: headerBg,
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
+              boxShadow: const [
                 BoxShadow(color: Color(0x12000000), blurRadius: 12, offset: Offset(0, 4)),
               ],
             ),
@@ -308,13 +310,17 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
                   children: [
                     IconButton(
                       onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1A1A1A)),
+                      icon: Icon(Icons.arrow_back_ios_new_rounded, color: cs.primary),
                     ),
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         'Edit Subscription',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1A1A1A)),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: cs.primary,
+                        ),
                       ),
                     ),
                     IconButton(

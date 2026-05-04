@@ -8,9 +8,6 @@ import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
-/// Light cyan header (reference mock).
-const Color _kGoalHeaderCyan = Color(0xFFE8F4FA);
-
 class AddGoalScreen extends StatefulWidget {
   const AddGoalScreen({super.key, this.currencyCode});
 
@@ -167,6 +164,10 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final headerBg =
+        isDark ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)! : kInfaqMgmtHeaderMint;
     final suffix = _currencySuffix();
 
     return Scaffold(
@@ -184,7 +185,7 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             InfaqServiceFormHeader(
-              backgroundColor: _kGoalHeaderCyan,
+              backgroundColor: headerBg,
               title: 'Add Goals',
               onBack: _cancel,
             ),

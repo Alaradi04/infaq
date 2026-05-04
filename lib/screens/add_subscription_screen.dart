@@ -10,9 +10,6 @@ import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
-/// Pale cream header (reference mock).
-const Color _kSubHeaderCream = Color(0xFFFFF6E8);
-
 class AddSubscriptionScreen extends StatefulWidget {
   const AddSubscriptionScreen({super.key, this.currencyCode});
 
@@ -263,6 +260,11 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
   Widget build(BuildContext context) {
     final suffix = _currencySuffix();
 
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final headerBg =
+        isDark ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)! : kInfaqMgmtHeaderMint;
+
     return Scaffold(
       backgroundColor: Colors.white,
       extendBody: true,
@@ -278,7 +280,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           InfaqServiceFormHeader(
-            backgroundColor: _kSubHeaderCream,
+            backgroundColor: headerBg,
             title: 'Add Subscription',
             onBack: _cancel,
           ),
