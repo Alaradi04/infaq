@@ -1,6 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:infaq/oauth_redirect.dart';
+import 'package:infaq/screens/login_screen.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
 /// Strong password: at least this many characters (12–16+ recommended in UI copy).
@@ -16,7 +21,10 @@ class RegisterFlowScreen extends StatefulWidget {
 class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
   int _step = 1;
   bool _loading = false;
+  bool _googleLoading = false;
   bool _obscure = true;
+
+  StreamSubscription<AuthState>? _authSub;
 
   final _fullName = TextEditingController();
   final _email = TextEditingController();
@@ -29,6 +37,18 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
   void initState() {
     super.initState();
     _password.addListener(_onPasswordChanged);
+    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.session == null) return;
+      if (!mounted) return;
+      if (!Navigator.of(context).canPop()) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final nav = Navigator.of(context);
+        if (nav.canPop()) {
+          nav.popUntil((route) => route.isFirst);
+        }
+      });
+    });
   }
 
   void _onPasswordChanged() {
@@ -39,12 +59,31 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _fullName.dispose();
     _email.dispose();
     _password.removeListener(_onPasswordChanged);
     _password.dispose();
     _balance.dispose();
     super.dispose();
+  }
+
+  Future<void> _signUpWithGoogle() async {
+    setState(() => _googleLoading = true);
+    try {
+      await Supabase.instance.client.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: kOAuthRedirectTo,
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      showInfaqSnack(context, e.message);
+    } catch (e) {
+      if (!mounted) return;
+      showInfaqSnack(context, e.toString());
+    } finally {
+      if (mounted) setState(() => _googleLoading = false);
+    }
   }
 
   bool _isValidEmail(String email) {
@@ -220,18 +259,17 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
     if (_step > 1) {
       setState(() => _step--);
     } else {
-      Navigator.of(context).maybePop();
+      Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: _step == 1,
+      canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _step > 1) {
-          setState(() => _step--);
-        }
+        if (didPop) return;
+        _onRegistrationBack();
       },
       child: Scaffold(
         body: ListView(
@@ -269,7 +307,7 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
                 InfaqPrimaryButton(
                   label: _step == 1 ? 'Next' : 'Sign up',
                   isLoading: _loading,
-                  onPressed: _next,
+                  onPressed: _googleLoading ? null : _next,
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -278,7 +316,11 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
                     Text('Already have an account? ', style: TextStyle(color: Colors.black.withValues(alpha: 0.55))),
                     InfaqTextButton(
                       label: 'Sign in',
-                      onTap: () => Navigator.of(context).maybePop(),
+                      onTap: () {
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -293,7 +335,7 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
 
   List<Widget> _buildStep1(BuildContext context) {
     return [
-      const _FieldLabel('name'),
+      const _FieldLabel('Name'),
       InfaqPillField(
         controller: _fullName,
         hintText: 'full name (e.g., Ahmed Ali)',
@@ -301,7 +343,7 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
         autofillHints: const [AutofillHints.name],
       ),
       const SizedBox(height: 14),
-      const _FieldLabel('email'),
+      const _FieldLabel('Email'),
       InfaqPillField(
         controller: _email,
         hintText: 'example@gmail.com',
@@ -351,6 +393,40 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
           ),
         ),
       ),
+      const SizedBox(height: 22),
+      _OrDividerLine(color: Colors.black.withValues(alpha: 0.12)),
+      const SizedBox(height: 16),
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final maxW = constraints.maxWidth;
+          final gap = maxW < 340 ? 14.0 : 20.0;
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _SocialIcon(
+                icon: FontAwesomeIcons.apple,
+                onTap: _loading || _googleLoading
+                    ? null
+                    : () => showInfaqSnack(context, 'Apple sign-in is not available yet.'),
+              ),
+              SizedBox(width: gap),
+              _SocialIcon(
+                icon: FontAwesomeIcons.google,
+                onTap: _loading || _googleLoading ? null : _signUpWithGoogle,
+                loading: _googleLoading,
+              ),
+              SizedBox(width: gap),
+              _SocialIcon(
+                icon: FontAwesomeIcons.facebookF,
+                onTap: _loading || _googleLoading
+                    ? null
+                    : () => showInfaqSnack(context, 'Facebook sign-in is not available yet.'),
+              ),
+            ],
+          );
+        },
+      ),
+      const SizedBox(height: 4),
     ];
   }
 
@@ -419,6 +495,73 @@ class _FieldLabel extends StatelessWidget {
           color: Colors.black.withValues(alpha: 0.7),
           fontWeight: FontWeight.w700,
         ),
+      ),
+    );
+  }
+}
+
+/// Matches [LoginScreen] divider + social control styling without editing the sign-in file.
+class _OrDividerLine extends StatelessWidget {
+  const _OrDividerLine({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: Divider(height: 1, thickness: 1, color: color)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Text(
+            'or',
+            style: TextStyle(
+              color: Colors.black.withValues(alpha: 0.45),
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+        ),
+        Expanded(child: Divider(height: 1, thickness: 1, color: color)),
+      ],
+    );
+  }
+}
+
+class _SocialIcon extends StatelessWidget {
+  const _SocialIcon({
+    required this.icon,
+    this.onTap,
+    this.loading = false,
+  });
+
+  final IconData icon;
+  final VoidCallback? onTap;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkResponse(
+      onTap: loading || onTap == null ? null : onTap,
+      radius: 26,
+      child: Container(
+        width: 44,
+        height: 44,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: const [
+            BoxShadow(color: Color(0x11000000), blurRadius: 12, offset: Offset(0, 6)),
+          ],
+        ),
+        child: loading
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF3F5F4A)),
+              )
+            : FaIcon(icon, size: 20, color: Colors.black87),
       ),
     );
   }

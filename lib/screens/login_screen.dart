@@ -145,10 +145,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 26),
                 InfaqPillField(
                   controller: _email,
-                  hintText: 'username or email',
+                  hintText: 'Email',
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
-                  autofillHints: const [AutofillHints.username, AutofillHints.email],
+                  autofillHints: const [AutofillHints.email],
                 ),
                 const SizedBox(height: 14),
                 InfaqPillField(
