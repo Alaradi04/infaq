@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -29,14 +27,12 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
 
   final ImagePicker _imagePicker = ImagePicker();
   Uint8List? _iconPreviewBytes;
+
   /// Storage path inside the configured storage bucket (saved to `icon_url`).
   String? _iconStoragePath;
   bool _uploadingIcon = false;
 
-  static const _cycles = [
-    ('monthly', 'Monthly'),
-    ('yearly', 'Yearly'),
-  ];
+  static const _cycles = [('monthly', 'Monthly'), ('yearly', 'Yearly')];
 
   @override
   void dispose() {
@@ -66,7 +62,9 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
       lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
-          data: Theme.of(context).copyWith(colorScheme: const ColorScheme.light(primary: kServiceFormGreen)),
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(primary: kServiceFormGreen),
+          ),
           child: child!,
         );
       },
@@ -95,9 +93,12 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
       final lower = x.name.toLowerCase();
       final ext = lower.endsWith('.png') ? 'png' : 'jpg';
       final mime = ext == 'png' ? 'image/png' : 'image/jpeg';
-      final path = '${user.id}/sub_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final path =
+          '${user.id}/sub_${DateTime.now().millisecondsSinceEpoch}.$ext';
 
-      await Supabase.instance.client.storage.from(InfaqSubscriptionIconStorage.bucket).uploadBinary(
+      await Supabase.instance.client.storage
+          .from(InfaqSubscriptionIconStorage.bucket)
+          .uploadBinary(
             path,
             bytes,
             fileOptions: FileOptions(contentType: mime),
@@ -120,7 +121,9 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
   Future<void> _onIconFieldTap() async {
     await showModalBottomSheet<void>(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -187,7 +190,8 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
     );
     if (!mounted || value == null) return;
     final uri = Uri.tryParse(value);
-    final valid = uri != null &&
+    final valid =
+        uri != null &&
         (uri.scheme == 'http' || uri.scheme == 'https') &&
         (uri.host.isNotEmpty);
     if (!valid) {
@@ -204,7 +208,9 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
 
   Future<void> _save() async {
     final name = _nameCtrl.text.trim();
-    final amount = double.tryParse(_amountCtrl.text.replaceAll(',', '').replaceAll(r'$', ''));
+    final amount = double.tryParse(
+      _amountCtrl.text.replaceAll(',', '').replaceAll(r'$', ''),
+    );
     if (name.isEmpty) {
       showInfaqSnack(context, 'Enter a name for this subscription.');
       return;
@@ -262,8 +268,9 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
 
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final headerBg =
-        isDark ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)! : kInfaqMgmtHeaderMint;
+    final headerBg = isDark
+        ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)!
+        : kInfaqMgmtHeaderMint;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -307,11 +314,16 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                         onTap: _uploadingIcon ? null : _onIconFieldTap,
                         borderRadius: BorderRadius.circular(22),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFF7F8F7),
                             borderRadius: BorderRadius.circular(22),
-                            border: Border.all(color: kServiceFormGreen.withValues(alpha: 0.2)),
+                            border: Border.all(
+                              color: kServiceFormGreen.withValues(alpha: 0.2),
+                            ),
                           ),
                           child: Row(
                             children: [
@@ -323,31 +335,42 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                                     backgroundColor: Colors.white,
                                     backgroundImage: _iconPreviewBytes != null
                                         ? MemoryImage(_iconPreviewBytes!)
-                                        : (_iconStoragePath != null && _iconStoragePath!.isNotEmpty
-                                            ? NetworkImage(
-                                                InfaqSubscriptionIconStorage.resolveDisplayUrl(
-                                                  Supabase.instance.client,
-                                                  _iconStoragePath!,
-                                                )!,
-                                              )
-                                            : null),
-                                    child: _iconPreviewBytes == null &&
-                                            (_iconStoragePath == null || _iconStoragePath!.isEmpty)
-                                        ? Icon(Icons.add_photo_alternate_outlined, color: Colors.grey.shade500, size: 28)
+                                        : (_iconStoragePath != null &&
+                                                  _iconStoragePath!.isNotEmpty
+                                              ? NetworkImage(
+                                                  InfaqSubscriptionIconStorage.resolveDisplayUrl(
+                                                    Supabase.instance.client,
+                                                    _iconStoragePath!,
+                                                  )!,
+                                                )
+                                              : null),
+                                    child:
+                                        _iconPreviewBytes == null &&
+                                            (_iconStoragePath == null ||
+                                                _iconStoragePath!.isEmpty)
+                                        ? Icon(
+                                            Icons.add_photo_alternate_outlined,
+                                            color: Colors.grey.shade500,
+                                            size: 28,
+                                          )
                                         : null,
                                   ),
                                   if (_uploadingIcon)
                                     const SizedBox(
                                       width: 26,
                                       height: 26,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: kServiceFormGreen),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: kServiceFormGreen,
+                                      ),
                                     ),
                                 ],
                               ),
                               const SizedBox(width: 14),
                               Expanded(
                                 child: Text(
-                                  _iconStoragePath != null && _iconStoragePath!.isNotEmpty
+                                  _iconStoragePath != null &&
+                                          _iconStoragePath!.isNotEmpty
                                       ? 'Tap to change picture'
                                       : 'Tap to add subscription icon',
                                   style: TextStyle(
@@ -357,7 +380,10 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                                   ),
                                 ),
                               ),
-                              Icon(Icons.chevron_right_rounded, color: Colors.black.withValues(alpha: 0.25)),
+                              Icon(
+                                Icons.chevron_right_rounded,
+                                color: Colors.black.withValues(alpha: 0.25),
+                              ),
                             ],
                           ),
                         ),
@@ -408,12 +434,20 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                       onPressed: _saving ? null : _cancel,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: kServiceFormGreen,
-                        side: BorderSide(color: kServiceFormGreen.withValues(alpha: 0.45), width: 1.4),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                        side: BorderSide(
+                          color: kServiceFormGreen.withValues(alpha: 0.45),
+                          width: 1.4,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
+                        ),
                         backgroundColor: Colors.white,
                         elevation: 0,
                       ),
-                      child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700)),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
                     ),
                   ),
                 ],

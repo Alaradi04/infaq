@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/category/category_icons.dart';
+import 'package:infaq/services/ai_service.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
@@ -71,6 +74,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   bool _saving = false;
   String? _categoryError;
   bool _supportsCategoryIconKey = true;
+  Timer? _aiDebounce;
+  bool _aiCategorizing = false;
+  String? _aiConfidence;
+  String? _aiLeafColor;
 
   static const _primary = kInfaqPrimaryGreen;
 
@@ -128,6 +135,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   @override
   void dispose() {
+    _aiDebounce?.cancel();
     _descCtrl.dispose();
     _amountCtrl.dispose();
     super.dispose();
@@ -220,6 +228,45 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _isIncome = income;
       _clearCategoryIfInvalid();
     });
+  }
+
+  Future<void> _suggestCategoryWithAi(String value) async {
+    final desc = value.trim();
+    if (desc.length < 3) return;
+    if (_filteredCategories.isEmpty) return;
+
+    setState(() => _aiCategorizing = true);
+    try {
+      final amountValue = double.tryParse(_amountCtrl.text.trim().replaceAll(',', '')) ?? 0;
+      final result = await AiService().categorizeTransaction(
+        transactionName: desc,
+        amount: amountValue,
+        transactionType: _isIncome ? 'income' : 'expense',
+        description: null,
+        availableCategories: _filteredCategories.map((c) => c.name).toList(),
+      );
+
+      final suggested = (result['suggested_category'] ?? '').toString().trim();
+      final confidence = result['confidence']?.toString();
+      final leafColor = result['leaf_color']?.toString();
+      final match = _filteredCategories.where((c) => c.name.toLowerCase() == suggested.toLowerCase());
+      final matchedCategory = match.isEmpty ? null : match.first;
+
+      if (!mounted) return;
+      setState(() {
+        if (matchedCategory != null) {
+          _categoryId = matchedCategory.id;
+        }
+        _aiConfidence = confidence;
+        _aiLeafColor = leafColor;
+      });
+    } catch (_) {
+      // Keep AI suggestion failures silent.
+    } finally {
+      if (mounted) {
+        setState(() => _aiCategorizing = false);
+      }
+    }
   }
 
   String _currencyPrefix() {
@@ -470,6 +517,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       controller: _descCtrl,
                       hintText: descHint,
                       textInputAction: TextInputAction.next,
+                      onChanged: (value) {
+                        _aiDebounce?.cancel();
+                        _aiDebounce = Timer(const Duration(milliseconds: 700), () {
+                          _suggestCategoryWithAi(value);
+                        });
+                      },
                     ),
                   ),
                   const SizedBox(height: 18),
@@ -563,6 +616,21 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       ),
                     ),
                   ),
+                  if (_aiConfidence != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _aiCategorizing ? 'AI suggesting category...' : 'AI suggested this category',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: switch (_aiLeafColor) {
+                          'green' => Colors.green.shade700,
+                          'orange' => Colors.orange.shade800,
+                          'red' => Colors.red.shade700,
+                          _ => Colors.black.withValues(alpha: 0.5),
+                        },
+                      ),
+                    ),
+                  ],
                   if (_categoryError != null) ...[
                     const SizedBox(height: 8),
                     Text(
@@ -663,6 +731,7 @@ class _ShadowTextField extends StatelessWidget {
     this.keyboardType,
     this.textInputAction,
     this.inputFormatters,
+    this.onChanged,
   });
 
   final TextEditingController controller;
@@ -670,6 +739,7 @@ class _ShadowTextField extends StatelessWidget {
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
   final List<TextInputFormatter>? inputFormatters;
+  final ValueChanged<String>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -680,6 +750,7 @@ class _ShadowTextField extends StatelessWidget {
         keyboardType: keyboardType,
         textInputAction: textInputAction,
         inputFormatters: inputFormatters,
+        onChanged: onChanged,
         decoration: InputDecoration(
           hintText: hintText,
           filled: true,

@@ -1,4 +1,5 @@
 /// Helpers to attribute expenses to a subscription row and compare with category spend (e.g. food).
+library;
 
 double subReadAmount(dynamic raw) {
   if (raw == null) return 0;

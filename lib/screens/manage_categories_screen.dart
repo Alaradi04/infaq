@@ -60,7 +60,9 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
         _supportsCategoryIconKey = false;
       }
 
-      final list = (res as List<dynamic>).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final list = (res as List<dynamic>)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
       if (!mounted) return;
       setState(() {
         _rows = list;
@@ -103,10 +105,13 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: type,
+                    initialValue: type,
                     decoration: const InputDecoration(labelText: 'Type'),
                     items: const [
-                      DropdownMenuItem(value: 'expense', child: Text('Expense')),
+                      DropdownMenuItem(
+                        value: 'expense',
+                        child: Text('Expense'),
+                      ),
                       DropdownMenuItem(value: 'income', child: Text('Income')),
                     ],
                     onChanged: (v) => setLocal(() => type = v ?? 'expense'),
@@ -121,8 +126,14 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Add')),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Add'),
+              ),
             ],
           );
         },
@@ -192,8 +203,14 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Save'),
+              ),
             ],
           );
         },
@@ -213,7 +230,11 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
       if (_supportsCategoryIconKey) {
         payload['icon_key'] = validatedCategoryIconKey(iconKey);
       }
-      await Supabase.instance.client.from('categories').update(payload).eq('id', id).eq('user_id', user.id);
+      await Supabase.instance.client
+          .from('categories')
+          .update(payload)
+          .eq('id', id)
+          .eq('user_id', user.id);
       if (mounted) {
         showInfaqSnack(context, 'Updated');
         await _load();
@@ -232,9 +253,14 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete category?'),
-        content: Text('Remove “$name”? Transactions using it may be blocked by the database.'),
+        content: Text(
+          'Remove “$name”? Transactions using it may be blocked by the database.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
@@ -250,7 +276,11 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
     if (user == null) return;
 
     try {
-      await Supabase.instance.client.from('categories').delete().eq('id', id).eq('user_id', user.id);
+      await Supabase.instance.client
+          .from('categories')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', user.id);
       if (mounted) {
         showInfaqSnack(context, 'Category deleted');
         await _load();
@@ -268,7 +298,10 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
         backgroundColor: _kMint,
         foregroundColor: _primary,
         elevation: 0,
-        title: const Text('Categories', style: TextStyle(fontWeight: FontWeight.w800)),
+        title: const Text(
+          'Categories',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addCategory,
@@ -280,73 +313,87 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _primary))
           : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(_error!, textAlign: TextAlign.center),
-                        const SizedBox(height: 12),
-                        TextButton(onPressed: _load, child: const Text('Retry')),
-                      ],
-                    ),
-                  ),
-                )
-              : RefreshIndicator(
-                  color: _primary,
-                  onRefresh: _load,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
-                    itemCount: _rows.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, i) {
-                      final row = _rows[i];
-                      final def = _isDefault(row);
-                      final type = (row['type']?.toString() ?? '').toUpperCase();
-                      final name = row['name']?.toString() ?? '';
-                      final iconData = categoryIconForDisplay(
-                        iconKey: row['icon_key']?.toString(),
-                        name: name,
-                        type: row['type']?.toString() ?? 'expense',
-                        categoryId: row['id']?.toString(),
-                      );
-
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: _kMint,
-                          foregroundColor: _primary,
-                          child: Icon(iconData, size: 22),
-                        ),
-                        title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: Text('$type · ${def ? 'Default' : 'Yours'}'),
-                        trailing: def
-                            ? Padding(
-                                padding: const EdgeInsets.only(left: 8),
-                                child: Text(
-                                  'Built-in',
-                                  style: TextStyle(fontSize: 12, color: Colors.black.withValues(alpha: 0.45)),
-                                ),
-                              )
-                            : Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    tooltip: 'Edit',
-                                    onPressed: () => _editCustom(row),
-                                    icon: const Icon(Icons.edit_outlined, color: _primary, size: 22),
-                                  ),
-                                  IconButton(
-                                    tooltip: 'Delete',
-                                    onPressed: () => _deleteCustom(row),
-                                    icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade700, size: 22),
-                                  ),
-                                ],
-                              ),
-                      );
-                    },
-                  ),
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(_error!, textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    TextButton(onPressed: _load, child: const Text('Retry')),
+                  ],
                 ),
+              ),
+            )
+          : RefreshIndicator(
+              color: _primary,
+              onRefresh: _load,
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+                itemCount: _rows.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, i) {
+                  final row = _rows[i];
+                  final def = _isDefault(row);
+                  final type = (row['type']?.toString() ?? '').toUpperCase();
+                  final name = row['name']?.toString() ?? '';
+                  final iconData = categoryIconForDisplay(
+                    iconKey: row['icon_key']?.toString(),
+                    name: name,
+                    type: row['type']?.toString() ?? 'expense',
+                    categoryId: row['id']?.toString(),
+                  );
+
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: _kMint,
+                      foregroundColor: _primary,
+                      child: Icon(iconData, size: 22),
+                    ),
+                    title: Text(
+                      name,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text('$type · ${def ? 'Default' : 'Yours'}'),
+                    trailing: def
+                        ? Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: Text(
+                              'Built-in',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.black.withValues(alpha: 0.45),
+                              ),
+                            ),
+                          )
+                        : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                tooltip: 'Edit',
+                                onPressed: () => _editCustom(row),
+                                icon: const Icon(
+                                  Icons.edit_outlined,
+                                  color: _primary,
+                                  size: 22,
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Delete',
+                                onPressed: () => _deleteCustom(row),
+                                icon: Icon(
+                                  Icons.delete_outline_rounded,
+                                  color: Colors.red.shade700,
+                                  size: 22,
+                                ),
+                              ),
+                            ],
+                          ),
+                  );
+                },
+              ),
+            ),
     );
   }
 }

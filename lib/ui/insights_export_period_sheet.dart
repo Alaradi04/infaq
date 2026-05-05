@@ -4,18 +4,18 @@ import 'package:flutter/material.dart';
 class InsightsExportSelection {
   /// Use the already-loaded [InsightsPayload] from the Insights tab (no refetch).
   const InsightsExportSelection.currentFilter()
-      : useCurrentScreenFilter = true,
-        start = null,
-        end = null,
-        label = '';
+    : useCurrentScreenFilter = true,
+      start = null,
+      end = null,
+      label = '';
 
   InsightsExportSelection.custom({
     required DateTime start,
     required DateTime end,
     required this.label,
-  })  : useCurrentScreenFilter = false,
-        start = start,
-        end = end;
+  }) : useCurrentScreenFilter = false,
+       start = start,
+       end = end;
 
   final bool useCurrentScreenFilter;
   final DateTime? start;
@@ -35,13 +35,15 @@ class InsightsExportPeriodSheet extends StatefulWidget {
 
   final String title;
   final String subtitle;
+
   /// Shown when “Use current filter” is enabled (Insights preset or custom label).
   final String currentFilterDescription;
   final bool showUseCurrentFilterOption;
   final String continueButtonLabel;
 
   @override
-  State<InsightsExportPeriodSheet> createState() => _InsightsExportPeriodSheetState();
+  State<InsightsExportPeriodSheet> createState() =>
+      _InsightsExportPeriodSheetState();
 }
 
 class _InsightsExportPeriodSheetState extends State<InsightsExportPeriodSheet> {
@@ -118,7 +120,8 @@ class _InsightsExportPeriodSheetState extends State<InsightsExportPeriodSheet> {
           InsightsExportSelection.custom(
             start: day,
             end: day,
-            label: '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}',
+            label:
+                '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}',
           ),
         );
         return;
@@ -198,16 +201,27 @@ class _InsightsExportPeriodSheetState extends State<InsightsExportPeriodSheet> {
               Expanded(
                 child: Text(
                   widget.title,
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: cs.onSurface),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: cs.onSurface,
+                  ),
                 ),
               ),
-              IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close_rounded),
+              ),
             ],
           ),
           const SizedBox(height: 4),
           Text(
             widget.subtitle,
-            style: TextStyle(fontSize: 13, color: cs.onSurface.withValues(alpha: 0.55), height: 1.3),
+            style: TextStyle(
+              fontSize: 13,
+              color: cs.onSurface.withValues(alpha: 0.55),
+              height: 1.3,
+            ),
           ),
           const SizedBox(height: 16),
           if (widget.showUseCurrentFilterOption) ...[
@@ -219,16 +233,35 @@ class _InsightsExportPeriodSheetState extends State<InsightsExportPeriodSheet> {
                 widget.currentFilterDescription,
                 style: TextStyle(color: cs.onSurface.withValues(alpha: 0.5)),
               ),
-              onTap: () => Navigator.pop(context, const InsightsExportSelection.currentFilter()),
+              onTap: () => Navigator.pop(
+                context,
+                const InsightsExportSelection.currentFilter(),
+              ),
             ),
             const Divider(height: 24),
           ],
           SegmentedButton<int>(
             segments: const [
-              ButtonSegment(value: 0, label: Text('Year'), icon: Icon(Icons.calendar_today_outlined, size: 16)),
-              ButtonSegment(value: 1, label: Text('Month'), icon: Icon(Icons.date_range_outlined, size: 16)),
-              ButtonSegment(value: 2, label: Text('Day'), icon: Icon(Icons.event_outlined, size: 16)),
-              ButtonSegment(value: 3, label: Text('Range'), icon: Icon(Icons.alt_route_outlined, size: 16)),
+              ButtonSegment(
+                value: 0,
+                label: Text('Year'),
+                icon: Icon(Icons.calendar_today_outlined, size: 16),
+              ),
+              ButtonSegment(
+                value: 1,
+                label: Text('Month'),
+                icon: Icon(Icons.date_range_outlined, size: 16),
+              ),
+              ButtonSegment(
+                value: 2,
+                label: Text('Day'),
+                icon: Icon(Icons.event_outlined, size: 16),
+              ),
+              ButtonSegment(
+                value: 3,
+                label: Text('Range'),
+                icon: Icon(Icons.alt_route_outlined, size: 16),
+              ),
             ],
             selected: {_mode},
             onSelectionChanged: (s) => setState(() => _mode = s.first),
@@ -236,9 +269,15 @@ class _InsightsExportPeriodSheetState extends State<InsightsExportPeriodSheet> {
           const SizedBox(height: 16),
           if (_mode == 0) ...[
             DropdownButtonFormField<int>(
-              value: _year,
-              decoration: const InputDecoration(labelText: 'Year', border: OutlineInputBorder()),
-              items: [for (final y in years) DropdownMenuItem(value: y, child: Text('$y'))],
+              initialValue: _year,
+              decoration: const InputDecoration(
+                labelText: 'Year',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                for (final y in years)
+                  DropdownMenuItem(value: y, child: Text('$y')),
+              ],
               onChanged: (v) => setState(() => _year = v ?? _year),
             ),
           ],
@@ -248,8 +287,11 @@ class _InsightsExportPeriodSheetState extends State<InsightsExportPeriodSheet> {
                 Expanded(
                   flex: 2,
                   child: DropdownButtonFormField<int>(
-                    value: _month,
-                    decoration: const InputDecoration(labelText: 'Month', border: OutlineInputBorder()),
+                    initialValue: _month,
+                    decoration: const InputDecoration(
+                      labelText: 'Month',
+                      border: OutlineInputBorder(),
+                    ),
                     items: [
                       for (var m = 1; m <= 12; m++)
                         DropdownMenuItem(value: m, child: Text(_months[m - 1])),
@@ -260,9 +302,15 @@ class _InsightsExportPeriodSheetState extends State<InsightsExportPeriodSheet> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<int>(
-                    value: _year,
-                    decoration: const InputDecoration(labelText: 'Year', border: OutlineInputBorder()),
-                    items: [for (final y in years) DropdownMenuItem(value: y, child: Text('$y'))],
+                    initialValue: _year,
+                    decoration: const InputDecoration(
+                      labelText: 'Year',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      for (final y in years)
+                        DropdownMenuItem(value: y, child: Text('$y')),
+                    ],
                     onChanged: (v) => setState(() => _year = v ?? _year),
                   ),
                 ),
@@ -311,7 +359,8 @@ Future<InsightsExportSelection?> showInsightsExportPeriodSheet(
   required String currentFilterDescription,
   bool showUseCurrentFilterOption = true,
   String title = 'Export data',
-  String subtitle = 'Choose the year, month, day, or range to include in the file.',
+  String subtitle =
+      'Choose the year, month, day, or range to include in the file.',
   String continueButtonLabel = 'Continue',
 }) {
   return showModalBottomSheet<InsightsExportSelection>(

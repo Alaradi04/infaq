@@ -163,7 +163,7 @@ IconData _iconFromStableCategorySeed({
   required String name,
   String? categoryId,
 }) {
-  final seed = (categoryId != null && categoryId.isNotEmpty) ? '${type}|$categoryId' : '${type}|$name';
+  final seed = (categoryId != null && categoryId.isNotEmpty) ? '$type|$categoryId' : '$type|$name';
   var h = 5381;
   for (final unit in seed.codeUnits) {
     h = ((h << 5) + h + unit) & 0x7fffffff;
