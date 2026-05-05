@@ -18,7 +18,7 @@ class DataPrivacyScreen extends StatelessWidget {
           children: const [
             _PolicyTitle('Privacy Policy'),
             SizedBox(height: 6),
-            _PolicyBody('Last Updated: [Enter Date]'),
+            _PolicyBody('Last Updated: 6/5/2026'),
             SizedBox(height: 16),
             _PolicyBody(
               'Welcome to Infaq.\n'
@@ -27,7 +27,7 @@ class DataPrivacyScreen extends StatelessWidget {
             ),
             SizedBox(height: 18),
             _PolicySection(
-              title: '1. Information We Collect',
+              title: 'Information We Collect',
               body:
                   'We may collect the following types of information:\n\n'
                   'Personal Information\n'
@@ -45,7 +45,7 @@ class DataPrivacyScreen extends StatelessWidget {
                   'Any text, images, files, or other content you upload, create, or store inside the app',
             ),
             _PolicySection(
-              title: '2. How We Use Your Information',
+              title: 'How We Use Your Information',
               body:
                   'We use your information to:\n\n'
                   'Provide and maintain the app\n'
@@ -56,7 +56,7 @@ class DataPrivacyScreen extends StatelessWidget {
                   'Protect the security of the app and its users',
             ),
             _PolicySection(
-              title: '3. Data Sharing',
+              title: 'Data Sharing',
               body:
                   'We do not sell your personal information.\n'
                   'We may share your information only in the following cases:\n\n'
@@ -65,7 +65,7 @@ class DataPrivacyScreen extends StatelessWidget {
                   'To protect our rights, users, or app security',
             ),
             _PolicySection(
-              title: '4. Data Storage and Security',
+              title: 'Data Storage and Security',
               body:
                   'We take reasonable measures to protect your information from unauthorized access, '
                   'loss, misuse, or disclosure.\n'
@@ -73,14 +73,14 @@ class DataPrivacyScreen extends StatelessWidget {
                   'guarantee absolute security.',
             ),
             _PolicySection(
-              title: '5. User Accounts',
+              title: 'User Accounts',
               body:
                   'If you create an account in Infaq, you are responsible for keeping your login '
                   'credentials secure.\n'
                   'Please do not share your password with others.',
             ),
             _PolicySection(
-              title: '6. Third-Party Services',
+              title: 'Third-Party Services',
               body:
                   'Infaq may use third-party services such as:\n\n'
                   'Authentication providers\n'
@@ -91,13 +91,13 @@ class DataPrivacyScreen extends StatelessWidget {
                   'privacy policies.',
             ),
             _PolicySection(
-              title: '7. Cookies and Similar Technologies',
+              title: 'Cookies and Similar Technologies',
               body:
                   'If applicable, we may use cookies or similar technologies to improve app '
                   'functionality, remember preferences, and analyze usage.',
             ),
             _PolicySection(
-              title: '8. Your Rights',
+              title: 'Your Rights',
               body:
                   'Depending on your location, you may have the right to:\n\n'
                   'Access your personal data\n'
@@ -107,25 +107,25 @@ class DataPrivacyScreen extends StatelessWidget {
                   'To request any of these, please contact us at: infaq.bh@gmail.com',
             ),
             _PolicySection(
-              title: '9. Data Retention',
+              title: 'Data Retention',
               body:
                   'We keep your information only for as long as necessary to provide the app and '
                   'meet legal or operational requirements.',
             ),
             _PolicySection(
-              title: '10. Children\'s Privacy',
+              title: 'Children\'s Privacy',
               body:
                   'Infaq is not intended for children without parental or guardian consent.\n'
                   'We do not knowingly collect personal information from children where prohibited by law.',
             ),
             _PolicySection(
-              title: '11. Changes to This Privacy Policy',
+              title: 'Changes to This Privacy Policy',
               body:
                   'We may update this Privacy Policy from time to time.\n'
                   'Any changes will be posted in the app with the updated effective date.',
             ),
             _PolicySection(
-              title: '12. Contact Us',
+              title: 'Contact Us',
               body:
                   'If you have any questions about this Privacy Policy, please contact us at:\n\n'
                   'App Name: Infaq\n'
