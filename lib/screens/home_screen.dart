@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -15,12 +16,15 @@ import 'package:infaq/screens/management_screen.dart';
 import 'package:infaq/screens/profile_tab_screen.dart';
 import 'package:infaq/profile/avatar_storage.dart';
 import 'package:infaq/services/ai_service.dart';
+import 'package:infaq/services/home_services_layout_store.dart';
 import 'package:infaq/ui/ai_insight_card.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 import 'package:infaq/user_profile_sync.dart';
 
 const Color _kHeaderGreen = Color(0xFFE8F2EA);
+/// Reserves vertical space in the scroll view while the edit layer is shown above the dimmed stack.
+const double _kServicesEditPlaceholderHeight = 420;
 
 /// Home dashboard after login. Loads profile from `users` and transactions from
 /// `transactions` when available (expects `user_id`, `amount`, `type`, optional
@@ -53,6 +57,12 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> _aiInsightCards = [];
   bool _loadingAiInsights = false;
   final _aiService = AiService();
+
+  List<String> _serviceKeyOrder = List<String>.from(HomeServicesLayoutStore.defaultOrder);
+  bool _servicesEditMode = false;
+  List<String> _editDraftKeys = List<String>.from(HomeServicesLayoutStore.defaultOrder);
+  List<String> _savedOrderSnapshot = List<String>.from(HomeServicesLayoutStore.defaultOrder);
+  final LayerLink _servicesLayerLink = LayerLink();
 
   @override
   void initState() {
@@ -149,6 +159,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final tx = await _fetchRecentTransactions(user.id);
     final spent = _computeSpentToday(tx);
 
+    var serviceOrder = List<String>.from(HomeServicesLayoutStore.defaultOrder);
+    try {
+      final loaded = await HomeServicesLayoutStore.load(user.id);
+      if (loaded != null) {
+        serviceOrder = HomeServicesLayoutStore.normalize(loaded);
+      }
+    } catch (_) {}
+
     if (!mounted) return;
     final photoPath = (profile?['profile_photo_path'] as String?)?.trim();
     setState(() {
@@ -160,6 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _transactionsListRefreshToken++;
       _profilePhotoStoragePath = photoPath != null && photoPath.isNotEmpty ? photoPath : null;
       _profileAvatarPublicUrl = InfaqAvatarStorage.publicUrl(supabase, _profilePhotoStoragePath);
+      _serviceKeyOrder = serviceOrder;
       _loading = false;
       _error = null;
     });
@@ -448,9 +467,70 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'categories':
         _openManageCategories();
         break;
+      case 'edits':
+        _enterServicesEdit();
+        break;
       default:
         _soon(key);
     }
+  }
+
+  void _enterServicesEdit() {
+    setState(() {
+      _savedOrderSnapshot = List<String>.from(_serviceKeyOrder);
+      _editDraftKeys = List<String>.from(_serviceKeyOrder);
+      _servicesEditMode = true;
+    });
+  }
+
+  void _cancelServicesEdit() {
+    setState(() {
+      _editDraftKeys = List.from(_savedOrderSnapshot);
+      _servicesEditMode = false;
+    });
+  }
+
+  Future<void> _commitServicesEdit() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user != null) {
+      try {
+        await HomeServicesLayoutStore.save(user.id, List<String>.from(_editDraftKeys));
+      } catch (e) {
+        if (mounted) showInfaqSnack(context, 'Could not save layout.');
+        return;
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _serviceKeyOrder = List<String>.from(_editDraftKeys);
+      _servicesEditMode = false;
+    });
+  }
+
+  /// Swaps two active shortcuts so reorder works the same in every direction on the grid.
+  void _reorderServiceDraft(String dragged, String target) {
+    if (dragged == target) return;
+    final list = List<String>.from(_editDraftKeys);
+    final i = list.indexOf(dragged);
+    final j = list.indexOf(target);
+    if (i < 0 || j < 0) return;
+    final tmp = list[i];
+    list[i] = list[j];
+    list[j] = tmp;
+    setState(() => _editDraftKeys = list);
+  }
+
+  void _removeServiceDraft(String key) {
+    if (_editDraftKeys.length <= HomeServicesLayoutStore.minVisible) {
+      showInfaqSnack(context, 'Keep at least ${HomeServicesLayoutStore.minVisible} shortcuts.');
+      return;
+    }
+    setState(() => _editDraftKeys.remove(key));
+  }
+
+  void _addServiceDraft(String key) {
+    if (_editDraftKeys.contains(key)) return;
+    setState(() => _editDraftKeys = [..._editDraftKeys, key]);
   }
 
   @override
@@ -506,92 +586,106 @@ class _HomeScreenState extends State<HomeScreen> {
         child: IndexedStack(
           index: _tabIndex,
           children: [
-            RefreshIndicator(
-              color: cs.primary,
-              onRefresh: () async {
-                await _bootstrap();
-                await _loadAiHomeInsights();
-              },
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            isDark ? const Color(0xFF1A2520) : _kHeaderGreen,
-                            cs.surface,
-                          ],
-                        ),
-                      ),
-                      child: SafeArea(
-                        bottom: false,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                RefreshIndicator(
+                  color: cs.primary,
+                  onRefresh: () async {
+                    if (_servicesEditMode) return;
+                    await _bootstrap();
+                    await _loadAiHomeInsights();
+                  },
+                  child: CustomScrollView(
+                    physics: _servicesEditMode
+                        ? const NeverScrollableScrollPhysics()
+                        : const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                isDark ? const Color(0xFF1A2520) : _kHeaderGreen,
+                                cs.surface,
+                              ],
+                            ),
+                          ),
+                          child: SafeArea(
+                            bottom: false,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Expanded(
-                                    child: Text(
-                                      _greetingLine(),
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: cs.onSurface.withValues(alpha: 0.55),
-                                        fontWeight: FontWeight.w600,
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          _greetingLine(),
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: cs.onSurface.withValues(alpha: 0.55),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
                                       ),
+                                      IconButton(
+                                        tooltip: 'Sign out',
+                                        visualDensity: VisualDensity.compact,
+                                        onPressed: () => Supabase.instance.client.auth.signOut(),
+                                        icon: Icon(Icons.logout_rounded, color: cs.primary, size: 22),
+                                      ),
+                                    ],
+                                  ),
+                                  Text(
+                                    _firstName(),
+                                    style: TextStyle(
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.w800,
+                                      color: cs.primary,
+                                      height: 1.15,
                                     ),
                                   ),
-                                  IconButton(
-                                    tooltip: 'Sign out',
-                                    visualDensity: VisualDensity.compact,
-                                    onPressed: () => Supabase.instance.client.auth.signOut(),
-                                    icon: Icon(Icons.logout_rounded, color: cs.primary, size: 22),
+                                  const SizedBox(height: 14),
+                                  _SummaryCard(
+                                    monthLabel: _monthYearLabel(),
+                                    dateDayLabel: _todayLabel(),
+                                    spentToday: _spentToday,
+                                    balance: _balance,
+                                    progress: progress,
+                                    format: _fmtMoney,
                                   ),
                                 ],
                               ),
-                              Text(
-                                _firstName(),
-                                style: TextStyle(
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.w800,
-                                  color: cs.primary,
-                                  height: 1.15,
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              _SummaryCard(
-                                monthLabel: _monthYearLabel(),
-                                dateDayLabel: _todayLabel(),
-                                spentToday: _spentToday,
-                                balance: _balance,
-                                progress: progress,
-                                format: _fmtMoney,
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Services',
-                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: cs.onSurface),
-                          ),
-                          const SizedBox(height: 12),
-                          _ServicesGrid(onServiceTap: _onServiceTap),
-                          const SizedBox(height: 28),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Services',
+                                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: cs.onSurface),
+                              ),
+                              const SizedBox(height: 12),
+                              CompositedTransformTarget(
+                                link: _servicesLayerLink,
+                                child: _servicesEditMode
+                                    ? const SizedBox(width: double.infinity, height: _kServicesEditPlaceholderHeight)
+                                    : _ServicesGridOrdered(
+                                        orderedKeys: _serviceKeyOrder,
+                                        onServiceTap: _onServiceTap,
+                                      ),
+                              ),
+                              const SizedBox(height: 28),
                           _SectionHeader(
                             title: 'Insights',
                             action: 'View all',
@@ -633,6 +727,27 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
+            ),
+                if (_servicesEditMode) const Positioned.fill(child: _ServicesEditBackdrop()),
+                if (_servicesEditMode)
+                  CompositedTransformFollower(
+                    link: _servicesLayerLink,
+                    showWhenUnlinked: false,
+                    targetAnchor: Alignment.topLeft,
+                    followerAnchor: Alignment.topLeft,
+                    child: SizedBox(
+                      width: MediaQuery.sizeOf(context).width - 40,
+                      child: _ServicesEditPanel(
+                        draftKeys: _editDraftKeys,
+                        onCancel: _cancelServicesEdit,
+                        onDone: _commitServicesEdit,
+                        onReorder: _reorderServiceDraft,
+                        onRemove: _removeServiceDraft,
+                        onAdd: _addServiceDraft,
+                      ),
+                    ),
+                  ),
+              ],
             ),
             ManagementScreen(
               currencyCode: _currency,
@@ -839,43 +954,335 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
-class _ServicesGrid extends StatelessWidget {
-  const _ServicesGrid({required this.onServiceTap});
+class _ServicesGridOrdered extends StatelessWidget {
+  const _ServicesGridOrdered({required this.orderedKeys, required this.onServiceTap});
 
+  final List<String> orderedKeys;
   final void Function(String serviceKey) onServiceTap;
 
   @override
   Widget build(BuildContext context) {
-    final items = <(IconData, String, String)>[
-      (Icons.south_west_rounded, 'Income', 'income'),
-      (Icons.north_east_rounded, 'Expense', 'expense'),
-      (Icons.subscriptions_outlined, 'Subs', 'subs'),
-      (Icons.track_changes_rounded, 'Goals', 'goals'),
-      (Icons.grid_view_rounded, 'Categories', 'categories'),
-      (Icons.edit_calendar_rounded, 'Edit', 'edits'),
-    ];
-
     return LayoutBuilder(
       builder: (context, c) {
         final w = c.maxWidth;
-        final spacing = 10.0;
-        final cols = 3;
+        const spacing = 12.0;
+        const cols = 3;
         final cell = (w - spacing * (cols - 1)) / cols;
 
         return Wrap(
           spacing: spacing,
           runSpacing: spacing,
           children: [
-            for (final (icon, short, key) in items)
+            for (final key in orderedKeys)
               SizedBox(
                 width: cell,
                 child: _ServiceTile(
-                  icon: icon,
-                  label: short,
+                  icon: HomeServicesLayoutStore.meta(key).$1,
+                  label: HomeServicesLayoutStore.meta(key).$2,
                   onTap: () => onServiceTap(key),
                 ),
               ),
+            SizedBox(
+              width: cell,
+              child: _ServiceTile(
+                icon: Icons.edit_rounded,
+                label: 'Edit',
+                onTap: () => onServiceTap('edits'),
+              ),
+            ),
           ],
+        );
+      },
+    );
+  }
+}
+
+class _ServicesEditBackdrop extends StatelessWidget {
+  const _ServicesEditBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    return AbsorbPointer(
+      child: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
+          child: Container(color: Colors.black.withValues(alpha: 0.3)),
+        ),
+      ),
+    );
+  }
+}
+
+class _ServicesEditPanel extends StatelessWidget {
+  const _ServicesEditPanel({
+    required this.draftKeys,
+    required this.onCancel,
+    required this.onDone,
+    required this.onReorder,
+    required this.onRemove,
+    required this.onAdd,
+  });
+
+  static const int _cols = 3;
+  static const double _gridSpacing = 12;
+  /// Target row height so labels + badges fit without clipping inside grid cells.
+  static const double _cellHeight = 96;
+
+  final List<String> draftKeys;
+  final VoidCallback onCancel;
+  final Future<void> Function() onDone;
+  final void Function(String dragged, String target) onReorder;
+  final void Function(String key) onRemove;
+  final void Function(String key) onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final available = HomeServicesLayoutStore.defaultOrder.where((k) => !draftKeys.contains(k)).toList();
+
+    return Material(
+      color: Colors.transparent,
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final w = c.maxWidth;
+          final cellW = (w - (_cols - 1) * _gridSpacing) / _cols;
+          final aspect = cellW / _cellHeight;
+
+          SliverGridDelegate gridDelegate() => SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: _cols,
+                mainAxisSpacing: _gridSpacing,
+                crossAxisSpacing: _gridSpacing,
+                childAspectRatio: aspect,
+              );
+
+          return SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: onCancel,
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSurface.withValues(alpha: 0.72),
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => onDone(),
+                      child: Text(
+                        'Done',
+                        style: TextStyle(fontWeight: FontWeight.w800, color: cs.primary),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: EdgeInsets.zero,
+                  gridDelegate: gridDelegate(),
+                  itemCount: draftKeys.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == draftKeys.length) {
+                      return Align(
+                        alignment: Alignment.topCenter,
+                        child: Opacity(
+                          opacity: 0.45,
+                          child: _ServiceTile(
+                            icon: Icons.edit_rounded,
+                            label: 'Edit',
+                            onTap: () {},
+                          ),
+                        ),
+                      );
+                    }
+                    final key = draftKeys[index];
+                    return _ActiveShortcutDragCell(
+                      serviceKey: key,
+                      cellWidth: cellW,
+                      colorScheme: cs,
+                      onReorder: onReorder,
+                      onRemove: onRemove,
+                    );
+                  },
+                ),
+                if (available.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  Text(
+                    'Available Shortcuts',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: cs.onSurface.withValues(alpha: 0.75),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: EdgeInsets.zero,
+                    gridDelegate: gridDelegate(),
+                    itemCount: available.length,
+                    itemBuilder: (context, index) {
+                      final key = available[index];
+                      final meta = HomeServicesLayoutStore.meta(key);
+                      return Align(
+                        alignment: Alignment.topCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              _ServiceTile(
+                                icon: meta.$1,
+                                label: meta.$2,
+                                onTap: () => onAdd(key),
+                              ),
+                              Positioned(
+                                top: 2,
+                                left: 2,
+                                child: Material(
+                                  color: cs.primary,
+                                  elevation: 2,
+                                  shape: const CircleBorder(),
+                                  child: InkWell(
+                                    customBorder: const CircleBorder(),
+                                    onTap: () => onAdd(key),
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(4),
+                                      child: Icon(Icons.add, size: 13, color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Draggable reorder target for one active shortcut (not used in Available section).
+class _ActiveShortcutDragCell extends StatelessWidget {
+  const _ActiveShortcutDragCell({
+    required this.serviceKey,
+    required this.cellWidth,
+    required this.colorScheme,
+    required this.onReorder,
+    required this.onRemove,
+  });
+
+  final String serviceKey;
+  final double cellWidth;
+  final ColorScheme colorScheme;
+  final void Function(String dragged, String target) onReorder;
+  final void Function(String key) onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = HomeServicesLayoutStore.meta(serviceKey);
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (d) => d.data != serviceKey,
+      onAcceptWithDetails: (d) => onReorder(d.data, serviceKey),
+      builder: (context, candidate, rejected) {
+        final highlight = candidate.isNotEmpty;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: highlight
+                  ? colorScheme.primary.withValues(alpha: 0.7)
+                  : Colors.transparent,
+              width: highlight ? 2 : 0,
+            ),
+          ),
+          child: SizedBox.expand(
+            child: Material(
+              color: Colors.transparent,
+              clipBehavior: Clip.none,
+              child: LongPressDraggable<String>(
+                data: serviceKey,
+                feedback: Material(
+                  elevation: 16,
+                  shadowColor: Colors.black54,
+                  borderRadius: BorderRadius.circular(16),
+                  color: Colors.transparent,
+                  child: Transform.scale(
+                    scale: 1.08,
+                    child: SizedBox(
+                      width: cellWidth * 0.96,
+                      child: _ServiceTile(icon: meta.$1, label: meta.$2, onTap: () {}),
+                    ),
+                  ),
+                ),
+                childWhenDragging: AnimatedScale(
+                  duration: const Duration(milliseconds: 170),
+                  scale: 0.86,
+                  curve: Curves.easeOutCubic,
+                  child: Opacity(
+                    opacity: 0.42,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: colorScheme.outline.withValues(alpha: 0.28)),
+                      ),
+                      child: Center(
+                        child: _ServiceTile(icon: meta.$1, label: meta.$2, onTap: () {}),
+                      ),
+                    ),
+                  ),
+                ),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        _ServiceTile(icon: meta.$1, label: meta.$2, onTap: () {}),
+                        Positioned(
+                          top: 2,
+                          left: 2,
+                          child: Material(
+                            color: Colors.red.shade700,
+                            elevation: 2,
+                            shape: const CircleBorder(),
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: () => onRemove(serviceKey),
+                              child: const Padding(
+                                padding: EdgeInsets.all(4),
+                                child: Icon(Icons.remove, size: 13, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         );
       },
     );
