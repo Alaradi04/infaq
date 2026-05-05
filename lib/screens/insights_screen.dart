@@ -6,6 +6,8 @@ import 'package:infaq/analytics/insights_export.dart';
 import 'package:infaq/analytics/insights_format.dart';
 import 'package:infaq/analytics/insights_models.dart';
 import 'package:infaq/analytics/insights_service.dart';
+import 'package:infaq/services/ai_service.dart';
+import 'package:infaq/ui/ai_insight_card.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 import 'package:infaq/ui/insights_export_period_sheet.dart';
 
@@ -39,6 +41,10 @@ class _InsightsScreenState extends State<InsightsScreen> {
   String? _error;
   bool _exporting = false;
 
+  List<Map<String, dynamic>> _aiInsightCards = [];
+  bool _loadingAiInsights = false;
+  final _aiService = AiService();
+
   String get _effectiveFilterDescription {
     if (_customPeriodActive && (_customPeriodLabel != null && _customPeriodLabel!.isNotEmpty)) {
       return _customPeriodLabel!;
@@ -56,6 +62,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
   void initState() {
     super.initState();
     _load();
+    _loadAiInsights();
   }
 
   @override
@@ -63,6 +70,23 @@ class _InsightsScreenState extends State<InsightsScreen> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.refreshToken != widget.refreshToken) {
       _load();
+      _loadAiInsights();
+    }
+  }
+
+  Future<void> _loadAiInsights() async {
+    if (!mounted) return;
+    setState(() => _loadingAiInsights = true);
+    try {
+      final cards = await _aiService.generateHomeInsights();
+      if (!mounted) return;
+      setState(() => _aiInsightCards = cards);
+    } catch (e, st) {
+      debugPrint('AI insights failed: $e\n$st');
+      if (!mounted) return;
+      setState(() => _aiInsightCards = []);
+    } finally {
+      if (mounted) setState(() => _loadingAiInsights = false);
     }
   }
 
@@ -379,12 +403,17 @@ class _InsightsScreenState extends State<InsightsScreen> {
                                 const SizedBox(height: 20),
                                 _SectionTitle('Smart insights', cs),
                                 const SizedBox(height: 10),
-                                ...p.smartInsights.map(
-                                  (i) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 10),
-                                    child: _InsightTile(item: i, cs: cs),
+                                if (_loadingAiInsights)
+                                  AiInsightCard.loading()
+                                else if (_aiInsightCards.isEmpty)
+                                  AiInsightCard.fallback()
+                                else
+                                  ..._aiInsightCards.map(
+                                    (c) => Padding(
+                                      padding: const EdgeInsets.only(bottom: 10),
+                                      child: AiInsightCard.fromMap(c),
+                                    ),
                                   ),
-                                ),
                                 const SizedBox(height: 8),
                                 _SectionTitle('Export', cs),
                                 const SizedBox(height: 10),
@@ -1055,60 +1084,6 @@ class _GoalsCard extends StatelessWidget {
             ),
           ),
           Text(v, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: cs.primary)),
-        ],
-      ),
-    );
-  }
-}
-
-class _InsightTile extends StatelessWidget {
-  const _InsightTile({required this.item, required this.cs});
-
-  final SmartInsightItem item;
-  final ColorScheme cs;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cs.outline.withValues(alpha: 0.18)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: item.iconBackground,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(item.icon, color: item.iconColor, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.title,
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: cs.onSurface),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  item.body,
-                  style: TextStyle(
-                    height: 1.35,
-                    color: cs.onSurface.withValues(alpha: 0.55),
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );

@@ -14,13 +14,13 @@ import 'package:infaq/screens/manage_categories_screen.dart';
 import 'package:infaq/screens/management_screen.dart';
 import 'package:infaq/screens/profile_tab_screen.dart';
 import 'package:infaq/profile/avatar_storage.dart';
+import 'package:infaq/services/ai_service.dart';
+import 'package:infaq/ui/ai_insight_card.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 import 'package:infaq/user_profile_sync.dart';
 
-const Color _kPrimary = Color(0xFF3F5F4A);
 const Color _kHeaderGreen = Color(0xFFE8F2EA);
-const Color _kCardTint = Color(0xFFEEF5F0);
 
 /// Home dashboard after login. Loads profile from `users` and transactions from
 /// `transactions` when available (expects `user_id`, `amount`, `type`, optional
@@ -50,10 +50,31 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Mirrors Management tab: 0 transactions, 1 subscriptions, 2 goals.
   int _managementTabIndex = 0;
 
+  List<Map<String, dynamic>> _aiInsightCards = [];
+  bool _loadingAiInsights = false;
+  final _aiService = AiService();
+
   @override
   void initState() {
     super.initState();
     _bootstrap();
+    _loadAiHomeInsights();
+  }
+
+  Future<void> _loadAiHomeInsights() async {
+    if (!mounted) return;
+    setState(() => _loadingAiInsights = true);
+    try {
+      final cards = await _aiService.generateHomeInsights();
+      if (!mounted) return;
+      setState(() => _aiInsightCards = cards);
+    } catch (e, st) {
+      debugPrint('AI home insights failed: $e\n$st');
+      if (!mounted) return;
+      setState(() => _aiInsightCards = []);
+    } finally {
+      if (mounted) setState(() => _loadingAiInsights = false);
+    }
   }
 
   Future<void> _bootstrap() async {
@@ -487,7 +508,10 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             RefreshIndicator(
               color: cs.primary,
-              onRefresh: _bootstrap,
+              onRefresh: () async {
+                await _bootstrap();
+                await _loadAiHomeInsights();
+              },
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
@@ -574,7 +598,21 @@ class _HomeScreenState extends State<HomeScreen> {
                             onAction: () => setState(() => _tabIndex = 2),
                           ),
                           const SizedBox(height: 12),
-                          _InsightsPlaceholder(),
+                          Column(
+                            children: _loadingAiInsights
+                                ? [AiInsightCard.loading()]
+                                : _aiInsightCards.isEmpty
+                                    ? [AiInsightCard.fallback()]
+                                    : _aiInsightCards
+                                        .take(3)
+                                        .map(
+                                          (c) => Padding(
+                                            padding: const EdgeInsets.only(bottom: 10),
+                                            child: AiInsightCard.fromMap(c),
+                                          ),
+                                        )
+                                        .toList(),
+                          ),
                           const SizedBox(height: 28),
                           _SectionHeader(
                             title: 'Recent transactions',
@@ -918,96 +956,6 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _InsightsPlaceholder extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _InsightCard(
-          icon: Icons.auto_graph_rounded,
-          iconColor: _kPrimary,
-          iconBg: _kCardTint,
-          title: 'Insights coming soon',
-          body:
-              'When you add income and expenses, this space will show trends, comparisons, and simple recommendations.',
-        ),
-        const SizedBox(height: 10),
-        _InsightCard(
-          icon: Icons.eco_rounded,
-          iconBg: const Color(0xFFE3F2E5),
-          iconColor: _kPrimary,
-          title: 'Sustainability tips',
-          body: 'Eco-related suggestions will appear here based on your spending patterns.',
-        ),
-      ],
-    );
-  }
-}
-
-class _InsightCard extends StatelessWidget {
-  const _InsightCard({
-    required this.icon,
-    required this.iconBg,
-    required this.iconColor,
-    required this.title,
-    required this.body,
-  });
-
-  final IconData icon;
-  final Color iconBg;
-  final Color iconColor;
-  final String title;
-  final String body;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark ? cs.surfaceContainerHigh : _kCardTint,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cs.outline.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: iconBg,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: iconColor, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: cs.onSurface),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  body,
-                  style: TextStyle(
-                    height: 1.35,
-                    color: cs.onSurface.withValues(alpha: 0.55),
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _TransactionsList extends StatelessWidget {
   const _TransactionsList({
     required this.transactions,
@@ -1034,8 +982,7 @@ class _TransactionsList extends StatelessWidget {
           border: Border.all(color: cs.outline.withValues(alpha: 0.2)),
         ),
         child: Text(
-          'No transactions yet. Add expenses or income from Services when those flows are ready, '
-          'or insert rows in the `transactions` table (user_id, amount, type, created_at).',
+          'No transactions yet. Add your first income or expense from Services.',
           style: TextStyle(color: cs.onSurface.withValues(alpha: 0.55), height: 1.4),
         ),
       );
