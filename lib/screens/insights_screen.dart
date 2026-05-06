@@ -53,7 +53,11 @@ class _InsightsScreenState extends State<InsightsScreen> {
     red: 0,
     total: 0,
   );
+  List<_EnvironmentalBucketBars> _environmentalBars = [];
   final Map<String, String?> _leafColorCacheByTransactionId = {};
+  List<Map<String, dynamic>> _environmentalTransactionsCache = [];
+  Map<String, String> _environmentalCategoryTypeById = {};
+  String? _environmentalCacheUserId;
 
   String get _effectiveFilterDescription {
     if (_customPeriodActive &&
@@ -85,7 +89,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
     if (oldWidget.refreshToken != widget.refreshToken) {
       _load();
       _loadAiInsights();
-      _loadEnvironmentalImpact();
+      _loadEnvironmentalImpact(forceReload: true);
       unawaited(_migrateMissingLeafImpacts());
     }
   }
@@ -106,49 +110,115 @@ class _InsightsScreenState extends State<InsightsScreen> {
     }
   }
 
-  Future<void> _loadEnvironmentalImpact() async {
+  Future<void> _loadEnvironmentalImpact({bool forceReload = false}) async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
     if (mounted) setState(() => _loadingEnvironmentalImpact = true);
 
     try {
-      final rawTx = await Supabase.instance.client
-          .from('transactions')
-          .select('id, category_id, leaf_color')
-          .eq('user_id', user.id);
-      final txRows = (rawTx as List<dynamic>)
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList(growable: false);
+      if (forceReload || _environmentalCacheUserId != user.id) {
+        _environmentalCacheUserId = user.id;
+        _environmentalTransactionsCache = [];
+        _environmentalCategoryTypeById = {};
+      }
 
-      final categoryIds = txRows
-          .map((r) => r['category_id']?.toString())
-          .where((id) => id != null && id.isNotEmpty)
-          .cast<String>()
-          .toSet()
-          .toList();
-      final categoryById = <String, String>{};
-      if (categoryIds.isNotEmpty) {
-        final rawCats = await Supabase.instance.client
-            .from('categories')
-            .select('id, type')
-            .inFilter('id', categoryIds);
-        for (final c in (rawCats as List<dynamic>)) {
-          final m = Map<String, dynamic>.from(c as Map);
-          final id = m['id']?.toString();
-          final type = m['type']?.toString().toLowerCase();
-          if (id != null && id.isNotEmpty && type != null) {
-            categoryById[id] = type;
+      final DateTime periodStart;
+      final DateTime periodEnd;
+      final String selectedFilterLabel;
+      if (_customPeriodActive && _customStart != null && _customEnd != null) {
+        periodStart = DateTime(
+          _customStart!.year,
+          _customStart!.month,
+          _customStart!.day,
+        );
+        periodEnd = DateTime(
+          _customEnd!.year,
+          _customEnd!.month,
+          _customEnd!.day,
+        );
+        selectedFilterLabel = _customPeriodLabel?.trim().isNotEmpty == true
+            ? _customPeriodLabel!
+            : 'Custom period';
+      } else {
+        final bounds = insightsRangeBounds(_presetRange, DateTime.now());
+        periodStart = bounds.$1;
+        periodEnd = bounds.$2;
+        selectedFilterLabel = _presetRange.shortLabel;
+      }
+      debugPrint('Environmental selected date filter: $selectedFilterLabel');
+      debugPrint('Environmental start date: ${periodStart.toIso8601String()}');
+      debugPrint('Environmental end date: ${periodEnd.toIso8601String()}');
+
+      if (_environmentalTransactionsCache.isEmpty) {
+        final rawTx = await Supabase.instance.client
+            .from('transactions')
+            .select('id, category_id, leaf_color, date, created_at')
+            .eq('user_id', user.id);
+        _environmentalTransactionsCache = (rawTx as List<dynamic>)
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList(growable: false);
+      }
+      final txRows = _environmentalTransactionsCache;
+
+      if (_environmentalCategoryTypeById.isEmpty) {
+        final categoryIds = txRows
+            .map((r) => r['category_id']?.toString())
+            .where((id) => id != null && id.isNotEmpty)
+            .cast<String>()
+            .toSet()
+            .toList();
+        if (categoryIds.isNotEmpty) {
+          final rawCats = await Supabase.instance.client
+              .from('categories')
+              .select('id, type')
+              .inFilter('id', categoryIds);
+          for (final c in (rawCats as List<dynamic>)) {
+            final m = Map<String, dynamic>.from(c as Map);
+            final id = m['id']?.toString();
+            final type = m['type']?.toString().toLowerCase();
+            if (id != null && id.isNotEmpty && type != null) {
+              _environmentalCategoryTypeById[id] = type;
+            }
           }
         }
       }
+      final categoryById = _environmentalCategoryTypeById;
+      final buckets = _buildEnvironmentalBuckets(
+        start: periodStart,
+        end: periodEnd,
+      );
+      final bucketCounts = <String, _EnvironmentalBucketCount>{
+        for (final bucket in buckets)
+          bucket.key: _EnvironmentalBucketCount(
+            key: bucket.key,
+            label: bucket.label,
+            green: 0,
+            orange: 0,
+            red: 0,
+          ),
+      };
 
       var green = 0;
       var orange = 0;
       var red = 0;
+      var filteredExpenseCount = 0;
       for (final row in txRows) {
+        final rawDate = row['date'] ?? row['created_at'];
+        final parsed = rawDate != null
+            ? DateTime.tryParse(rawDate.toString())
+            : null;
+        if (parsed == null) continue;
+        final day = DateTime(parsed.year, parsed.month, parsed.day);
+        if (day.isBefore(periodStart) || day.isAfter(periodEnd)) continue;
+
         final categoryId = row['category_id']?.toString();
         if (categoryId == null || categoryById[categoryId] != 'expense')
           continue;
+        filteredExpenseCount++;
+        final bucketKey = _bucketKeyForDate(day);
+        if (bucketKey == null || !bucketCounts.containsKey(bucketKey)) {
+          continue;
+        }
         final txId = row['id']?.toString() ?? '';
         final leaf = (row['leaf_color'] ?? '').toString().toLowerCase().trim();
         if (txId.isNotEmpty && leaf.isNotEmpty) {
@@ -157,17 +227,42 @@ class _InsightsScreenState extends State<InsightsScreen> {
         switch (leaf) {
           case 'green':
             green++;
+            final b = bucketCounts[bucketKey]!;
+            bucketCounts[bucketKey] = b.copyWith(green: b.green + 1);
             break;
           case 'orange':
             orange++;
+            final b = bucketCounts[bucketKey]!;
+            bucketCounts[bucketKey] = b.copyWith(orange: b.orange + 1);
             break;
           case 'red':
             red++;
+            final b = bucketCounts[bucketKey]!;
+            bucketCounts[bucketKey] = b.copyWith(red: b.red + 1);
             break;
         }
       }
 
       final total = green + orange + red;
+      final barData = <_EnvironmentalBucketBars>[];
+      for (final bucket in buckets) {
+        final b = bucketCounts[bucket.key]!;
+        final bucketTotal = b.green + b.orange + b.red;
+        final greenPct = bucketTotal == 0 ? 0.0 : (b.green / bucketTotal) * 100;
+        final orangePct = bucketTotal == 0
+            ? 0.0
+            : (b.orange / bucketTotal) * 100;
+        final redPct = bucketTotal == 0 ? 0.0 : (b.red / bucketTotal) * 100;
+        barData.add(
+          _EnvironmentalBucketBars(
+            label: bucket.label,
+            greenPercent: greenPct,
+            orangePercent: orangePct,
+            redPercent: redPct,
+          ),
+        );
+      }
+      debugPrint('Environmental filtered expense count: $filteredExpenseCount');
       debugPrint('environmental counts: green=$green orange=$orange red=$red');
       if (!mounted) return;
       setState(() {
@@ -177,12 +272,94 @@ class _InsightsScreenState extends State<InsightsScreen> {
           red: red,
           total: total,
         );
+        _environmentalBars = barData;
         _loadingEnvironmentalImpact = false;
       });
     } catch (e, st) {
       debugPrint('environmental section load failed: $e\n$st');
       if (!mounted) return;
       setState(() => _loadingEnvironmentalImpact = false);
+    }
+  }
+
+  List<_EnvironmentalBucketMeta> _buildEnvironmentalBuckets({
+    required DateTime start,
+    required DateTime end,
+  }) {
+    if (_customPeriodActive) {
+      final labels = <_EnvironmentalBucketMeta>[];
+      var d = DateTime(start.year, start.month, start.day);
+      while (!d.isAfter(end)) {
+        labels.add(
+          _EnvironmentalBucketMeta(
+            key: '${d.year}-${d.month}-${d.day}',
+            label: '${d.day}/${d.month}',
+          ),
+        );
+        d = d.add(const Duration(days: 1));
+      }
+      return labels;
+    }
+    switch (_presetRange) {
+      case InsightsTimeRange.thisWeek:
+        final labels = <_EnvironmentalBucketMeta>[];
+        var d = DateTime(start.year, start.month, start.day);
+        const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        while (!d.isAfter(end)) {
+          labels.add(
+            _EnvironmentalBucketMeta(
+              key: d.weekday.toString(),
+              label: dayNames[d.weekday - 1],
+            ),
+          );
+          d = d.add(const Duration(days: 1));
+        }
+        return labels;
+      case InsightsTimeRange.thisMonth:
+      case InsightsTimeRange.lastMonth:
+        final weekCount = ((end.day - 1) ~/ 7) + 1;
+        return List.generate(
+          weekCount,
+          (i) => _EnvironmentalBucketMeta(
+            key: (i + 1).toString(),
+            label: 'W${i + 1}',
+          ),
+        );
+      case InsightsTimeRange.thisYear:
+        const monthInitials = [
+          'J',
+          'F',
+          'M',
+          'A',
+          'M',
+          'J',
+          'J',
+          'A',
+          'S',
+          'O',
+          'N',
+          'D',
+        ];
+        return List.generate(
+          end.month,
+          (i) => _EnvironmentalBucketMeta(
+            key: (i + 1).toString(),
+            label: monthInitials[i],
+          ),
+        );
+    }
+  }
+
+  String? _bucketKeyForDate(DateTime day) {
+    if (_customPeriodActive) return '${day.year}-${day.month}-${day.day}';
+    switch (_presetRange) {
+      case InsightsTimeRange.thisWeek:
+        return day.weekday.toString();
+      case InsightsTimeRange.thisMonth:
+      case InsightsTimeRange.lastMonth:
+        return (((day.day - 1) ~/ 7) + 1).toString();
+      case InsightsTimeRange.thisYear:
+        return day.month.toString();
     }
   }
 
@@ -317,6 +494,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
       _customPeriodLabel = null;
     });
     await _load();
+    await _loadEnvironmentalImpact();
   }
 
   Future<void> _openCustomPeriodPicker() async {
@@ -337,6 +515,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
       _customPeriodLabel = sel.label;
     });
     await _load();
+    await _loadEnvironmentalImpact();
   }
 
   String _fmt(double v) =>
@@ -604,6 +783,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                           cs: cs,
                           loading: _loadingEnvironmentalImpact,
                           totals: _leafImpactTotals,
+                          bars: _environmentalBars,
                         ),
                         const SizedBox(height: 20),
                         _SectionTitle('Smart insights', cs),
@@ -1438,11 +1618,13 @@ class _EnvironmentalImpactCard extends StatelessWidget {
     required this.cs,
     required this.loading,
     required this.totals,
+    required this.bars,
   });
 
   final ColorScheme cs;
   final bool loading;
   final ({int green, int orange, int red, int total}) totals;
+  final List<_EnvironmentalBucketBars> bars;
 
   @override
   Widget build(BuildContext context) {
@@ -1469,7 +1651,7 @@ class _EnvironmentalImpactCard extends StatelessWidget {
           border: Border.all(color: cs.outline.withValues(alpha: 0.12)),
         ),
         child: Text(
-          'No environmental impact data yet. Add expenses to see your impact summary.',
+          'No environmental impact data for this period.',
           style: TextStyle(
             color: cs.onSurface.withValues(alpha: 0.65),
             fontWeight: FontWeight.w600,
@@ -1505,6 +1687,127 @@ class _EnvironmentalImpactCard extends StatelessWidget {
               color: cs.primary,
               fontSize: 14,
             ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 162,
+            child: BarChart(
+              BarChartData(
+                minY: 0,
+                maxY: 100,
+                alignment: BarChartAlignment.spaceAround,
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: 25,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: cs.outline.withValues(alpha: 0.12),
+                    strokeWidth: 1,
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                barTouchData: BarTouchData(enabled: false),
+                titlesData: FlTitlesData(
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 28,
+                      interval: 25,
+                      getTitlesWidget: (value, meta) => Text(
+                        '${value.toInt()}%',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: cs.onSurface.withValues(alpha: 0.45),
+                        ),
+                      ),
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (value, meta) {
+                        final i = value.toInt();
+                        if (i < 0 || i >= bars.length) {
+                          return const SizedBox.shrink();
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            bars[i].label,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: cs.onSurface.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                barGroups: [
+                  for (var i = 0; i < bars.length; i++)
+                    BarChartGroupData(
+                      x: i,
+                      barsSpace: 3,
+                      barRods: [
+                        BarChartRodData(
+                          toY: bars[i].greenPercent.clamp(0, 100),
+                          width: 6,
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(4),
+                          ),
+                          color: const Color(0xFF2E7D32),
+                        ),
+                        BarChartRodData(
+                          toY: bars[i].orangePercent.clamp(0, 100),
+                          width: 6,
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(4),
+                          ),
+                          color: const Color(0xFFF57C00),
+                        ),
+                        BarChartRodData(
+                          toY: bars[i].redPercent.clamp(0, 100),
+                          width: 6,
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(4),
+                          ),
+                          color: const Color(0xFFC62828),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _EnvLegendDot(
+                label: 'Green',
+                color: const Color(0xFF2E7D32),
+                cs: cs,
+              ),
+              const SizedBox(width: 12),
+              _EnvLegendDot(
+                label: 'Orange',
+                color: const Color(0xFFF57C00),
+                cs: cs,
+              ),
+              const SizedBox(width: 12),
+              _EnvLegendDot(
+                label: 'Red',
+                color: const Color(0xFFC62828),
+                cs: cs,
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           _EnvProgressRow(
@@ -1569,6 +1872,93 @@ class _EnvProgressRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _EnvLegendDot extends StatelessWidget {
+  const _EnvLegendDot({
+    required this.label,
+    required this.color,
+    required this.cs,
+  });
+
+  final String label;
+  final Color color;
+  final ColorScheme cs;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: cs.onSurface.withValues(alpha: 0.7),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _EnvironmentalBucketBars {
+  const _EnvironmentalBucketBars({
+    required this.label,
+    required this.greenPercent,
+    required this.orangePercent,
+    required this.redPercent,
+  });
+
+  final String label;
+  final double greenPercent;
+  final double orangePercent;
+  final double redPercent;
+}
+
+class _EnvironmentalBucketMeta {
+  const _EnvironmentalBucketMeta({required this.key, required this.label});
+  final String key;
+  final String label;
+}
+
+class _EnvironmentalBucketCount {
+  const _EnvironmentalBucketCount({
+    required this.key,
+    required this.label,
+    required this.green,
+    required this.orange,
+    required this.red,
+  });
+
+  final String key;
+  final String label;
+  final int green;
+  final int orange;
+  final int red;
+
+  _EnvironmentalBucketCount copyWith({
+    String? key,
+    String? label,
+    int? green,
+    int? orange,
+    int? red,
+  }) {
+    return _EnvironmentalBucketCount(
+      key: key ?? this.key,
+      label: label ?? this.label,
+      green: green ?? this.green,
+      orange: orange ?? this.orange,
+      red: red ?? this.red,
     );
   }
 }
