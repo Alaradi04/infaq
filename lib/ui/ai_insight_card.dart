@@ -27,7 +27,7 @@ class AiInsightCard extends StatelessWidget {
       title: (map['title'] ?? '').toString(),
       message: (map['message'] ?? '').toString(),
       insightType: (map['type'] ?? 'spending_behavior').toString(),
-      severity: (map['severity'] ?? 'low').toString(),
+      severity: (map['priority'] ?? map['severity'] ?? 'low').toString(),
     );
   }
 
@@ -53,6 +53,18 @@ class AiInsightCard extends StatelessWidget {
 
   static IconData iconForType(String type) {
     switch (type) {
+      case 'expense':
+        return Icons.receipt_long_rounded;
+      case 'goal':
+        return Icons.flag_outlined;
+      case 'subscription':
+        return Icons.subscriptions_outlined;
+      case 'environment':
+        return Icons.eco_rounded;
+      case 'saving':
+        return Icons.savings_outlined;
+      case 'behavior':
+        return Icons.psychology_alt_outlined;
       case 'sustainability':
         return Icons.eco_rounded;
       case 'spending_behavior':
@@ -118,53 +130,59 @@ class AiInsightCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-          Align(
-            alignment: Alignment.topLeft,
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: iconBg,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: forceShowProgress
-                  ? SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.2,
-                        color: _kInfaqPrimary.withValues(alpha: isDark ? 0.9 : 1),
+            Align(
+              alignment: Alignment.topLeft,
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: forceShowProgress
+                    ? SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: _kInfaqPrimary.withValues(
+                            alpha: isDark ? 0.9 : 1,
+                          ),
+                        ),
+                      )
+                    : Icon(
+                        icon,
+                        color: isDark ? cs.primary : _kInfaqPrimary,
+                        size: 22,
                       ),
-                    )
-                  : Icon(icon, color: isDark ? cs.primary : _kInfaqPrimary, size: 22),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                    color: cs.onSurface,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                      color: cs.onSurface,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  message,
-                  style: TextStyle(
-                    height: 1.35,
-                    color: cs.onSurface.withValues(alpha: 0.55),
-                    fontSize: 13,
+                  const SizedBox(height: 4),
+                  Text(
+                    message,
+                    style: TextStyle(
+                      height: 1.35,
+                      color: cs.onSurface.withValues(alpha: 0.55),
+                      fontSize: 13,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
         ),
       ),
     );

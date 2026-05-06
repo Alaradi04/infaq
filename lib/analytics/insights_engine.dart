@@ -21,7 +21,9 @@ bool txIsIncome(Map<String, dynamic> t) {
     if (ty == 'income') return true;
     if (ty == 'expense') return false;
   }
-  final legacy = (t['type'] ?? t['transaction_type'] ?? '').toString().toLowerCase();
+  final legacy = (t['type'] ?? t['transaction_type'] ?? '')
+      .toString()
+      .toLowerCase();
   return legacy == 'income' || legacy == 'credit' || legacy == 'in';
 }
 
@@ -47,7 +49,9 @@ Map<String, double> expenseByCategory(
     final amt = readAmount(t);
     if (!txIsExpense(t, amt)) continue;
     final cat = t['categories'];
-    final name = cat is Map ? (cat['name'] ?? 'Uncategorized').toString().trim() : 'Uncategorized';
+    final name = cat is Map
+        ? (cat['name'] ?? 'Uncategorized').toString().trim()
+        : 'Uncategorized';
     final key = name.isEmpty ? 'Uncategorized' : name;
     map[key] = (map[key] ?? 0) + amt.abs();
   }
@@ -117,7 +121,11 @@ List<CategorySpendSlice> buildCategorySlices(
   DateTime start,
   DateTime end,
 ) {
-  final grouped = <String, ({String name, String? id, dynamic savedColor, double amount})>{};
+  final grouped =
+      <
+        String,
+        ({String name, String? id, dynamic savedColor, double amount})
+      >{};
   for (final t in transactions) {
     final d = parseTxLocalDate(t);
     if (!_inInclusiveRange(d, start, end)) continue;
@@ -125,10 +133,18 @@ List<CategorySpendSlice> buildCategorySlices(
     if (!txIsExpense(t, amt)) continue;
     final cat = t['categories'];
     final catNameRaw = cat is Map ? cat['name']?.toString() : null;
-    final name = (catNameRaw == null || catNameRaw.trim().isEmpty) ? 'Uncategorized' : catNameRaw.trim();
-    final id = (cat is Map ? cat['id'] : null)?.toString() ?? t['category_id']?.toString();
-    final savedColor = cat is Map ? (cat['color'] ?? cat['color_value'] ?? cat['hex_color']) : null;
-    final key = (id != null && id.isNotEmpty) ? 'id:$id' : 'name:${name.toLowerCase()}';
+    final name = (catNameRaw == null || catNameRaw.trim().isEmpty)
+        ? 'Uncategorized'
+        : catNameRaw.trim();
+    final id =
+        (cat is Map ? cat['id'] : null)?.toString() ??
+        t['category_id']?.toString();
+    final savedColor = cat is Map
+        ? (cat['color'] ?? cat['color_value'] ?? cat['hex_color'])
+        : null;
+    final key = (id != null && id.isNotEmpty)
+        ? 'id:$id'
+        : 'name:${name.toLowerCase()}';
     final prev = grouped[key];
     grouped[key] = (
       name: name,
@@ -138,13 +154,18 @@ List<CategorySpendSlice> buildCategorySlices(
     );
   }
 
-  final entries = grouped.values.toList()..sort((a, b) => b.amount.compareTo(a.amount));
+  final entries = grouped.values.toList()
+    ..sort((a, b) => b.amount.compareTo(a.amount));
   return [
     for (final e in entries)
       CategorySpendSlice(
         name: e.name,
         amount: e.amount,
-        color: categoryDisplayColorFor(e.name, categoryId: e.id, savedColor: e.savedColor),
+        color: categoryDisplayColorFor(
+          e.name,
+          categoryId: e.id,
+          savedColor: e.savedColor,
+        ),
       ),
   ];
 }
@@ -161,6 +182,7 @@ List<TrendBarSlice> buildTrendBars(
     case InsightsTimeRange.thisYear:
       return _monthlyBarsYear(transactions, start, end);
     case InsightsTimeRange.thisMonth:
+      return _weekBucketsByDayOfMonth(transactions, start, end);
     case InsightsTimeRange.lastMonth:
       return _weekBucketsInRange(transactions, start, end);
   }
@@ -197,7 +219,9 @@ List<TrendBarSlice> _weekBucketsInRange(
   DateTime end,
 ) {
   final totalDays = end.difference(start).inDays + 1;
-  final bucketCount = totalDays <= 7 ? totalDays : (totalDays / 7).ceil().clamp(1, 6);
+  final bucketCount = totalDays <= 7
+      ? totalDays
+      : (totalDays / 7).ceil().clamp(1, 6);
   final bucketSize = (totalDays / bucketCount).ceil().clamp(1, 999);
   final amounts = List<double>.filled(bucketCount, 0);
 
@@ -213,6 +237,29 @@ List<TrendBarSlice> _weekBucketsInRange(
 
   return [
     for (var i = 0; i < bucketCount; i++)
+      TrendBarSlice(label: 'W${i + 1}', amount: amounts[i]),
+  ];
+}
+
+/// Fixed month buckets by day-of-month:
+/// W1=1-7, W2=8-14, W3=15-21, W4=22-28, W5=29-end.
+/// Used only for `InsightsTimeRange.thisMonth`.
+List<TrendBarSlice> _weekBucketsByDayOfMonth(
+  Iterable<Map<String, dynamic>> transactions,
+  DateTime start,
+  DateTime end,
+) {
+  final amounts = List<double>.filled(5, 0);
+  for (final t in transactions) {
+    final d = parseTxLocalDate(t);
+    if (d == null || d.isBefore(start) || d.isAfter(end)) continue;
+    final amt = readAmount(t);
+    if (!txIsExpense(t, amt)) continue;
+    final idx = ((d.day - 1) ~/ 7).clamp(0, 4);
+    amounts[idx] += amt.abs();
+  }
+  return [
+    for (var i = 0; i < 5; i++)
       TrendBarSlice(label: 'W${i + 1}', amount: amounts[i]),
   ];
 }
@@ -243,7 +290,9 @@ List<TrendBarSlice> _monthlyBarsCalendarSpan(
       if (!txIsExpense(t, amt)) continue;
       sum += amt.abs();
     }
-    final lbl = sameYearAcrossRange ? labels[cur.month - 1] : '${labels[cur.month - 1]} ${cur.year}';
+    final lbl = sameYearAcrossRange
+        ? labels[cur.month - 1]
+        : '${labels[cur.month - 1]} ${cur.year}';
     out.add(TrendBarSlice(label: lbl, amount: sum));
     cur = DateTime(cur.year, cur.month + 1, 1);
   }
@@ -286,7 +335,8 @@ List<TrendBarSlice> _monthlyBarsYear(
   final now = DateTime.now();
   final lastMonth = end.year == now.year ? now.month : 12;
   return [
-    for (var m = 0; m < lastMonth; m++) TrendBarSlice(label: labels[m], amount: amounts[m]),
+    for (var m = 0; m < lastMonth; m++)
+      TrendBarSlice(label: labels[m], amount: amounts[m]),
   ];
 }
 
@@ -327,7 +377,11 @@ SubscriptionAnalytics buildSubscriptionBlock(
     if (d != null && activeFlag) {
       final local = d.toLocal();
       final day = DateTime(local.year, local.month, local.day);
-      final todayD = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+      final todayD = DateTime(
+        DateTime.now().year,
+        DateTime.now().month,
+        DateTime.now().day,
+      );
       if (!day.isBefore(todayD)) {
         if (nextPay == null || day.isBefore(nextPay)) {
           nextPay = day;
@@ -337,7 +391,11 @@ SubscriptionAnalytics buildSubscriptionBlock(
     }
   }
 
-  final linked = sumSubscriptionLinkedExpenses(transactions, periodStart, periodEnd);
+  final linked = sumSubscriptionLinkedExpenses(
+    transactions,
+    periodStart,
+    periodEnd,
+  );
 
   return SubscriptionAnalytics(
     monthlyRecurringCost: monthly,
@@ -449,10 +507,12 @@ List<SmartInsightItem> buildSmartInsights({
         iconBackground: const Color(0xFFFFEBEE),
         iconColor: const Color(0xFFC62828),
         title: 'Spending uptick',
-        body: 'This month’s expenses are higher than last month. Consider reviewing discretionary categories.',
+        body:
+            'This month’s expenses are higher than last month. Consider reviewing discretionary categories.',
       ),
     );
-  } else if (monthComparison.thisMonthExpense < monthComparison.lastMonthExpense &&
+  } else if (monthComparison.thisMonthExpense <
+          monthComparison.lastMonthExpense &&
       monthComparison.thisMonthExpense > 0) {
     out.add(
       SmartInsightItem(
@@ -460,7 +520,8 @@ List<SmartInsightItem> buildSmartInsights({
         iconBackground: const Color(0xFFE8F5E9),
         iconColor: const Color(0xFF2E7D32),
         title: 'Positive trend',
-        body: 'You spent less this month than last month — nice work staying under last month’s pace.',
+        body:
+            'You spent less this month than last month — nice work staying under last month’s pace.',
       ),
     );
   }
@@ -474,7 +535,8 @@ List<SmartInsightItem> buildSmartInsights({
         iconBackground: const Color(0xFFFFF3E0),
         iconColor: const Color(0xFFEF6C00),
         title: 'Low balance vs spending',
-        body: 'Your balance is below this month’s expenses so far. Plan for upcoming bills or reduce spend.',
+        body:
+            'Your balance is below this month’s expenses so far. Plan for upcoming bills or reduce spend.',
       ),
     );
   }
@@ -487,7 +549,8 @@ List<SmartInsightItem> buildSmartInsights({
         iconBackground: const Color(0xFFF3E5F5),
         iconColor: const Color(0xFF6A1B9A),
         title: 'Subscriptions footprint',
-        body: 'Recurring subscriptions are a large share of monthly expenses. Audit inactive services.',
+        body:
+            'Recurring subscriptions are a large share of monthly expenses. Audit inactive services.',
       ),
     );
   }
@@ -499,7 +562,8 @@ List<SmartInsightItem> buildSmartInsights({
         iconBackground: const Color(0xFFFFEBEE),
         iconColor: const Color(0xFFC62828),
         title: 'Goal deadline',
-        body: 'At least one goal has a nearby deadline with low progress — consider increasing contributions.',
+        body:
+            'At least one goal has a nearby deadline with low progress — consider increasing contributions.',
       ),
     );
   }
@@ -511,7 +575,8 @@ List<SmartInsightItem> buildSmartInsights({
         iconBackground: const Color(0xFFE8F5E9),
         iconColor: const Color(0xFF3F5F4A),
         title: 'Keep logging',
-        body: 'Add income and expenses to unlock richer comparisons and alerts.',
+        body:
+            'Add income and expenses to unlock richer comparisons and alerts.',
       ),
     );
   }
@@ -538,7 +603,12 @@ InsightsPayload buildInsightsPayload({
   final cats = buildCategorySlices(transactions, pStart, pEnd);
   final bars = buildTrendBars(range, transactions, pStart, pEnd);
   final monthCmp = buildMonthComparison(transactions, now);
-  final subBlock = buildSubscriptionBlock(subscriptions, transactions, pStart, pEnd);
+  final subBlock = buildSubscriptionBlock(
+    subscriptions,
+    transactions,
+    pStart,
+    pEnd,
+  );
   final goalBlock = buildGoalBlock(goals);
 
   final insights = buildSmartInsights(
@@ -591,7 +661,12 @@ InsightsPayload buildCustomPeriodPayload({
   final cats = buildCategorySlices(transactions, pStart, pEnd);
   final bars = buildTrendBarsForCustomRange(transactions, pStart, pEnd);
   final monthCmp = buildMonthComparison(transactions, now);
-  final subBlock = buildSubscriptionBlock(subscriptions, transactions, pStart, pEnd);
+  final subBlock = buildSubscriptionBlock(
+    subscriptions,
+    transactions,
+    pStart,
+    pEnd,
+  );
   final goalBlock = buildGoalBlock(goals);
 
   final insights = buildSmartInsights(

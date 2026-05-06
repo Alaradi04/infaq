@@ -43,8 +43,10 @@ class _InsightsScreenState extends State<InsightsScreen> {
   String? _error;
   bool _exporting = false;
 
-  List<Map<String, dynamic>> _aiInsightCards = [];
-  bool _loadingAiInsights = false;
+  List<Map<String, dynamic>> _detailedInsightCards = [];
+  bool _loadingDetailedInsights = false;
+  bool _detailedInsightsUnavailable = false;
+  final Map<String, List<Map<String, dynamic>>> _cachedDetailedInsights = {};
   final _aiService = AiService();
   bool _loadingEnvironmentalImpact = false;
   ({int green, int orange, int red, int total}) _leafImpactTotals = (
@@ -78,7 +80,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
   void initState() {
     super.initState();
     _load();
-    _loadAiInsights();
+    _loadDetailedInsights();
     _loadEnvironmentalImpact();
     unawaited(_migrateMissingLeafImpacts());
   }
@@ -88,25 +90,76 @@ class _InsightsScreenState extends State<InsightsScreen> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.refreshToken != widget.refreshToken) {
       _load();
-      _loadAiInsights();
+      _cachedDetailedInsights.clear();
+      _loadDetailedInsights(forceRefresh: true);
       _loadEnvironmentalImpact(forceReload: true);
       unawaited(_migrateMissingLeafImpacts());
     }
   }
 
-  Future<void> _loadAiInsights() async {
+  String _selectedDetailedPeriod() {
+    if (_customPeriodActive && _customStart != null && _customEnd != null) {
+      final start = DateTime(
+        _customStart!.year,
+        _customStart!.month,
+        _customStart!.day,
+      );
+      final end = DateTime(
+        _customEnd!.year,
+        _customEnd!.month,
+        _customEnd!.day,
+      );
+      final days = end.difference(start).inDays + 1;
+      if (days <= 7) return 'week';
+      if (days <= 45) return 'month';
+      return 'year';
+    }
+    switch (_presetRange) {
+      case InsightsTimeRange.thisWeek:
+        return 'week';
+      case InsightsTimeRange.thisMonth:
+        return 'month';
+      case InsightsTimeRange.lastMonth:
+        return 'last_month';
+      case InsightsTimeRange.thisYear:
+        return 'year';
+    }
+  }
+
+  Future<void> _loadDetailedInsights({bool forceRefresh = false}) async {
+    final period = _selectedDetailedPeriod();
+    if (!forceRefresh && _cachedDetailedInsights.containsKey(period)) {
+      if (!mounted) return;
+      setState(() {
+        _detailedInsightCards = _cachedDetailedInsights[period]!;
+        _loadingDetailedInsights = false;
+        _detailedInsightsUnavailable = false;
+      });
+      return;
+    }
+
     if (!mounted) return;
-    setState(() => _loadingAiInsights = true);
+    setState(() {
+      _loadingDetailedInsights = true;
+      _detailedInsightsUnavailable = false;
+    });
     try {
-      final cards = await _aiService.generateHomeInsights();
+      final cards = await _aiService.generateDetailedInsights(period: period);
       if (!mounted) return;
-      setState(() => _aiInsightCards = cards);
+      _cachedDetailedInsights[period] = cards;
+      setState(() {
+        _detailedInsightCards = cards;
+        _loadingDetailedInsights = false;
+        _detailedInsightsUnavailable = false;
+      });
     } catch (e, st) {
-      debugPrint('AI insights failed: $e\n$st');
+      debugPrint('Detailed insights failed: $e\n$st');
       if (!mounted) return;
-      setState(() => _aiInsightCards = []);
-    } finally {
-      if (mounted) setState(() => _loadingAiInsights = false);
+      setState(() {
+        _detailedInsightCards = [];
+        _loadingDetailedInsights = false;
+        _detailedInsightsUnavailable = true;
+      });
     }
   }
 
@@ -495,6 +548,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
     });
     await _load();
     await _loadEnvironmentalImpact();
+    await _loadDetailedInsights();
   }
 
   Future<void> _openCustomPeriodPicker() async {
@@ -516,6 +570,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
     });
     await _load();
     await _loadEnvironmentalImpact();
+    await _loadDetailedInsights();
   }
 
   String _fmt(double v) =>
@@ -709,6 +764,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
               onRefresh: () async {
                 await _load();
                 await _loadEnvironmentalImpact();
+                _cachedDetailedInsights.clear();
+                await _loadDetailedInsights(forceRefresh: true);
                 unawaited(_migrateMissingLeafImpacts());
               },
               child: _error != null
@@ -788,12 +845,29 @@ class _InsightsScreenState extends State<InsightsScreen> {
                         const SizedBox(height: 20),
                         _SectionTitle('Smart insights', cs),
                         const SizedBox(height: 10),
-                        if (_loadingAiInsights)
-                          AiInsightCard.loading()
-                        else if (_aiInsightCards.isEmpty)
-                          AiInsightCard.fallback()
+                        if (_loadingDetailedInsights) ...[
+                          AiInsightCard.loading(),
+                          const SizedBox(height: 10),
+                          AiInsightCard.loading(),
+                        ] else if (_detailedInsightsUnavailable)
+                          const AiInsightCard(
+                            title: 'Smart insights unavailable',
+                            message:
+                                'Smart insights are temporarily unavailable.',
+                            insightType: 'behavior',
+                            severity: 'low',
+                            forceIcon: Icons.wifi_off_rounded,
+                          )
+                        else if (_detailedInsightCards.isEmpty)
+                          const AiInsightCard(
+                            title: 'No smart insights',
+                            message:
+                                'No smart insights available for this period yet.',
+                            insightType: 'behavior',
+                            severity: 'low',
+                          )
                         else
-                          ..._aiInsightCards.map(
+                          ..._detailedInsightCards.map(
                             (c) => Padding(
                               padding: const EdgeInsets.only(bottom: 10),
                               child: AiInsightCard.fromMap(c),

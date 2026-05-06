@@ -85,4 +85,42 @@ class AiService {
       'Unexpected response format from classify-leaf-impact',
     );
   }
+
+  Future<List<Map<String, dynamic>>> generateDetailedInsights({
+    required String period,
+  }) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return [];
+
+    if (kDebugMode) {
+      debugPrint('generate-detailed-insights called period=$period');
+    }
+
+    final response = await _client.functions.invoke(
+      'generate-detailed-insights',
+      body: {'user_id': user.id, 'period': period},
+    );
+
+    final raw = response.data;
+    if (raw is! Map) return [];
+    final data = raw is Map<String, dynamic>
+        ? raw
+        : Map<String, dynamic>.from(raw);
+    final insightsRaw = data['insights'];
+    if (insightsRaw is! List) return [];
+
+    final out = <Map<String, dynamic>>[];
+    for (final e in insightsRaw) {
+      if (e is Map<String, dynamic>) {
+        out.add(e);
+      } else if (e is Map) {
+        out.add(Map<String, dynamic>.from(e));
+      }
+    }
+
+    if (kDebugMode) {
+      debugPrint('generate-detailed-insights returned count=${out.length}');
+    }
+    return out;
+  }
 }
