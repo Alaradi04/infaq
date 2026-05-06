@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:infaq/ui/infaq_service_form_widgets.dart';
+
 /// Icons offered when creating or editing a goal.
 const List<IconData> kGoalPaletteIcons = [
   Icons.menu_book_rounded,
@@ -15,6 +17,7 @@ const List<IconData> kGoalPaletteIcons = [
 
 void showGoalIconPickerSheet(
   BuildContext context, {
+  required IconData selectedIcon,
   required ValueChanged<IconData> onSelected,
 }) {
   final cs = Theme.of(context).colorScheme;
@@ -23,6 +26,7 @@ void showGoalIconPickerSheet(
     backgroundColor: cs.surface,
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
     builder: (ctx) {
+      final outline = Theme.of(ctx).colorScheme.outline.withValues(alpha: 0.28);
       return SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -51,9 +55,17 @@ void showGoalIconPickerSheet(
                         height: 52,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Theme.of(ctx).colorScheme.outline.withValues(alpha: 0.25)),
+                          color: ic == selectedIcon
+                              ? kServiceFormGreen.withValues(alpha: 0.16)
+                              : Colors.transparent,
+                          border: Border.all(
+                            color: ic == selectedIcon
+                                ? kServiceFormGreen.withValues(alpha: 0.5)
+                                : outline,
+                            width: ic == selectedIcon ? 2 : 1,
+                          ),
                         ),
-                        child: Icon(ic, color: Theme.of(ctx).colorScheme.primary),
+                        child: Icon(ic, color: kServiceFormGreen, size: 26),
                       ),
                     ),
                 ],

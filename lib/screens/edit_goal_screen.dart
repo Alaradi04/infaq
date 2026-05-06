@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:infaq/goal_accent.dart';
 import 'package:infaq/goal_icon_picker.dart';
 import 'package:infaq/goal_local_storage.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
@@ -250,6 +249,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
   void _showIconPicker() {
     showGoalIconPickerSheet(
       context,
+      selectedIcon: _goalIcon,
       onSelected: (ic) => setState(() => _goalIcon = ic),
     );
   }
@@ -265,9 +265,6 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
     final reached = double.tryParse(_reachedCtrl.text.replaceAll(',', '')) ?? 0;
     final t = target != null && target > 0 ? target : 0.0;
     final progress = t > 0 ? (reached / t).clamp(0.0, 1.0) : 0.0;
-    final accent = accentColorForGoalTitle(
-      _titleCtrl.text.trim().isEmpty ? 'x' : _titleCtrl.text.trim(),
-    );
 
     if (!_extrasLoaded) {
       return Scaffold(
@@ -315,8 +312,12 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                             width: 92,
                             height: 92,
                             decoration: BoxDecoration(
-                              color: accent,
+                              color: kServiceFormGreen.withValues(alpha: 0.14),
                               borderRadius: BorderRadius.circular(22),
+                              border: Border.all(
+                                color: kServiceFormGreen.withValues(alpha: 0.28),
+                                width: 1,
+                              ),
                               boxShadow: [
                                 BoxShadow(
                                   color: cs.shadow.withValues(alpha: isDark ? 0.35 : 0.12),
@@ -325,7 +326,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                                 ),
                               ],
                             ),
-                            child: Icon(_goalIcon, color: Colors.white, size: 40),
+                            child: Icon(_goalIcon, color: kServiceFormGreen, size: 40),
                           ),
                           Positioned(
                             right: -4,
@@ -339,7 +340,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                                 customBorder: const CircleBorder(),
                                 child: Padding(
                                   padding: const EdgeInsets.all(6),
-                                  child: Icon(Icons.edit_rounded, size: 16, color: accent),
+                                  child: Icon(Icons.edit_rounded, size: 16, color: kServiceFormGreen),
                                 ),
                               ),
                             ),
@@ -350,7 +351,6 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                       Expanded(
                         child: TextField(
                           controller: _titleCtrl,
-                          onChanged: (_) => setState(() {}),
                           style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w800,
@@ -423,7 +423,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                       value: progress,
                       minHeight: 10,
                       backgroundColor: cs.surfaceContainerHighest,
-                      color: accent,
+                      color: kServiceFormGreen,
                     ),
                   ),
                   const SizedBox(height: 22),

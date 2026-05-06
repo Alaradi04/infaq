@@ -5,6 +5,8 @@ import 'package:infaq/app_theme_mode.dart';
 
 const Color _kPrimary = Color(0xFF3F5F4A);
 const Color _kProfileHeaderGreen = Color(0xFFE8F5E9);
+/// Soft sage ring for the name pill (light mode); aligns with primary green, not blue.
+const Color _kNamePillBorderLight = Color(0xFF9DB5A3);
 const Color _kLogoutBg = Color(0xFF707070);
 
 /// Main **Profile** tab (bottom nav). Matches app mock: header, user pill, settings, privacy, logout.
@@ -43,7 +45,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
     final headerBg = isDark ? const Color(0xFF1A2420) : _kProfileHeaderGreen;
     final titleColor = isDark ? cs.primary : _kPrimary;
     final pillBg = isDark ? cs.surfaceContainerHigh : Colors.white;
-    final pillBorder = isDark ? cs.outline.withValues(alpha: 0.35) : const Color(0xFF64B5F6);
+    final pillBorder = isDark ? cs.outline.withValues(alpha: 0.35) : _kNamePillBorderLight;
     final onSurface = cs.onSurface;
 
     return ColoredBox(

@@ -34,6 +34,7 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _nameCtrl;
+  late final TextEditingController _emailCtrl;
   late String _currency;
   final ImagePicker _picker = ImagePicker();
 
@@ -47,6 +48,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.initialName ?? '');
+    _emailCtrl = TextEditingController(
+      text: Supabase.instance.client.auth.currentUser?.email ?? '',
+    );
     _currency = (widget.initialCurrency != null && widget.initialCurrency!.trim().isNotEmpty)
         ? widget.initialCurrency!.trim().toUpperCase()
         : 'BHD';
@@ -59,6 +63,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   void dispose() {
     _nameCtrl.dispose();
+    _emailCtrl.dispose();
     super.dispose();
   }
 
@@ -381,6 +386,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),
               children: [
+                const Text('Email', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                const SizedBox(height: 8),
+                _pillField(
+                  child: TextField(
+                    controller: _emailCtrl,
+                    readOnly: true,
+                    showCursor: false,
+                    enableInteractiveSelection: true,
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
                 const Text('Edit name', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
                 const SizedBox(height: 8),
                 _pillField(

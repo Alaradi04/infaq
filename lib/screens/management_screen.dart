@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:infaq/goal_accent.dart';
 import 'package:infaq/goal_local_storage.dart';
 import 'package:infaq/profile/subscription_icon_storage.dart';
 import 'package:infaq/screens/add_goal_screen.dart';
@@ -109,6 +108,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
     if (oldWidget.transactionsListRefreshToken != widget.transactionsListRefreshToken) {
       _loadTransactions();
       _loadSubscriptions();
+      _loadGoals();
     }
   }
 
@@ -1368,7 +1368,6 @@ class _ManagementScreenState extends State<ManagementScreen> {
     final current = _readAmount(g['current_amount']);
     final target = _readAmount(g['target_amount']);
     final progress = target > 0 ? (current / target).clamp(0.0, 1.0) : 0.0;
-    final accent = accentColorForGoalTitle(title);
     final deadline = _formatGoalDeadlineShort(g['deadline']);
     final iconCp = idStr != null ? _goalIconCodePoints[idStr] : null;
     final goalIcon = iconCp != null ? IconData(iconCp, fontFamily: 'MaterialIcons') : Icons.menu_book_rounded;
@@ -1428,10 +1427,14 @@ class _ManagementScreenState extends State<ManagementScreen> {
                           width: 52,
                           height: 52,
                           decoration: BoxDecoration(
-                            color: accent,
+                            color: kServiceFormGreen.withValues(alpha: 0.14),
                             borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: kServiceFormGreen.withValues(alpha: 0.28),
+                              width: 1,
+                            ),
                           ),
-                          child: Icon(goalIcon, color: Colors.white, size: 26),
+                          child: Icon(goalIcon, color: kServiceFormGreen, size: 26),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -1466,7 +1469,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
                         value: progress.clamp(0.0, 1.0),
                         minHeight: 8,
                         backgroundColor: cs.surfaceContainerHighest,
-                        color: accent,
+                        color: kServiceFormGreen,
                       ),
                     ),
                   ],

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:infaq/goal_accent.dart';
 import 'package:infaq/goal_icon_picker.dart';
 import 'package:infaq/goal_local_storage.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
@@ -201,7 +200,6 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
                         controller: _nameCtrl,
                         hintText: 'PhD, new car, emergency fund…',
                         textInputAction: TextInputAction.next,
-                        onChanged: (_) => setState(() {}),
                       ),
                     ),
                     const SizedBox(height: 18),
@@ -220,6 +218,7 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
                         onTap: () {
                           showGoalIconPickerSheet(
                             context,
+                            selectedIcon: _goalIcon,
                             onSelected: (ic) => setState(() => _goalIcon = ic),
                           );
                         },
@@ -231,12 +230,14 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
                               width: 64,
                               height: 64,
                               decoration: BoxDecoration(
-                                color: accentColorForGoalTitle(
-                                  _nameCtrl.text.trim().isEmpty ? 'x' : _nameCtrl.text.trim(),
-                                ),
+                                color: kServiceFormGreen.withValues(alpha: 0.14),
                                 borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                  color: kServiceFormGreen.withValues(alpha: 0.28),
+                                  width: 1,
+                                ),
                               ),
-                              child: Icon(_goalIcon, color: Colors.white, size: 32),
+                              child: Icon(_goalIcon, color: kServiceFormGreen, size: 32),
                             ),
                             const SizedBox(width: 14),
                             Text(
