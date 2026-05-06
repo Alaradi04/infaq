@@ -10,7 +10,7 @@ class InfaqHeader extends StatelessWidget {
   /// When set, replaces the default [Navigator.maybePop] behavior (e.g. multi-step flows).
   final VoidCallback? onBack;
 
-  static const Color _kBrandGreen = Color(0xFF3F5F4A);
+  static const Color _kBrandGreen = Color(0xFF4D6658);
 
   @override
   Widget build(BuildContext context) {
@@ -145,7 +145,7 @@ class InfaqPrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = const Color(0xFF3F5F4A);
+    final bg = const Color(0xFF4D6658);
     return SizedBox(
       width: double.infinity,
       height: 52,
@@ -186,7 +186,7 @@ class InfaqTextButton extends StatelessWidget {
         child: Text(
           label,
           style: const TextStyle(
-            color: Color(0xFF3F5F4A),
+            color: Color(0xFF4D6658),
             fontWeight: FontWeight.w700,
           ),
         ),

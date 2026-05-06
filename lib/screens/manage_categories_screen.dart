@@ -5,7 +5,6 @@ import 'package:infaq/category/category_icons.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
-const Color _kMint = Color(0xFFECF9E5);
 const _primary = kInfaqPrimaryGreen;
 
 class ManageCategoriesScreen extends StatefulWidget {
@@ -292,23 +291,24 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: cs.surface,
       appBar: AppBar(
-        backgroundColor: _kMint,
-        foregroundColor: _primary,
+        backgroundColor: isDark ? const Color(0xFF1A2520) : const Color(0xFFE8F2EA),
+        foregroundColor: cs.primary,
         elevation: 0,
         title: const Text(
           'Categories',
           style: TextStyle(fontWeight: FontWeight.w800),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: _addCategory,
         backgroundColor: _primary,
         foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('Add'),
+        child: const Icon(Icons.add),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _primary))
@@ -329,10 +329,9 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
           : RefreshIndicator(
               color: _primary,
               onRefresh: _load,
-              child: ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
                 itemCount: _rows.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (context, i) {
                   final row = _rows[i];
                   final def = _isDefault(row);
@@ -344,52 +343,42 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
                     type: row['type']?.toString() ?? 'expense',
                     categoryId: row['id']?.toString(),
                   );
-
-                  return ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: _kMint,
-                      foregroundColor: _primary,
-                      child: Icon(iconData, size: 22),
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.34 : 0.14)),
                     ),
-                    title: Text(
-                      name,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Text('$type · ${def ? 'Default' : 'Yours'}'),
-                    trailing: def
-                        ? Padding(
-                            padding: const EdgeInsets.only(left: 8),
-                            child: Text(
-                              'Built-in',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.black.withValues(alpha: 0.45),
-                              ),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: isDark ? cs.surfaceContainerHighest : const Color(0xFFE8F2EA),
+                        foregroundColor: _primary,
+                        child: Icon(iconData, size: 22),
+                      ),
+                      title: Text(name, style: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurface)),
+                      subtitle: Text(
+                        '$type · ${def ? 'Default' : 'Yours'}',
+                        style: TextStyle(color: cs.onSurface.withValues(alpha: 0.58)),
+                      ),
+                      trailing: def
+                          ? Text('Built-in', style: TextStyle(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.45)))
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  tooltip: 'Edit',
+                                  onPressed: () => _editCustom(row),
+                                  icon: const Icon(Icons.edit_outlined, color: _primary, size: 22),
+                                ),
+                                IconButton(
+                                  tooltip: 'Delete',
+                                  onPressed: () => _deleteCustom(row),
+                                  icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade700, size: 22),
+                                ),
+                              ],
                             ),
-                          )
-                        : Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                tooltip: 'Edit',
-                                onPressed: () => _editCustom(row),
-                                icon: const Icon(
-                                  Icons.edit_outlined,
-                                  color: _primary,
-                                  size: 22,
-                                ),
-                              ),
-                              IconButton(
-                                tooltip: 'Delete',
-                                onPressed: () => _deleteCustom(row),
-                                icon: Icon(
-                                  Icons.delete_outline_rounded,
-                                  color: Colors.red.shade700,
-                                  size: 22,
-                                ),
-                              ),
-                            ],
-                          ),
+                    ),
                   );
                 },
               ),

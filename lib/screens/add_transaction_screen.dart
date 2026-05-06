@@ -9,19 +9,10 @@ import 'package:infaq/services/ai_service.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
-/// Mint header tint (reference mock).
-const Color _kAddHeaderMint = Color(0xFFECF9E5);
-
-BoxDecoration _addTxPillDecoration() => BoxDecoration(
-      color: Colors.white,
+BoxDecoration _addTxPillDecoration(BuildContext context) => BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerLowest,
       borderRadius: BorderRadius.circular(999),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.1),
-          blurRadius: 16,
-          offset: const Offset(0, 6),
-        ),
-      ],
+      boxShadow: const [],
     );
 
 class _CategoryRow {
@@ -310,7 +301,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final chosen = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -428,6 +419,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final prefix = _currencyPrefix();
     final saveLabel = _isEditing
         ? (_isIncome ? 'Update income' : 'Update expense')
@@ -437,7 +430,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         : 'e.g. meal, new phone, vegetables';
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: cs.surface,
       extendBody: true,
       bottomNavigationBar: InfaqBottomNavBar(
         tabIndex: -1,
@@ -452,21 +445,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         children: [
           Container(
             width: double.infinity,
-            decoration: const BoxDecoration(
-              color: _kAddHeaderMint,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1A2520) : const Color(0xFFE8F2EA),
               borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
-              boxShadow: [
-                BoxShadow(
-                  color: Color(0x1A3F5F4A),
-                  blurRadius: 18,
-                  offset: Offset(0, 8),
-                ),
-              ],
+              boxShadow: const [],
             ),
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 4, 22, 20),
+                padding: const EdgeInsets.fromLTRB(8, 4, 8, 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -474,16 +461,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       children: [
                         IconButton(
                           onPressed: _cancel,
-                          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _primary),
+                          icon: Icon(Icons.arrow_back_ios_new_rounded, color: cs.primary),
                         ),
                         Expanded(
                           child: Text(
                             _isEditing ? 'Edit transaction' : 'Add transaction',
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.w800,
-                              color: _primary,
+                              color: cs.primary,
                             ),
                           ),
                         ),
@@ -491,12 +478,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      child: _ExpenseIncomeToggle(
-                        isIncome: _isIncome,
-                        onExpense: () => _setIncome(false),
-                        onIncome: () => _setIncome(true),
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 380),
+                        child: _ExpenseIncomeToggle(
+                          isIncome: _isIncome,
+                          onExpense: () => _setIncome(false),
+                          onIncome: () => _setIncome(true),
+                        ),
                       ),
                     ),
                   ],
@@ -546,7 +535,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         onTap: _pickDate,
                         borderRadius: BorderRadius.circular(999),
                         child: Ink(
-                          decoration: _addTxPillDecoration(),
+                          decoration: _addTxPillDecoration(context),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                             child: Row(
@@ -556,7 +545,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                                     '${_date.day}/${_date.month}/${_date.year}',
                                     style: TextStyle(
                                       fontSize: 16,
-                                      color: Colors.black.withValues(alpha: 0.75),
+                                      color: cs.onSurface.withValues(alpha: 0.75),
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
@@ -580,7 +569,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                             : _pickCategory,
                         borderRadius: BorderRadius.circular(999),
                         child: Ink(
-                          decoration: _addTxPillDecoration(),
+                          decoration: _addTxPillDecoration(context),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                             child: Row(
@@ -594,7 +583,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                                       ? Text(
                                           'Loading…',
                                           style: TextStyle(
-                                            color: Colors.black.withValues(alpha: 0.45),
+                                            color: cs.onSurface.withValues(alpha: 0.45),
                                           ),
                                         )
                                       : Text(
@@ -603,8 +592,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                                             fontSize: 16,
                                             fontWeight: FontWeight.w500,
                                             color: _selectedCategory != null
-                                                ? Colors.black.withValues(alpha: 0.85)
-                                                : Colors.black.withValues(alpha: 0.45),
+                                                ? cs.onSurface.withValues(alpha: 0.85)
+                                                : cs.onSurface.withValues(alpha: 0.45),
                                           ),
                                         ),
                                 ),
@@ -626,7 +615,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                           'green' => Colors.green.shade700,
                           'orange' => Colors.orange.shade800,
                           'red' => Colors.red.shade700,
-                          _ => Colors.black.withValues(alpha: 0.5),
+                          _ => cs.onSurface.withValues(alpha: 0.5),
                         },
                       ),
                     ),
@@ -645,7 +634,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     const SizedBox(height: 8),
                     Text(
                       'No ${_isIncome ? 'income' : 'expense'} categories yet. Add some in Supabase.',
-                      style: TextStyle(fontSize: 13, color: Colors.black.withValues(alpha: 0.55)),
+                      style: TextStyle(fontSize: 13, color: cs.onSurface.withValues(alpha: 0.55)),
                     ),
                   ],
                   const SizedBox(height: 28),
@@ -666,7 +655,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(28),
                         ),
-                        backgroundColor: Colors.white,
+                        backgroundColor: cs.surface,
                         elevation: 0,
                       ),
                       child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700)),
@@ -703,7 +692,7 @@ class _LabeledField extends StatelessWidget {
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w700,
-            color: Colors.black.withValues(alpha: 0.55),
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55),
           ),
         ),
         if (subtitle != null) ...[
@@ -712,7 +701,7 @@ class _LabeledField extends StatelessWidget {
             subtitle!,
             style: TextStyle(
               fontSize: 12,
-              color: Colors.black.withValues(alpha: 0.45),
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.45),
               height: 1.25,
             ),
           ),
@@ -743,8 +732,9 @@ class _ShadowTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
-      decoration: _addTxPillDecoration(),
+      decoration: _addTxPillDecoration(context),
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
@@ -754,7 +744,7 @@ class _ShadowTextField extends StatelessWidget {
         decoration: InputDecoration(
           hintText: hintText,
           filled: true,
-          fillColor: Colors.white,
+          fillColor: cs.surfaceContainerLowest,
           contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(999),
@@ -782,15 +772,11 @@ class _ExpenseIncomeToggle extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).brightness == Brightness.dark
+            ? Theme.of(context).colorScheme.surfaceContainerHighest
+            : Colors.white,
         borderRadius: BorderRadius.circular(999),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        boxShadow: const [],
       ),
       child: Row(
         children: [
@@ -841,7 +827,7 @@ class _Seg extends StatelessWidget {
               label,
               style: TextStyle(
                 fontWeight: FontWeight.w800,
-                color: selected ? Colors.white : Colors.black.withValues(alpha: 0.65),
+            color: selected ? Colors.white : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.65),
               ),
             ),
           ),

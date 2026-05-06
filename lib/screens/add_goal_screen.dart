@@ -25,6 +25,7 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
   DateTime _targetDate = DateTime.now().add(const Duration(days: 365));
   bool _saving = false;
   IconData _goalIcon = Icons.menu_book_rounded;
+  Color _goalIconColor = kServiceFormGreen;
 
   @override
   void dispose() {
@@ -137,6 +138,7 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
           await persistGoalLocalExtras(
             goalId: newId,
             iconCodePoint: _goalIcon.codePoint,
+            iconColorValue: _goalIconColor.toARGB32(),
             monthly: double.tryParse(_monthlyCtrl.text.replaceAll(',', '')),
           );
         } catch (_) {
@@ -165,12 +167,11 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final headerBg =
-        isDark ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)! : kInfaqMgmtHeaderMint;
+    final headerBg = isDark ? const Color(0xFF1A2520) : const Color(0xFFE8F2EA);
     final suffix = _currencySuffix();
 
     return Scaffold(
-        backgroundColor: Colors.white,
+      backgroundColor: cs.surface,
         extendBody: true,
         bottomNavigationBar: InfaqBottomNavBar(
           tabIndex: -1,
@@ -208,7 +209,7 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: Colors.black.withValues(alpha: 0.65),
+                        color: cs.onSurface.withValues(alpha: 0.65),
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -219,7 +220,11 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
                           showGoalIconPickerSheet(
                             context,
                             selectedIcon: _goalIcon,
-                            onSelected: (ic) => setState(() => _goalIcon = ic),
+                            selectedColor: _goalIconColor,
+                            onSelected: (ic, color) => setState(() {
+                              _goalIcon = ic;
+                              _goalIconColor = color;
+                            }),
                           );
                         },
                         borderRadius: BorderRadius.circular(20),
@@ -230,23 +235,23 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
                               width: 64,
                               height: 64,
                               decoration: BoxDecoration(
-                                color: kServiceFormGreen.withValues(alpha: 0.14),
+                                color: _goalIconColor.withValues(alpha: 0.14),
                                 borderRadius: BorderRadius.circular(18),
                                 border: Border.all(
-                                  color: kServiceFormGreen.withValues(alpha: 0.28),
+                                  color: _goalIconColor.withValues(alpha: 0.28),
                                   width: 1,
                                 ),
                               ),
-                              child: Icon(_goalIcon, color: kServiceFormGreen, size: 32),
+                              child: Icon(_goalIcon, color: _goalIconColor, size: 32),
                             ),
                             const SizedBox(width: 14),
                             Text(
                               'Tap to choose icon',
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
-                                color: kServiceFormGreen,
+                                color: _goalIconColor,
                                 decoration: TextDecoration.underline,
-                                decorationColor: kServiceFormGreen.withValues(alpha: 0.5),
+                                decorationColor: _goalIconColor.withValues(alpha: 0.5),
                               ),
                             ),
                           ],
@@ -296,7 +301,7 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
                         fontSize: 14,
                         height: 1.35,
                         fontWeight: FontWeight.w600,
-                        color: Colors.black.withValues(alpha: 0.5),
+                        color: cs.onSurface.withValues(alpha: 0.5),
                       ),
                     ),
                     const SizedBox(height: 28),
@@ -315,7 +320,7 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
                           foregroundColor: kServiceFormGreen,
                           side: BorderSide(color: kServiceFormGreen.withValues(alpha: 0.45), width: 1.4),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                          backgroundColor: Colors.white,
+                          backgroundColor: cs.surface,
                           elevation: 0,
                         ),
                         child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700)),

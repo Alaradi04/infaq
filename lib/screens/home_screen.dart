@@ -14,6 +14,7 @@ import 'package:infaq/screens/insights_screen.dart';
 import 'package:infaq/screens/manage_categories_screen.dart';
 import 'package:infaq/screens/management_screen.dart';
 import 'package:infaq/screens/profile_tab_screen.dart';
+import 'package:infaq/category/category_icons.dart';
 import 'package:infaq/profile/avatar_storage.dart';
 import 'package:infaq/services/ai_service.dart';
 import 'package:infaq/services/home_services_layout_store.dart';
@@ -1452,23 +1453,9 @@ class _TxRow extends StatelessWidget {
     return '${months[d.month - 1]} ${d.day} ${d.year}';
   }
 
-  static Color _accentFromTitle(String title) {
-    final h = title.hashCode.abs();
-    const colors = [
-      Color(0xFF6BB3F0),
-      Color(0xFFFF8FB8),
-      Color(0xFFFFB86C),
-      Color(0xFF7FD8BE),
-      Color(0xFFB39DFF),
-      Color(0xFFB0BEC5),
-    ];
-    return colors[h % colors.length];
-  }
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final amountMaxWidth = (MediaQuery.sizeOf(context).width * 0.28).clamp(90.0, 132.0);
     final title = (data['description'] ?? data['title'] ?? data['merchant'] ?? data['name'] ?? 'Transaction').toString();
     var category = (data['category'] ?? data['category_name'] ?? '').toString();
@@ -1482,6 +1469,7 @@ class _TxRow extends StatelessWidget {
       if (category.isNotEmpty) category,
       if (d != null) _prettyDate(d),
     ].join(' - ');
+    final iconBg = categoryDisplayColor(category.isEmpty ? title : category);
 
     final amount = _parseAmount(data['amount']);
     final isExpense = _isExpense(data, amount);
@@ -1499,26 +1487,23 @@ class _TxRow extends StatelessWidget {
     final txId = data['id']?.toString() ?? '';
     final canMutate = txId.isNotEmpty;
 
-    final tile = Material(
-      color: cs.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(20),
-      elevation: 0,
-      shadowColor: Colors.transparent,
-      child: InkWell(
-        onTap: canMutate ? onTap : null,
+    final tile = Container(
+      decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            color: cs.surfaceContainerLow,
-            boxShadow: [
-              BoxShadow(
-                color: cs.shadow.withValues(alpha: isDark ? 0.25 : 0.07),
-                blurRadius: 14,
-                offset: const Offset(0, 5),
-              ),
-            ],
+        boxShadow: [
+          BoxShadow(
+            color: cs.shadow.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.16 : 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
+        ],
+      ),
+      child: Material(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          onTap: canMutate ? onTap : null,
+          borderRadius: BorderRadius.circular(20),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
@@ -1528,7 +1513,7 @@ class _TxRow extends StatelessWidget {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: _accentFromTitle(title).withValues(alpha: 0.35),
+                    color: iconBg.withValues(alpha: 0.28),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(

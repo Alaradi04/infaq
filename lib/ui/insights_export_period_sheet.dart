@@ -241,30 +241,27 @@ class _InsightsExportPeriodSheetState extends State<InsightsExportPeriodSheet> {
             const Divider(height: 24),
           ],
           SegmentedButton<int>(
+            showSelectedIcon: false,
             segments: const [
-              ButtonSegment(
-                value: 0,
-                label: Text('Year'),
-                icon: Icon(Icons.calendar_today_outlined, size: 16),
-              ),
-              ButtonSegment(
-                value: 1,
-                label: Text('Month'),
-                icon: Icon(Icons.date_range_outlined, size: 16),
-              ),
-              ButtonSegment(
-                value: 2,
-                label: Text('Day'),
-                icon: Icon(Icons.event_outlined, size: 16),
-              ),
-              ButtonSegment(
-                value: 3,
-                label: Text('Range'),
-                icon: Icon(Icons.alt_route_outlined, size: 16),
-              ),
+              ButtonSegment(value: 0, label: Text('Year')),
+              ButtonSegment(value: 1, label: Text('Month')),
+              ButtonSegment(value: 2, label: Text('Day')),
             ],
-            selected: {_mode},
+            selected: {_mode == 3 ? 2 : _mode},
             onSelectionChanged: (s) => setState(() => _mode = s.first),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => setState(() => _mode = 3),
+            icon: const Icon(Icons.alt_route_outlined, size: 16),
+            label: const Text('Range'),
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(
+                color: _mode == 3 ? cs.primary : cs.outline.withValues(alpha: 0.35),
+                width: _mode == 3 ? 1.4 : 1,
+              ),
+              foregroundColor: _mode == 3 ? cs.primary : cs.onSurface,
+            ),
           ),
           const SizedBox(height: 16),
           if (_mode == 0) ...[

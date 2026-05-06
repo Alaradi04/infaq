@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/goal_local_storage.dart';
 import 'package:infaq/profile/subscription_icon_storage.dart';
+import 'package:infaq/category/category_icons.dart';
 import 'package:infaq/screens/add_goal_screen.dart';
 import 'package:infaq/screens/add_subscription_screen.dart';
 import 'package:infaq/screens/edit_goal_screen.dart';
@@ -14,6 +15,9 @@ import 'package:infaq/subscription/subscription_analytics.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
+
+const Color _kHeaderGreenLight = Color(0xFFE8F2EA);
+const Color _kHeaderGreenDark = Color(0xFF1A2520);
 
 enum _SubFilter { all, activeOnly, inactiveOnly }
 
@@ -87,6 +91,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
 
   /// Goal id → Material icon codePoint; same storage as [EditGoalScreen] (`goal_local_v1_<id>` JSON).
   Map<String, int> _goalIconCodePoints = {};
+  Map<String, Color> _goalIconColors = {};
 
   bool _loadingTx = true;
   bool _loadingSub = false;
@@ -198,6 +203,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
   Future<void> _syncGoalIconsFromPrefs() async {
     final p = await SharedPreferences.getInstance();
     final next = <String, int>{};
+    final nextColors = <String, Color>{};
     for (final g in _goals) {
       final id = g['id']?.toString();
       if (id == null || id.isEmpty) continue;
@@ -206,10 +212,17 @@ class _ManagementScreenState extends State<ManagementScreen> {
       try {
         final m = jsonDecode(raw) as Map<String, dynamic>;
         final cp = (m['icon'] as num?)?.toInt();
+        final c = (m['icon_color'] as num?)?.toInt();
         if (cp != null) next[id] = cp;
+        if (c != null) nextColors[id] = Color(c);
       } catch (_) {}
     }
-    if (mounted) setState(() => _goalIconCodePoints = next);
+    if (mounted) {
+      setState(() {
+        _goalIconCodePoints = next;
+        _goalIconColors = nextColors;
+      });
+    }
   }
 
   void _onMainTabChanged(_MgmtMainTab t) {
@@ -594,15 +607,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
     final budget = _monthlyBudget;
     final progress = budget > 0 ? (spent / budget).clamp(0.0, 1.0) : 0.0;
 
-    final Color headerTint;
-    switch (_mainTab) {
-      case _MgmtMainTab.subscriptions:
-        headerTint = isDark ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)! : kInfaqMgmtHeaderMint;
-      case _MgmtMainTab.goals:
-        headerTint = isDark ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)! : kInfaqMgmtHeaderMint;
-      case _MgmtMainTab.transactions:
-        headerTint = isDark ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)! : kInfaqMgmtHeaderMint;
-    }
+    final headerTint = isDark ? _kHeaderGreenDark : _kHeaderGreenLight;
 
     return ColoredBox(
       color: cs.surface,
@@ -1371,6 +1376,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
     final deadline = _formatGoalDeadlineShort(g['deadline']);
     final iconCp = idStr != null ? _goalIconCodePoints[idStr] : null;
     final goalIcon = iconCp != null ? IconData(iconCp, fontFamily: 'MaterialIcons') : Icons.menu_book_rounded;
+    final goalColor = idStr != null
+        ? (_goalIconColors[idStr] ?? categoryDisplayColor(title))
+        : categoryDisplayColor(title);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -1427,14 +1435,14 @@ class _ManagementScreenState extends State<ManagementScreen> {
                           width: 52,
                           height: 52,
                           decoration: BoxDecoration(
-                            color: kServiceFormGreen.withValues(alpha: 0.14),
+                            color: goalColor.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                              color: kServiceFormGreen.withValues(alpha: 0.28),
+                              color: goalColor.withValues(alpha: 0.38),
                               width: 1,
                             ),
                           ),
-                          child: Icon(goalIcon, color: kServiceFormGreen, size: 26),
+                          child: Icon(goalIcon, color: goalColor, size: 26),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -1469,7 +1477,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
                         value: progress.clamp(0.0, 1.0),
                         minHeight: 8,
                         backgroundColor: cs.surfaceContainerHighest,
-                        color: kServiceFormGreen,
+                        color: goalColor,
                       ),
                     ),
                   ],
@@ -2055,23 +2063,9 @@ class _MgmtTxTile extends StatelessWidget {
     return '${months[d.month - 1]} ${d.day} ${d.year}';
   }
 
-  static Color _accentFromTitle(String title) {
-    final h = title.hashCode.abs();
-    const colors = [
-      Color(0xFF6BB3F0),
-      Color(0xFFFF8FB8),
-      Color(0xFFFFB86C),
-      Color(0xFF7FD8BE),
-      Color(0xFFB39DFF),
-      Color(0xFFB0BEC5),
-    ];
-    return colors[h % colors.length];
-  }
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final amountMaxWidth = (MediaQuery.sizeOf(context).width * 0.28).clamp(90.0, 132.0);
     final title = (data['description'] ?? data['title'] ?? 'Transaction').toString();
     var category = (data['category'] ?? '').toString();
@@ -2086,6 +2080,7 @@ class _MgmtTxTile extends StatelessWidget {
       if (category.isNotEmpty) category,
       if (d != null) _prettyDate(d),
     ].join(' - ');
+    final iconBg = categoryDisplayColor(category.isEmpty ? title : category);
 
     final amount = _parseAmount(data['amount']);
     final isExpense = _isExpense(data, amount);
@@ -2100,26 +2095,23 @@ class _MgmtTxTile extends StatelessWidget {
       leafColor = Colors.green.shade700;
     }
 
-    final tile = Material(
-      color: cs.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(20),
-      elevation: 0,
-      shadowColor: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
+    final tile = Container(
+      decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            color: cs.surfaceContainerLow,
-            boxShadow: [
-              BoxShadow(
-                color: cs.shadow.withValues(alpha: isDark ? 0.25 : 0.07),
-                blurRadius: 14,
-                offset: const Offset(0, 5),
-              ),
-            ],
+        boxShadow: [
+          BoxShadow(
+            color: cs.shadow.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.16 : 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
+        ],
+      ),
+      child: Material(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
@@ -2129,7 +2121,7 @@ class _MgmtTxTile extends StatelessWidget {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: _accentFromTitle(title).withValues(alpha: 0.35),
+                    color: iconBg.withValues(alpha: 0.28),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(

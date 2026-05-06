@@ -8,6 +8,7 @@ String goalLocalExtrasPrefsKey(String goalId) => 'goal_local_v1_$goalId';
 Future<void> persistGoalLocalExtras({
   required String goalId,
   required int iconCodePoint,
+  int? iconColorValue,
   double? monthly,
 }) async {
   final p = await SharedPreferences.getInstance();
@@ -16,6 +17,7 @@ Future<void> persistGoalLocalExtras({
     jsonEncode({
       'monthly': monthly,
       'icon': iconCodePoint,
+      'icon_color': iconColorValue,
     }),
   );
 }

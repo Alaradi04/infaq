@@ -88,8 +88,6 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
   double get _totalAllTime =>
       subscriptionAttributedExpenseAllTime(widget.subscription, widget.allTransactions);
 
-  double get _perPeriod => subReadAmount(_amountCtrl.text.replaceAll(',', ''));
-
   Future<void> _pickIcon(ImageSource source) async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
@@ -270,8 +268,7 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final headerBg =
-        isDark ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)! : kInfaqMgmtHeaderMint;
+    final headerBg = isDark ? const Color(0xFF1A2520) : const Color(0xFFE8F2EA);
     final suffix = _currencySuffix();
     final subName = (widget.subscription['name'] ?? 'Subscription').toString();
     final now = DateTime.now();
@@ -281,7 +278,7 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
         _isActive && foodThisMonth > 0 && subSpendThisMonth > foodThisMonth;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: cs.surface,
       extendBody: true,
       bottomNavigationBar: InfaqBottomNavBar(
         tabIndex: -1,
@@ -390,7 +387,7 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
                               final n = _nameCtrl.text.trim();
                               return Text(
                                 n.isNotEmpty ? n : subName,
-                                style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: Color(0xFF1A1A1A)),
+                                style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: cs.onSurface),
                               );
                             },
                           ),
@@ -442,7 +439,7 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
                               children: [
                                 Text(
                                   _cycles.firstWhere((c) => c.$1 == _cycle, orElse: () => _cycles.first).$2,
-                                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: cs.onSurface),
                                 ),
                                 const Icon(Icons.keyboard_arrow_down_rounded, color: kServiceFormGreen),
                               ],
@@ -482,20 +479,20 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
                                         style: TextStyle(
                                           fontSize: 13,
                                           fontWeight: FontWeight.w600,
-                                          color: Colors.black.withValues(alpha: 0.45),
+                                          color: cs.onSurface.withValues(alpha: 0.45),
                                         ),
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
                                         'All time (from your transactions)',
-                                        style: TextStyle(fontSize: 11, color: Colors.black.withValues(alpha: 0.35)),
+                                        style: TextStyle(fontSize: 11, color: cs.onSurface.withValues(alpha: 0.35)),
                                       ),
                                     ],
                                   ),
                                 ),
                                 Text(
                                   '${suffix ?? ''}${_totalAllTime.toStringAsFixed(_totalAllTime % 1 == 0 ? 0 : 2)}',
-                                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: Color(0xFF1A1A1A)),
+                                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: cs.onSurface),
                                 ),
                               ],
                             ),
@@ -585,11 +582,14 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
       children: [
         Text(
           label,
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black.withValues(alpha: 0.45)),
+      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.45)),
         ),
         if (subtitle != null) ...[
           const SizedBox(height: 4),
-          Text(subtitle, style: TextStyle(fontSize: 11, color: Colors.black.withValues(alpha: 0.35))),
+          Text(
+            subtitle,
+            style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.35)),
+          ),
         ],
         const SizedBox(height: 10),
         right,

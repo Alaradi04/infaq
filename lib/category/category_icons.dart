@@ -2,6 +2,16 @@ import 'package:flutter/material.dart';
 
 /// Default when [validatedCategoryIconKey] receives null/unknown.
 const String kDefaultCategoryIconKey = 'category';
+const List<Color> kCategoryColorPalette = <Color>[
+  Color(0xFFE8A87C),
+  Color(0xFFE27D9A),
+  Color(0xFF6B9BD1),
+  Color(0xFF9B7ED9),
+  Color(0xFF4D6658),
+  Color(0xFF2BB3A8),
+  Color(0xFFC9A227),
+  Color(0xFF7EB6DF),
+];
 
 class CategoryIconChoice {
   const CategoryIconChoice({required this.key, required this.icon, required this.label});
@@ -170,6 +180,17 @@ IconData _iconFromStableCategorySeed({
   }
   final choices = kCategoryIconChoices;
   return choices[h.abs() % choices.length].icon;
+}
+
+Color categoryDisplayColor(String rawName) {
+  final name = rawName.trim().toLowerCase();
+  if (name.isEmpty) return kCategoryColorPalette.first;
+  var h = 5381;
+  for (final unit in name.codeUnits) {
+    h = ((h << 5) + h + unit) & 0x7fffffff;
+  }
+  final hue = (h % 360).toDouble();
+  return HSVColor.fromAHSV(1, hue, 0.5, 0.88).toColor();
 }
 
 /// Compact grid of icon choices for dialogs.

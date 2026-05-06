@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:infaq/analytics/insights_models.dart';
+import 'package:infaq/category/category_icons.dart';
 import 'package:infaq/subscription/subscription_analytics.dart';
 
 DateTime? parseTxLocalDate(Map<String, dynamic> t) {
@@ -116,23 +117,11 @@ List<CategorySpendSlice> buildCategorySlices(
   DateTime start,
   DateTime end,
 ) {
-  const palette = <Color>[
-    Color(0xFFE8A87C),
-    Color(0xFFE27D9A),
-    Color(0xFF6B9BD1),
-    Color(0xFF9B7ED9),
-    Color(0xFF3F5F4A),
-    Color(0xFF2BB3A8),
-    Color(0xFFC9A227),
-    Color(0xFF7EB6DF),
-  ];
   final map = expenseByCategory(transactions, start, end);
   final entries = map.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
   final out = <CategorySpendSlice>[];
-  var i = 0;
   for (final e in entries) {
-    out.add(CategorySpendSlice(name: e.key, amount: e.value, color: palette[i % palette.length]));
-    i++;
+    out.add(CategorySpendSlice(name: e.key, amount: e.value, color: categoryDisplayColor(e.key)));
   }
   return out;
 }

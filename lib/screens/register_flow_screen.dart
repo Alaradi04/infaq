@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -272,63 +273,71 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
         _onRegistrationBack();
       },
       child: Scaffold(
-        body: ListView(
-          padding: const EdgeInsets.only(bottom: 24),
-          children: [
-            InfaqHeader(showBack: true, onBack: _onRegistrationBack),
-          const SizedBox(height: 10),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 22),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Create account',
-                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  _step == 1 ? 'Start your journey to better financial health' : 'Just a little more',
-                  style: TextStyle(color: Colors.black.withValues(alpha: 0.55)),
-                ),
-                const SizedBox(height: 20),
-                if (_step == 1) ..._buildStep1(context) else ..._buildStep2(context),
-                const SizedBox(height: 20),
-                if (_step > 1) ...[
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: InfaqTextButton(
-                      label: 'Back',
-                      onTap: () => setState(() => _step--),
+        backgroundColor: Colors.white,
+        body: AnnotatedRegion<SystemUiOverlayStyle>(
+          value: const SystemUiOverlayStyle(
+            statusBarColor: Colors.white,
+            statusBarIconBrightness: Brightness.dark,
+            statusBarBrightness: Brightness.light,
+          ),
+          child: ListView(
+            padding: const EdgeInsets.only(bottom: 24),
+            children: [
+              InfaqHeader(showBack: true, onBack: _onRegistrationBack),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 22),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Create account',
+                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _step == 1 ? 'Start your journey to better financial health' : 'Just a little more',
+                    style: TextStyle(color: Colors.black.withValues(alpha: 0.55)),
+                  ),
+                  const SizedBox(height: 20),
+                  if (_step == 1) ..._buildStep1(context) else ..._buildStep2(context),
+                  const SizedBox(height: 20),
+                  if (_step > 1) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: InfaqTextButton(
+                        label: 'Back',
+                        onTap: () => setState(() => _step--),
+                      ),
                     ),
+                    const SizedBox(height: 10),
+                  ],
+                  InfaqPrimaryButton(
+                    label: _step == 1 ? 'Next' : 'Sign up',
+                    isLoading: _loading,
+                    onPressed: _googleLoading ? null : _next,
                   ),
                   const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text('Already have an account? ', style: TextStyle(color: Colors.black.withValues(alpha: 0.55))),
+                      InfaqTextButton(
+                        label: 'Sign in',
+                        onTap: () {
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ],
-                InfaqPrimaryButton(
-                  label: _step == 1 ? 'Next' : 'Sign up',
-                  isLoading: _loading,
-                  onPressed: _googleLoading ? null : _next,
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('Already have an account? ', style: TextStyle(color: Colors.black.withValues(alpha: 0.55))),
-                    InfaqTextButton(
-                      label: 'Sign in',
-                      onTap: () {
-                        Navigator.of(context).pushReplacement(
-                          MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
+        ),
       ),
     );
   }

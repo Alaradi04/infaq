@@ -3,7 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/app_theme_mode.dart';
 
-const Color _kPrimary = Color(0xFF3F5F4A);
+const Color _kPrimary = Color(0xFF4D6658);
 const Color _kProfileHeaderGreen = Color(0xFFE8F5E9);
 /// Soft sage ring for the name pill (light mode); aligns with primary green, not blue.
 const Color _kNamePillBorderLight = Color(0xFF9DB5A3);
@@ -39,6 +39,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isSystem = AppThemeMode.instance.isSystem;
     final name = widget.displayName?.trim();
     final label = (name != null && name.isNotEmpty) ? name : 'Your profile';
 
@@ -144,9 +145,16 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                       Divider(height: 1, color: cs.outline.withValues(alpha: 0.2)),
                       _toggleTile(
                         context,
+                        title: 'Use device theme',
+                        value: isSystem,
+                        onChanged: (v) => AppThemeMode.instance.setSystem(v),
+                      ),
+                      Divider(height: 1, color: cs.outline.withValues(alpha: 0.2)),
+                      _toggleTile(
+                        context,
                         title: 'Dark mode',
                         value: isDark,
-                        onChanged: (v) => AppThemeMode.instance.setDark(v),
+                        onChanged: isSystem ? null : (v) => AppThemeMode.instance.setDark(v),
                       ),
                     ],
                   ),
@@ -258,7 +266,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
     BuildContext context, {
     required String title,
     required bool value,
-    required ValueChanged<bool> onChanged,
+    required ValueChanged<bool>? onChanged,
   }) {
     final cs = Theme.of(context).colorScheme;
     return SwitchListTile.adaptive(
@@ -267,7 +275,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
         style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: cs.onSurface),
       ),
       value: value,
-      activeColor: Colors.white,
+      activeThumbColor: Colors.white,
       activeTrackColor: isDark(context) ? cs.primary : _kPrimary,
       inactiveThumbColor: Colors.grey.shade400,
       inactiveTrackColor: Colors.grey.shade300,

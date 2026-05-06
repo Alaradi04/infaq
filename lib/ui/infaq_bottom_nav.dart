@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 /// App primary green (labels, selected tab).
-const Color kInfaqPrimaryGreen = Color(0xFF3F5F4A);
+const Color kInfaqPrimaryGreen = Color(0xFF4D6658);
 
 /// Center CTA on the bottom bar.
-const Color kInfaqNavCenterGreen = Color(0xFF3E5C45);
+const Color kInfaqNavCenterGreen = Color(0xFF4A6356);
 
 /// Bottom navigation: white rounded bar + raised center add button.
 class InfaqBottomNavBar extends StatelessWidget {

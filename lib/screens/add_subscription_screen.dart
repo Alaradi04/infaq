@@ -268,12 +268,10 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
 
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final headerBg = isDark
-        ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)!
-        : kInfaqMgmtHeaderMint;
+    final headerBg = isDark ? const Color(0xFF1A2520) : const Color(0xFFE8F2EA);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: cs.surface,
       extendBody: true,
       bottomNavigationBar: InfaqBottomNavBar(
         tabIndex: -1,
@@ -319,7 +317,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                             vertical: 12,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF7F8F7),
+                            color: isDark ? cs.surfaceContainerHigh : const Color(0xFFF7F8F7),
                             borderRadius: BorderRadius.circular(22),
                             border: Border.all(
                               color: kServiceFormGreen.withValues(alpha: 0.2),
@@ -332,7 +330,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                                 children: [
                                   CircleAvatar(
                                     radius: 28,
-                                    backgroundColor: Colors.white,
+                                    backgroundColor: isDark ? cs.surfaceContainerHighest : Colors.white,
                                     backgroundImage: _iconPreviewBytes != null
                                         ? MemoryImage(_iconPreviewBytes!)
                                         : (_iconStoragePath != null &&
@@ -350,7 +348,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                                                 _iconStoragePath!.isEmpty)
                                         ? Icon(
                                             Icons.add_photo_alternate_outlined,
-                                            color: Colors.grey.shade500,
+                                            color: cs.onSurface.withValues(alpha: 0.5),
                                             size: 28,
                                           )
                                         : null,
@@ -375,14 +373,14 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                                       : 'Tap to add subscription icon',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
-                                    color: Colors.black.withValues(alpha: 0.55),
+                                    color: cs.onSurface.withValues(alpha: 0.65),
                                     fontSize: 14,
                                   ),
                                 ),
                               ),
                               Icon(
                                 Icons.chevron_right_rounded,
-                                color: Colors.black.withValues(alpha: 0.25),
+                                color: cs.onSurface.withValues(alpha: 0.35),
                               ),
                             ],
                           ),
@@ -441,7 +439,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(28),
                         ),
-                        backgroundColor: Colors.white,
+                        backgroundColor: cs.surface,
                         elevation: 0,
                       ),
                       child: const Text(

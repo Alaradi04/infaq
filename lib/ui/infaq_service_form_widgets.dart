@@ -16,13 +16,15 @@ BoxDecoration infaqServicePillDecoration(BuildContext context) {
     color: isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLowest,
     borderRadius: BorderRadius.circular(24),
     border: isDark ? Border.all(color: cs.outline.withValues(alpha: 0.22)) : null,
-    boxShadow: [
-      BoxShadow(
-        color: Colors.black.withValues(alpha: isDark ? 0.32 : 0.09),
-        blurRadius: 18,
-        offset: const Offset(0, 6),
-      ),
-    ],
+    boxShadow: isDark
+        ? null
+        : [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
   );
 }
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -60,7 +61,10 @@ class _StartupShellState extends State<_StartupShell> {
       ).timeout(_kSupabaseInitTimeout);
     } on TimeoutException {
       if (!mounted) return;
-      setState(() => _error = 'Connection timed out while starting. Check internet, VPN, firewall, and Supabase URL.');
+      setState(
+        () => _error =
+            'Connection timed out while starting. Check internet, VPN, firewall, and Supabase URL.',
+      );
       return;
     } catch (e, st) {
       debugPrint('Supabase init failed: $e\n$st');
@@ -98,7 +102,10 @@ class _StartupShellState extends State<_StartupShell> {
                   Text(
                     _error.toString(),
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.black.withValues(alpha: 0.65), height: 1.35),
+                    style: TextStyle(
+                      color: Colors.black.withValues(alpha: 0.65),
+                      height: 1.35,
+                    ),
                   ),
                   const SizedBox(height: 28),
                   FilledButton(
@@ -128,7 +135,10 @@ class _StartupShellState extends State<_StartupShell> {
                 const SizedBox(height: 20),
                 Text(
                   'Starting…',
-                  style: TextStyle(color: Colors.black.withValues(alpha: 0.55), fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
@@ -144,8 +154,10 @@ class _StartupShellState extends State<_StartupShell> {
 class MainApp extends StatelessWidget {
   const MainApp({super.key});
 
-  static const Color _primary = Color(0xFF3F5F4A);
+  static const Color _primary = Color(0xFF4D6658);
   static const Color _surface = Color(0xFFF4F6F4);
+  static const Color _headerLight = Color(0xFFE8F2EA);
+  static const Color _headerDark = Color(0xFF1A2520);
 
   @override
   Widget build(BuildContext context) {
@@ -155,6 +167,27 @@ class MainApp extends StatelessWidget {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           themeMode: AppThemeMode.instance.themeMode,
+          builder: (context, child) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final statusBg = isDark ? _headerDark : _headerLight;
+            final style = SystemUiOverlayStyle(
+              statusBarColor: statusBg,
+              systemNavigationBarColor: Theme.of(
+                context,
+              ).scaffoldBackgroundColor,
+              statusBarIconBrightness: isDark
+                  ? Brightness.light
+                  : Brightness.dark,
+              statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+              systemNavigationBarIconBrightness: isDark
+                  ? Brightness.light
+                  : Brightness.dark,
+            );
+            return AnnotatedRegion<SystemUiOverlayStyle>(
+              value: style,
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
           theme: ThemeData(
             useMaterial3: true,
             colorScheme: ColorScheme.fromSeed(
@@ -173,22 +206,28 @@ class MainApp extends StatelessWidget {
               headlineSmall: TextStyle(fontWeight: FontWeight.w700),
               titleMedium: TextStyle(fontWeight: FontWeight.w600),
             ),
+            appBarTheme: const AppBarTheme(
+              systemOverlayStyle: SystemUiOverlayStyle.dark,
+            ),
           ),
           darkTheme: ThemeData(
             useMaterial3: true,
             colorScheme: ColorScheme.fromSeed(
               seedColor: _primary,
-              primary: const Color(0xFF8BC4A0),
-              secondary: const Color(0xFF6B9B7E),
-              surface: const Color(0xFF1E2422),
-              surfaceContainerHighest: const Color(0xFF2A302E),
-              onSurface: const Color(0xFFE8ECEA),
+              primary: const Color(0xFF89B89D),
+              secondary: const Color(0xFF6F9580),
+              surface: const Color(0xFF000000),
+              surfaceContainerHighest: const Color(0xFF1B1B1B),
+              onSurface: const Color(0xFFEAEAEA),
               brightness: Brightness.dark,
             ),
-            scaffoldBackgroundColor: const Color(0xFF121816),
+            scaffoldBackgroundColor: const Color(0xFF000000),
             textTheme: const TextTheme(
               headlineSmall: TextStyle(fontWeight: FontWeight.w700),
               titleMedium: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            appBarTheme: const AppBarTheme(
+              systemOverlayStyle: SystemUiOverlayStyle.light,
             ),
           ),
           home: const AuthGate(),
@@ -247,7 +286,9 @@ class _AuthGateState extends State<AuthGate> {
           builder: (context, snap) {
             if (snap.connectionState != ConnectionState.done) {
               return Scaffold(
-                body: Center(child: CircularProgressIndicator(color: cs.primary)),
+                body: Center(
+                  child: CircularProgressIndicator(color: cs.primary),
+                ),
               );
             }
             final exists = snap.data ?? false;

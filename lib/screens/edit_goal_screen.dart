@@ -27,6 +27,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
 
   late DateTime _deadline;
   IconData _goalIcon = Icons.menu_book_rounded;
+  Color _goalIconColor = kServiceFormGreen;
   bool _saving = false;
   bool _extrasLoaded = false;
 
@@ -43,8 +44,12 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
     super.initState();
     final t = widget.goal['title']?.toString() ?? '';
     _titleCtrl = TextEditingController(text: t);
-    _targetCtrl = TextEditingController(text: _readAmount(widget.goal['target_amount']).toStringAsFixed(0));
-    _reachedCtrl = TextEditingController(text: _readAmount(widget.goal['current_amount']).toStringAsFixed(0));
+    _targetCtrl = TextEditingController(
+      text: _readAmount(widget.goal['target_amount']).toStringAsFixed(0),
+    );
+    _reachedCtrl = TextEditingController(
+      text: _readAmount(widget.goal['current_amount']).toStringAsFixed(0),
+    );
     _monthlyCtrl = TextEditingController();
 
     final rawD = widget.goal['deadline'];
@@ -66,13 +71,19 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
         final m = jsonDecode(raw) as Map<String, dynamic>;
         final monthly = (m['monthly'] as num?)?.toDouble();
         if (monthly != null && monthly > 0) {
-          _monthlyCtrl.text = monthly % 1 == 0 ? monthly.toStringAsFixed(0) : monthly.toStringAsFixed(2);
+          _monthlyCtrl.text = monthly % 1 == 0
+              ? monthly.toStringAsFixed(0)
+              : monthly.toStringAsFixed(2);
         }
         final iconCp = (m['icon'] as num?)?.toInt();
+        final iconColor = (m['icon_color'] as num?)?.toInt();
         if (mounted) {
           setState(() {
             if (iconCp != null) {
               _goalIcon = IconData(iconCp, fontFamily: 'MaterialIcons');
+            }
+            if (iconColor != null) {
+              _goalIconColor = Color(iconColor);
             }
             _extrasLoaded = true;
           });
@@ -92,6 +103,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
     await persistGoalLocalExtras(
       goalId: id,
       iconCodePoint: _goalIcon.codePoint,
+      iconColorValue: _goalIconColor.toARGB32(),
       monthly: monthly,
     );
   }
@@ -157,7 +169,9 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
       lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
-          data: Theme.of(context).copyWith(colorScheme: Theme.of(context).colorScheme),
+          data: Theme.of(
+            context,
+          ).copyWith(colorScheme: Theme.of(context).colorScheme),
           child: child!,
         );
       },
@@ -175,7 +189,10 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Delete this goal?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: Text('Delete', style: TextStyle(color: Colors.red.shade700)),
@@ -185,7 +202,11 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
     );
     if (ok != true || !mounted) return;
     try {
-      await Supabase.instance.client.from('goals').delete().eq('id', id).eq('created_by', user.id);
+      await Supabase.instance.client
+          .from('goals')
+          .delete()
+          .eq('id', id)
+          .eq('created_by', user.id);
       await _clearExtras();
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -224,12 +245,16 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
       final deadline =
           '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-      await Supabase.instance.client.from('goals').update({
-        'title': title,
-        'target_amount': target,
-        'current_amount': reached,
-        'deadline': deadline,
-      }).eq('id', id).eq('created_by', user.id);
+      await Supabase.instance.client
+          .from('goals')
+          .update({
+            'title': title,
+            'target_amount': target,
+            'current_amount': reached,
+            'deadline': deadline,
+          })
+          .eq('id', id)
+          .eq('created_by', user.id);
 
       await _persistExtras();
       if (!mounted) return;
@@ -239,7 +264,10 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
       setState(() => _saving = false);
       final msg = e.toString();
       if (msg.contains('row-level security') || msg.contains('42501')) {
-        showInfaqSnack(context, 'Could not save: check database access for goals.');
+        showInfaqSnack(
+          context,
+          'Could not save: check database access for goals.',
+        );
       } else {
         showInfaqSnack(context, 'Could not save: $e');
       }
@@ -250,7 +278,11 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
     showGoalIconPickerSheet(
       context,
       selectedIcon: _goalIcon,
-      onSelected: (ic) => setState(() => _goalIcon = ic),
+      selectedColor: _goalIconColor,
+      onSelected: (ic, color) => setState(() {
+        _goalIcon = ic;
+        _goalIconColor = color;
+      }),
     );
   }
 
@@ -258,8 +290,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final headerBg =
-        isDark ? Color.lerp(cs.primaryContainer, cs.surface, 0.35)! : kInfaqMgmtHeaderMint;
+    final headerBg = isDark ? const Color(0xFF1A2520) : const Color(0xFFE8F2EA);
     final suffix = _currencySuffix();
     final target = double.tryParse(_targetCtrl.text.replaceAll(',', ''));
     final reached = double.tryParse(_reachedCtrl.text.replaceAll(',', '')) ?? 0;
@@ -293,7 +324,11 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
             onBack: _cancel,
             trailing: IconButton(
               onPressed: _confirmDelete,
-              icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade600, size: 24),
+              icon: Icon(
+                Icons.delete_outline_rounded,
+                color: Colors.red.shade600,
+                size: 24,
+              ),
             ),
           ),
           Expanded(
@@ -312,21 +347,27 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                             width: 92,
                             height: 92,
                             decoration: BoxDecoration(
-                              color: kServiceFormGreen.withValues(alpha: 0.14),
+                              color: _goalIconColor.withValues(alpha: 0.14),
                               borderRadius: BorderRadius.circular(22),
                               border: Border.all(
-                                color: kServiceFormGreen.withValues(alpha: 0.28),
+                                color: _goalIconColor.withValues(alpha: 0.28),
                                 width: 1,
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: cs.shadow.withValues(alpha: isDark ? 0.35 : 0.12),
+                                  color: cs.shadow.withValues(
+                                    alpha: isDark ? 0.35 : 0.12,
+                                  ),
                                   blurRadius: 16,
                                   offset: const Offset(0, 6),
                                 ),
                               ],
                             ),
-                            child: Icon(_goalIcon, color: kServiceFormGreen, size: 40),
+                            child: Icon(
+                              _goalIcon,
+                              color: _goalIconColor,
+                              size: 40,
+                            ),
                           ),
                           Positioned(
                             right: -4,
@@ -340,7 +381,11 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                                 customBorder: const CircleBorder(),
                                 child: Padding(
                                   padding: const EdgeInsets.all(6),
-                                  child: Icon(Icons.edit_rounded, size: 16, color: kServiceFormGreen),
+                                  child: Icon(
+                                    Icons.edit_rounded,
+                                    size: 16,
+                                    color: _goalIconColor,
+                                  ),
                                 ),
                               ),
                             ),
@@ -385,7 +430,11 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                             const SizedBox(height: 4),
                             Text(
                               _fmtMoney(reached),
-                              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: cs.onSurface),
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w800,
+                                color: cs.onSurface,
+                              ),
                             ),
                           ],
                         ),
@@ -434,7 +483,9 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                       borderRadius: BorderRadius.circular(22),
                       boxShadow: [
                         BoxShadow(
-                          color: cs.shadow.withValues(alpha: isDark ? 0.25 : 0.08),
+                          color: cs.shadow.withValues(
+                            alpha: isDark ? 0.25 : 0.08,
+                          ),
                           blurRadius: 18,
                           offset: const Offset(0, 6),
                         ),
@@ -505,12 +556,20 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                       onPressed: _saving ? null : _cancel,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: cs.primary,
-                        side: BorderSide(color: cs.primary.withValues(alpha: 0.45), width: 1.4),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                        side: BorderSide(
+                          color: cs.primary.withValues(alpha: 0.45),
+                          width: 1.4,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
+                        ),
                         backgroundColor: cs.surface,
                         elevation: 0,
                       ),
-                      child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700)),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
                     ),
                   ),
                 ],
