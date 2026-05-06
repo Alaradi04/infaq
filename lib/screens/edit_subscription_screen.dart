@@ -456,6 +456,34 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
                       onTap: _pickDate,
                     ),
                   ),
+                  const SizedBox(height: 18),
+                  Semantics(
+                    label: 'Subscription active',
+                    toggled: _isActive,
+                    child: Container(
+                      decoration: infaqServicePillDecoration(context),
+                      padding: const EdgeInsets.only(left: 16, right: 8, top: 4, bottom: 4),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Active',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: cs.onSurface,
+                            ),
+                          ),
+                          const Spacer(),
+                          Switch(
+                            value: _isActive,
+                            onChanged: (v) => setState(() => _isActive = v),
+                            activeTrackColor: kServiceFormGreen,
+                            inactiveTrackColor: cs.onSurface.withValues(alpha: 0.2),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 28),
                   InfaqPrimaryButton(
                     label: 'Save changes',

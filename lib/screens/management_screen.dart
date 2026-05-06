@@ -11,7 +11,6 @@ import 'package:infaq/screens/add_goal_screen.dart';
 import 'package:infaq/screens/add_subscription_screen.dart';
 import 'package:infaq/screens/edit_goal_screen.dart';
 import 'package:infaq/screens/edit_subscription_screen.dart';
-import 'package:infaq/subscription/subscription_analytics.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
@@ -1140,14 +1139,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
     }
     switch (_subFilter) {
       case _SubFilter.activeOnly:
-        list = list
-            .where((s) => parseSubscriptionIsActive(s['is_active']))
-            .toList();
+        list = list.where((s) => s['is_active'] == true).toList();
         break;
       case _SubFilter.inactiveOnly:
-        list = list
-            .where((s) => !parseSubscriptionIsActive(s['is_active']))
-            .toList();
+        list = list.where((s) => s['is_active'] == false).toList();
         break;
       case _SubFilter.all:
         break;
@@ -1446,7 +1441,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
   Widget _buildSubscriptionDismissibleCard(Map<String, dynamic> s) {
     final cs = Theme.of(context).colorScheme;
     final sid = s['id']?.toString() ?? s.hashCode.toString();
-    final active = parseSubscriptionIsActive(s['is_active']);
+    final dimInactive = s['is_active'] == false;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Dismissible(
@@ -1467,7 +1462,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
         ),
         confirmDismiss: (_) => _confirmDeleteSubscription(s),
         child: Opacity(
-          opacity: active ? 1 : 0.55,
+          opacity: dimInactive ? 0.55 : 1,
           child: Material(
             color: cs.surfaceContainerLow,
             borderRadius: BorderRadius.circular(20),
