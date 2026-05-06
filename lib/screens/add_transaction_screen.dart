@@ -10,24 +10,29 @@ import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
 BoxDecoration _addTxPillDecoration(BuildContext context) => BoxDecoration(
-      color: Theme.of(context).colorScheme.surfaceContainerLowest,
-      borderRadius: BorderRadius.circular(999),
-      boxShadow: const [],
-    );
+  color: Theme.of(context).colorScheme.surfaceContainerLowest,
+  borderRadius: BorderRadius.circular(999),
+  boxShadow: const [],
+);
 
 class _CategoryRow {
-  _CategoryRow({required this.id, required this.name, required this.type, this.iconKey});
+  _CategoryRow({
+    required this.id,
+    required this.name,
+    required this.type,
+    this.iconKey,
+  });
   final String id;
   final String name;
   final String type;
   final String? iconKey;
 
   IconData get displayIcon => categoryIconForDisplay(
-        iconKey: iconKey,
-        name: name,
-        type: type,
-        categoryId: id,
-      );
+    iconKey: iconKey,
+    name: name,
+    type: type,
+    categoryId: id,
+  );
 }
 
 /// Full-screen add or edit flow. Pops with `true` if a transaction was saved,
@@ -41,6 +46,7 @@ class AddTransactionScreen extends StatefulWidget {
     super.key,
     this.currencyCode,
     this.existingTransaction,
+
     /// When adding (not editing), pre-select Income (`true`) or Expense (`false`).
     this.initialIncome,
   });
@@ -102,8 +108,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     _descCtrl.text = (ex['description'] ?? ex['title'] ?? '').toString();
     final amt = ex['amount'];
     if (amt != null) {
-      final n = amt is num ? amt.toDouble() : double.tryParse(amt.toString()) ?? 0;
-      _amountCtrl.text = n % 1 == 0 ? n.toStringAsFixed(0) : n.toStringAsFixed(2);
+      final n = amt is num
+          ? amt.toDouble()
+          : double.tryParse(amt.toString()) ?? 0;
+      _amountCtrl.text = n % 1 == 0
+          ? n.toStringAsFixed(0)
+          : n.toStringAsFixed(2);
     }
 
     final cid = ex['category_id']?.toString();
@@ -172,9 +182,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             final id = m['id']?.toString();
             final name = m['name']?.toString() ?? '';
             final type = (m['type']?.toString() ?? 'expense').toLowerCase();
-            final iconKey = _supportsCategoryIconKey ? m['icon_key']?.toString() : null;
+            final iconKey = _supportsCategoryIconKey
+                ? m['icon_key']?.toString()
+                : null;
             if (id == null) return null;
-            return _CategoryRow(id: id, name: name, type: type, iconKey: iconKey);
+            return _CategoryRow(
+              id: id,
+              name: name,
+              type: type,
+              iconKey: iconKey,
+            );
           })
           .whereType<_CategoryRow>()
           .toList();
@@ -197,8 +214,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     }
   }
 
-  List<_CategoryRow> get _filteredCategories =>
-      _categories.where((c) => c.type == (_isIncome ? 'income' : 'expense')).toList();
+  List<_CategoryRow> get _filteredCategories => _categories
+      .where((c) => c.type == (_isIncome ? 'income' : 'expense'))
+      .toList();
 
   _CategoryRow? get _selectedCategory {
     if (_categoryId == null) return null;
@@ -228,7 +246,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     setState(() => _aiCategorizing = true);
     try {
-      final amountValue = double.tryParse(_amountCtrl.text.trim().replaceAll(',', '')) ?? 0;
+      final amountValue =
+          double.tryParse(_amountCtrl.text.trim().replaceAll(',', '')) ?? 0;
       final result = await AiService().categorizeTransaction(
         transactionName: desc,
         amount: amountValue,
@@ -240,7 +259,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       final suggested = (result['suggested_category'] ?? '').toString().trim();
       final confidence = result['confidence']?.toString();
       final leafColor = result['leaf_color']?.toString();
-      final match = _filteredCategories.where((c) => c.name.toLowerCase() == suggested.toLowerCase());
+      final match = _filteredCategories.where(
+        (c) => c.name.toLowerCase() == suggested.toLowerCase(),
+      );
       final matchedCategory = match.isEmpty ? null : match.first;
 
       if (!mounted) return;
@@ -286,9 +307,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(primary: _primary),
-          ),
+          data: Theme.of(
+            context,
+          ).copyWith(colorScheme: const ColorScheme.light(primary: _primary)),
           child: child!,
         );
       },
@@ -320,7 +341,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       const Expanded(
                         child: Text(
                           'Category',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                       IconButton(
@@ -339,7 +363,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         leading: Icon(c.displayIcon, color: _primary, size: 26),
                         title: Text(c.name),
                         trailing: _categoryId == c.id
-                            ? const Icon(Icons.check_circle_rounded, color: _primary)
+                            ? const Icon(
+                                Icons.check_circle_rounded,
+                                color: _primary,
+                              )
                             : null,
                         onTap: () => Navigator.pop(ctx, c.id),
                       );
@@ -361,7 +388,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final amount = double.tryParse(amountRaw);
 
     if (desc.isEmpty) {
-      showInfaqSnack(context, 'Add a short description (e.g. what you bought or received).');
+      showInfaqSnack(
+        context,
+        'Add a short description (e.g. what you bought or received).',
+      );
       return;
     }
     if (amount == null || amount <= 0) {
@@ -383,26 +413,46 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     try {
       final dateStr =
           '${_date.year.toString().padLeft(4, '0')}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}';
+      Map<String, dynamic>? leafData;
+      if (!_isIncome) {
+        final categoryName = _selectedCategory?.name.trim() ?? '';
+        if (categoryName.isNotEmpty) {
+          try {
+            leafData = await AiService().classifyLeafImpact(
+              transactionName: desc,
+              category: categoryName,
+              transactionType: 'expense',
+            );
+            debugPrint(
+              'leaf classified from edge function: color=${leafData['leaf_color']}',
+            );
+          } catch (e, st) {
+            debugPrint('leaf classify failed during save: $e\n$st');
+          }
+        }
+      }
+
+      final txPayload = <String, dynamic>{
+        'amount': amount,
+        'category_id': _categoryId,
+        'description': desc,
+        'date': dateStr,
+        'leaf_color': _isIncome ? null : leafData?['leaf_color'],
+        'leaf_title': _isIncome ? null : leafData?['title'],
+        'leaf_message': _isIncome ? null : leafData?['message'],
+      };
 
       final client = Supabase.instance.client;
       if (_isEditing) {
         await client
             .from('transactions')
-            .update({
-              'amount': amount,
-              'category_id': _categoryId,
-              'description': desc,
-              'date': dateStr,
-            })
+            .update(txPayload)
             .eq('id', _existingId!)
             .eq('user_id', user.id);
       } else {
         await client.from('transactions').insert({
           'user_id': user.id,
-          'amount': amount,
-          'category_id': _categoryId,
-          'description': desc,
-          'date': dateStr,
+          ...txPayload,
         });
       }
 
@@ -461,7 +511,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       children: [
                         IconButton(
                           onPressed: _cancel,
-                          icon: Icon(Icons.arrow_back_ios_new_rounded, color: cs.primary),
+                          icon: Icon(
+                            Icons.arrow_back_ios_new_rounded,
+                            color: cs.primary,
+                          ),
                         ),
                         Expanded(
                           child: Text(
@@ -508,9 +561,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       textInputAction: TextInputAction.next,
                       onChanged: (value) {
                         _aiDebounce?.cancel();
-                        _aiDebounce = Timer(const Duration(milliseconds: 700), () {
-                          _suggestCategoryWithAi(value);
-                        });
+                        _aiDebounce = Timer(
+                          const Duration(milliseconds: 700),
+                          () {
+                            _suggestCategoryWithAi(value);
+                          },
+                        );
                       },
                     ),
                   ),
@@ -520,7 +576,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     child: _ShadowTextField(
                       controller: _amountCtrl,
                       hintText: '${prefix}0',
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
                       ],
@@ -537,7 +595,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         child: Ink(
                           decoration: _addTxPillDecoration(context),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 16,
+                            ),
                             child: Row(
                               children: [
                                 Expanded(
@@ -545,12 +606,17 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                                     '${_date.day}/${_date.month}/${_date.year}',
                                     style: TextStyle(
                                       fontSize: 16,
-                                      color: cs.onSurface.withValues(alpha: 0.75),
+                                      color: cs.onSurface.withValues(
+                                        alpha: 0.75,
+                                      ),
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                 ),
-                                const Icon(Icons.calendar_month_rounded, color: _primary),
+                                const Icon(
+                                  Icons.calendar_month_rounded,
+                                  color: _primary,
+                                ),
                               ],
                             ),
                           ),
@@ -571,11 +637,19 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         child: Ink(
                           decoration: _addTxPillDecoration(context),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 16,
+                            ),
                             child: Row(
                               children: [
-                                if (_selectedCategory != null && !_loadingCategories) ...[
-                                  Icon(_selectedCategory!.displayIcon, color: _primary, size: 22),
+                                if (_selectedCategory != null &&
+                                    !_loadingCategories) ...[
+                                  Icon(
+                                    _selectedCategory!.displayIcon,
+                                    color: _primary,
+                                    size: 22,
+                                  ),
                                   const SizedBox(width: 12),
                                 ],
                                 Expanded(
@@ -583,21 +657,31 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                                       ? Text(
                                           'Loading…',
                                           style: TextStyle(
-                                            color: cs.onSurface.withValues(alpha: 0.45),
+                                            color: cs.onSurface.withValues(
+                                              alpha: 0.45,
+                                            ),
                                           ),
                                         )
                                       : Text(
-                                          _selectedCategory?.name ?? 'Choose a category',
+                                          _selectedCategory?.name ??
+                                              'Choose a category',
                                           style: TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.w500,
                                             color: _selectedCategory != null
-                                                ? cs.onSurface.withValues(alpha: 0.85)
-                                                : cs.onSurface.withValues(alpha: 0.45),
+                                                ? cs.onSurface.withValues(
+                                                    alpha: 0.85,
+                                                  )
+                                                : cs.onSurface.withValues(
+                                                    alpha: 0.45,
+                                                  ),
                                           ),
                                         ),
                                 ),
-                                const Icon(Icons.keyboard_arrow_down_rounded, color: _primary),
+                                const Icon(
+                                  Icons.keyboard_arrow_down_rounded,
+                                  color: _primary,
+                                ),
                               ],
                             ),
                           ),
@@ -608,7 +692,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   if (_aiConfidence != null) ...[
                     const SizedBox(height: 8),
                     Text(
-                      _aiCategorizing ? 'AI suggesting category...' : 'AI suggested this category',
+                      _aiCategorizing
+                          ? 'AI suggesting category...'
+                          : 'AI suggested this category',
                       style: TextStyle(
                         fontSize: 12,
                         color: switch (_aiLeafColor) {
@@ -624,9 +710,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     const SizedBox(height: 8),
                     Text(
                       _categoryError!,
-                      style: TextStyle(fontSize: 13, color: Colors.red.shade700),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.red.shade700,
+                      ),
                     ),
-                    TextButton(onPressed: _loadCategories, child: const Text('Retry')),
+                    TextButton(
+                      onPressed: _loadCategories,
+                      child: const Text('Retry'),
+                    ),
                   ],
                   if (!_loadingCategories &&
                       _categoryError == null &&
@@ -634,7 +726,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     const SizedBox(height: 8),
                     Text(
                       'No ${_isIncome ? 'income' : 'expense'} categories yet. Add some in Supabase.',
-                      style: TextStyle(fontSize: 13, color: cs.onSurface.withValues(alpha: 0.55)),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: cs.onSurface.withValues(alpha: 0.55),
+                      ),
                     ),
                   ],
                   const SizedBox(height: 28),
@@ -658,7 +753,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         backgroundColor: cs.surface,
                         elevation: 0,
                       ),
-                      child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700)),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
                     ),
                   ),
                 ],
@@ -692,7 +790,9 @@ class _LabeledField extends StatelessWidget {
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w700,
-            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55),
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.55),
           ),
         ),
         if (subtitle != null) ...[
@@ -701,7 +801,9 @@ class _LabeledField extends StatelessWidget {
             subtitle!,
             style: TextStyle(
               fontSize: 12,
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.45),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.45),
               height: 1.25,
             ),
           ),
@@ -745,7 +847,10 @@ class _ShadowTextField extends StatelessWidget {
           hintText: hintText,
           filled: true,
           fillColor: cs.surfaceContainerLowest,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 16,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(999),
             borderSide: BorderSide.none,
@@ -788,11 +893,7 @@ class _ExpenseIncomeToggle extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: _Seg(
-              label: 'Income',
-              selected: isIncome,
-              onTap: onIncome,
-            ),
+            child: _Seg(label: 'Income', selected: isIncome, onTap: onIncome),
           ),
         ],
       ),
@@ -801,7 +902,11 @@ class _ExpenseIncomeToggle extends StatelessWidget {
 }
 
 class _Seg extends StatelessWidget {
-  const _Seg({required this.label, required this.selected, required this.onTap});
+  const _Seg({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   final String label;
   final bool selected;
@@ -827,7 +932,11 @@ class _Seg extends StatelessWidget {
               label,
               style: TextStyle(
                 fontWeight: FontWeight.w800,
-            color: selected ? Colors.white : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.65),
+                color: selected
+                    ? Colors.white
+                    : Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.65),
               ),
             ),
           ),

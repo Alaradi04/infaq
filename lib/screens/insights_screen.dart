@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -44,9 +46,18 @@ class _InsightsScreenState extends State<InsightsScreen> {
   List<Map<String, dynamic>> _aiInsightCards = [];
   bool _loadingAiInsights = false;
   final _aiService = AiService();
+  bool _loadingEnvironmentalImpact = false;
+  ({int green, int orange, int red, int total}) _leafImpactTotals = (
+    green: 0,
+    orange: 0,
+    red: 0,
+    total: 0,
+  );
+  final Map<String, String?> _leafColorCacheByTransactionId = {};
 
   String get _effectiveFilterDescription {
-    if (_customPeriodActive && (_customPeriodLabel != null && _customPeriodLabel!.isNotEmpty)) {
+    if (_customPeriodActive &&
+        (_customPeriodLabel != null && _customPeriodLabel!.isNotEmpty)) {
       return _customPeriodLabel!;
     }
     return _presetRange.shortLabel;
@@ -54,7 +65,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
 
   String _trendSectionTitle(InsightsPayload p) {
     if (p.range == InsightsTimeRange.thisYear) return 'Spending by month';
-    if (_customPeriodActive && p.trendBars.length > 6) return 'Spending by month';
+    if (_customPeriodActive && p.trendBars.length > 6)
+      return 'Spending by month';
     return 'Spending trend';
   }
 
@@ -63,6 +75,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
     super.initState();
     _load();
     _loadAiInsights();
+    _loadEnvironmentalImpact();
+    unawaited(_migrateMissingLeafImpacts());
   }
 
   @override
@@ -71,6 +85,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
     if (oldWidget.refreshToken != widget.refreshToken) {
       _load();
       _loadAiInsights();
+      _loadEnvironmentalImpact();
+      unawaited(_migrateMissingLeafImpacts());
     }
   }
 
@@ -87,6 +103,158 @@ class _InsightsScreenState extends State<InsightsScreen> {
       setState(() => _aiInsightCards = []);
     } finally {
       if (mounted) setState(() => _loadingAiInsights = false);
+    }
+  }
+
+  Future<void> _loadEnvironmentalImpact() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    if (mounted) setState(() => _loadingEnvironmentalImpact = true);
+
+    try {
+      final rawTx = await Supabase.instance.client
+          .from('transactions')
+          .select('id, category_id, leaf_color')
+          .eq('user_id', user.id);
+      final txRows = (rawTx as List<dynamic>)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList(growable: false);
+
+      final categoryIds = txRows
+          .map((r) => r['category_id']?.toString())
+          .where((id) => id != null && id.isNotEmpty)
+          .cast<String>()
+          .toSet()
+          .toList();
+      final categoryById = <String, String>{};
+      if (categoryIds.isNotEmpty) {
+        final rawCats = await Supabase.instance.client
+            .from('categories')
+            .select('id, type')
+            .inFilter('id', categoryIds);
+        for (final c in (rawCats as List<dynamic>)) {
+          final m = Map<String, dynamic>.from(c as Map);
+          final id = m['id']?.toString();
+          final type = m['type']?.toString().toLowerCase();
+          if (id != null && id.isNotEmpty && type != null) {
+            categoryById[id] = type;
+          }
+        }
+      }
+
+      var green = 0;
+      var orange = 0;
+      var red = 0;
+      for (final row in txRows) {
+        final categoryId = row['category_id']?.toString();
+        if (categoryId == null || categoryById[categoryId] != 'expense')
+          continue;
+        final txId = row['id']?.toString() ?? '';
+        final leaf = (row['leaf_color'] ?? '').toString().toLowerCase().trim();
+        if (txId.isNotEmpty && leaf.isNotEmpty) {
+          _leafColorCacheByTransactionId[txId] = leaf;
+        }
+        switch (leaf) {
+          case 'green':
+            green++;
+            break;
+          case 'orange':
+            orange++;
+            break;
+          case 'red':
+            red++;
+            break;
+        }
+      }
+
+      final total = green + orange + red;
+      debugPrint('environmental counts: green=$green orange=$orange red=$red');
+      if (!mounted) return;
+      setState(() {
+        _leafImpactTotals = (
+          green: green,
+          orange: orange,
+          red: red,
+          total: total,
+        );
+        _loadingEnvironmentalImpact = false;
+      });
+    } catch (e, st) {
+      debugPrint('environmental section load failed: $e\n$st');
+      if (!mounted) return;
+      setState(() => _loadingEnvironmentalImpact = false);
+    }
+  }
+
+  Future<void> _migrateMissingLeafImpacts() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    try {
+      final missing = await Supabase.instance.client
+          .from('transactions')
+          .select('id, description, category_id')
+          .eq('user_id', user.id)
+          .isFilter('leaf_color', null)
+          .limit(5);
+      final rows = (missing as List<dynamic>)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList(growable: false);
+      if (rows.isEmpty) return;
+      debugPrint('old transactions found for leaf migration: ${rows.length}');
+
+      final categoryIds = rows
+          .map((r) => r['category_id']?.toString())
+          .where((id) => id != null && id.isNotEmpty)
+          .cast<String>()
+          .toSet()
+          .toList();
+      if (categoryIds.isEmpty) return;
+      final rawCats = await Supabase.instance.client
+          .from('categories')
+          .select('id, name, type')
+          .inFilter('id', categoryIds);
+      final categoryById = <String, Map<String, dynamic>>{};
+      for (final c in (rawCats as List<dynamic>)) {
+        final map = Map<String, dynamic>.from(c as Map);
+        final id = map['id']?.toString();
+        if (id != null && id.isNotEmpty) categoryById[id] = map;
+      }
+
+      for (final row in rows) {
+        final txId = row['id']?.toString();
+        final catId = row['category_id']?.toString();
+        if (txId == null || txId.isEmpty || catId == null || catId.isEmpty)
+          continue;
+        final cat = categoryById[catId];
+        if (cat == null || cat['type']?.toString().toLowerCase() != 'expense') {
+          continue;
+        }
+        final categoryName = (cat['name'] ?? '').toString().trim();
+        final txName = (row['description'] ?? '').toString().trim();
+        if (categoryName.isEmpty || txName.isEmpty) continue;
+        try {
+          final impact = await _aiService.classifyLeafImpact(
+            transactionName: txName,
+            category: categoryName,
+            transactionType: 'expense',
+          );
+          await Supabase.instance.client
+              .from('transactions')
+              .update({
+                'leaf_color': impact['leaf_color'],
+                'leaf_title': impact['title'],
+                'leaf_message': impact['message'],
+              })
+              .eq('id', txId)
+              .eq('user_id', user.id);
+          debugPrint('leaf migration updated transaction id=$txId');
+        } catch (e, st) {
+          debugPrint('leaf migration error tx=$txId: $e\n$st');
+        }
+      }
+      unawaited(_loadEnvironmentalImpact());
+    } catch (e, st) {
+      debugPrint('leaf migration background failed: $e\n$st');
     }
   }
 
@@ -157,7 +325,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
       currentFilterDescription: _effectiveFilterDescription,
       showUseCurrentFilterOption: false,
       title: 'Choose period',
-      subtitle: 'Select a year, month, single day, or custom date range for Insights.',
+      subtitle:
+          'Select a year, month, single day, or custom date range for Insights.',
       continueButtonLabel: 'Apply',
     );
     if (!mounted || sel == null || sel.useCurrentScreenFilter) return;
@@ -170,7 +339,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
     await _load();
   }
 
-  String _fmt(double v) => formatInsightsMoney(widget.currencyCode ?? _data?.currency, v);
+  String _fmt(double v) =>
+      formatInsightsMoney(widget.currencyCode ?? _data?.currency, v);
 
   Future<void> _exportWithFormat(bool asPdf) async {
     if (_exporting) return;
@@ -192,7 +362,11 @@ class _InsightsScreenState extends State<InsightsScreen> {
       if (sel.useCurrentScreenFilter) {
         final p = _data;
         if (p == null) {
-          if (mounted) showInfaqSnack(context, 'Insights still loading. Try again in a moment.');
+          if (mounted)
+            showInfaqSnack(
+              context,
+              'Insights still loading. Try again in a moment.',
+            );
           return;
         }
         payload = p;
@@ -285,7 +459,10 @@ class _InsightsScreenState extends State<InsightsScreen> {
                           onPressed: _loading ? null : _openCustomPeriodPicker,
                           iconSize: 25,
                           icon: Icon(Icons.schedule_rounded, color: cs.primary),
-                          tooltip: _customPeriodActive && (_customPeriodLabel != null && _customPeriodLabel!.isNotEmpty)
+                          tooltip:
+                              _customPeriodActive &&
+                                  (_customPeriodLabel != null &&
+                                      _customPeriodLabel!.isNotEmpty)
                               ? _customPeriodLabel!
                               : 'Date range',
                         ),
@@ -314,18 +491,29 @@ class _InsightsScreenState extends State<InsightsScreen> {
                               padding: const EdgeInsets.only(right: 8),
                               child: ChoiceChip(
                                 label: Text(r.shortLabel),
-                                selected: !_customPeriodActive && _presetRange == r,
-                                onSelected: _loading ? null : (_) => _onPresetChanged(r),
-                                selectedColor: cs.primary.withValues(alpha: 0.22),
+                                selected:
+                                    !_customPeriodActive && _presetRange == r,
+                                onSelected: _loading
+                                    ? null
+                                    : (_) => _onPresetChanged(r),
+                                selectedColor: cs.primary.withValues(
+                                  alpha: 0.22,
+                                ),
                                 labelStyle: TextStyle(
                                   fontWeight: FontWeight.w700,
-                                  color: (!_customPeriodActive && _presetRange == r)
+                                  color:
+                                      (!_customPeriodActive &&
+                                          _presetRange == r)
                                       ? cs.primary
                                       : cs.onSurface.withValues(alpha: 0.75),
                                   fontSize: 13,
                                 ),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                side: BorderSide(color: cs.outline.withValues(alpha: 0.2)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                side: BorderSide(
+                                  color: cs.outline.withValues(alpha: 0.2),
+                                ),
                               ),
                             ),
                         ],
@@ -339,7 +527,11 @@ class _InsightsScreenState extends State<InsightsScreen> {
           Expanded(
             child: RefreshIndicator(
               color: cs.primary,
-              onRefresh: _load,
+              onRefresh: () async {
+                await _load();
+                await _loadEnvironmentalImpact();
+                unawaited(_migrateMissingLeafImpacts());
+              },
               child: _error != null
                   ? ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
@@ -347,84 +539,97 @@ class _InsightsScreenState extends State<InsightsScreen> {
                       children: [
                         Text(_error!, style: TextStyle(color: cs.onSurface)),
                         const SizedBox(height: 16),
-                        FilledButton(onPressed: _load, child: const Text('Retry')),
+                        FilledButton(
+                          onPressed: _load,
+                          child: const Text('Retry'),
+                        ),
                       ],
                     )
                   : _loading && p == null
-                      ? ListView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(top: 80),
-                              child: Center(child: CircularProgressIndicator(color: cs.primary)),
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 80),
+                          child: Center(
+                            child: CircularProgressIndicator(color: cs.primary),
+                          ),
+                        ),
+                      ],
+                    )
+                  : p == null
+                  ? const SizedBox.shrink()
+                  : ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
+                      children: [
+                        if (_loading)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: LinearProgressIndicator(
+                              minHeight: 3,
+                              borderRadius: BorderRadius.circular(99),
+                              color: cs.primary,
                             ),
-                          ],
-                        )
-                      : p == null
-                          ? const SizedBox.shrink()
-                          : ListView(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
-                              children: [
-                                if (_loading)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 12),
-                                    child: LinearProgressIndicator(
-                                      minHeight: 3,
-                                      borderRadius: BorderRadius.circular(99),
-                                      color: cs.primary,
-                                    ),
-                                  ),
-                                if (!p.hasAnyTransactions) ...[
-                                  _EmptyTxBanner(cs: cs),
-                                  const SizedBox(height: 16),
-                                ],
-                                _SummaryStrip(payload: p, format: _fmt, cs: cs),
-                                const SizedBox(height: 20),
-                                _SectionTitle('Spending by category', cs),
-                                const SizedBox(height: 10),
-                                _CategoryCard(payload: p, format: _fmt, cs: cs),
-                                const SizedBox(height: 20),
-                                _SectionTitle(_trendSectionTitle(p), cs),
-                                const SizedBox(height: 10),
-                                _TrendCard(payload: p, format: _fmt, cs: cs),
-                                const SizedBox(height: 20),
-                                _SectionTitle('This month vs last month', cs),
-                                const SizedBox(height: 10),
-                                _CompareCard(payload: p, format: _fmt, cs: cs),
-                                const SizedBox(height: 20),
-                                _SectionTitle('Subscriptions', cs),
-                                const SizedBox(height: 10),
-                                _SubscriptionCard(payload: p, format: _fmt, cs: cs),
-                                const SizedBox(height: 20),
-                                _SectionTitle('Goals', cs),
-                                const SizedBox(height: 10),
-                                _GoalsCard(payload: p, format: _fmt, cs: cs),
-                                const SizedBox(height: 20),
-                                _SectionTitle('Smart insights', cs),
-                                const SizedBox(height: 10),
-                                if (_loadingAiInsights)
-                                  AiInsightCard.loading()
-                                else if (_aiInsightCards.isEmpty)
-                                  AiInsightCard.fallback()
-                                else
-                                  ..._aiInsightCards.map(
-                                    (c) => Padding(
-                                      padding: const EdgeInsets.only(bottom: 10),
-                                      child: AiInsightCard.fromMap(c),
-                                    ),
-                                  ),
-                                const SizedBox(height: 8),
-                                _SectionTitle('Export', cs),
-                                const SizedBox(height: 10),
-                                _ExportCard(
-                                  busy: _exporting,
-                                  onCsv: () => _exportWithFormat(false),
-                                  onPdf: () => _exportWithFormat(true),
-                                  cs: cs,
-                                ),
-                              ],
+                          ),
+                        if (!p.hasAnyTransactions) ...[
+                          _EmptyTxBanner(cs: cs),
+                          const SizedBox(height: 16),
+                        ],
+                        _SummaryStrip(payload: p, format: _fmt, cs: cs),
+                        const SizedBox(height: 20),
+                        _SectionTitle('Spending by category', cs),
+                        const SizedBox(height: 10),
+                        _CategoryCard(payload: p, format: _fmt, cs: cs),
+                        const SizedBox(height: 20),
+                        _SectionTitle(_trendSectionTitle(p), cs),
+                        const SizedBox(height: 10),
+                        _TrendCard(payload: p, format: _fmt, cs: cs),
+                        const SizedBox(height: 20),
+                        _SectionTitle('This month vs last month', cs),
+                        const SizedBox(height: 10),
+                        _CompareCard(payload: p, format: _fmt, cs: cs),
+                        const SizedBox(height: 20),
+                        _SectionTitle('Subscriptions', cs),
+                        const SizedBox(height: 10),
+                        _SubscriptionCard(payload: p, format: _fmt, cs: cs),
+                        const SizedBox(height: 20),
+                        _SectionTitle('Goals', cs),
+                        const SizedBox(height: 10),
+                        _GoalsCard(payload: p, format: _fmt, cs: cs),
+                        const SizedBox(height: 20),
+                        _SectionTitle('Environmental Impact', cs),
+                        const SizedBox(height: 10),
+                        _EnvironmentalImpactCard(
+                          cs: cs,
+                          loading: _loadingEnvironmentalImpact,
+                          totals: _leafImpactTotals,
+                        ),
+                        const SizedBox(height: 20),
+                        _SectionTitle('Smart insights', cs),
+                        const SizedBox(height: 10),
+                        if (_loadingAiInsights)
+                          AiInsightCard.loading()
+                        else if (_aiInsightCards.isEmpty)
+                          AiInsightCard.fallback()
+                        else
+                          ..._aiInsightCards.map(
+                            (c) => Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: AiInsightCard.fromMap(c),
                             ),
+                          ),
+                        const SizedBox(height: 8),
+                        _SectionTitle('Export', cs),
+                        const SizedBox(height: 10),
+                        _ExportCard(
+                          busy: _exporting,
+                          onCsv: () => _exportWithFormat(false),
+                          onPdf: () => _exportWithFormat(true),
+                          cs: cs,
+                        ),
+                      ],
+                    ),
             ),
           ),
         ],
@@ -478,13 +683,21 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: cs.onSurface),
+      style: TextStyle(
+        fontSize: 17,
+        fontWeight: FontWeight.w800,
+        color: cs.onSurface,
+      ),
     );
   }
 }
 
 class _SummaryStrip extends StatelessWidget {
-  const _SummaryStrip({required this.payload, required this.format, required this.cs});
+  const _SummaryStrip({
+    required this.payload,
+    required this.format,
+    required this.cs,
+  });
 
   final InsightsPayload payload;
   final String Function(double) format;
@@ -555,7 +768,11 @@ class _SummaryStrip extends StatelessWidget {
 }
 
 class _CategoryCard extends StatelessWidget {
-  const _CategoryCard({required this.payload, required this.format, required this.cs});
+  const _CategoryCard({
+    required this.payload,
+    required this.format,
+    required this.cs,
+  });
 
   final InsightsPayload payload;
   final String Function(double) format;
@@ -572,7 +789,9 @@ class _CategoryCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.22 : 0.12)),
+        border: Border.all(
+          color: cs.outline.withValues(alpha: isDark ? 0.22 : 0.12),
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -589,7 +808,11 @@ class _CategoryCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   'Expense categories · ${payload.periodLabel}',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: cs.onSurface),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: cs.onSurface,
+                  ),
                 ),
               ),
             ],
@@ -601,7 +824,10 @@ class _CategoryCard extends StatelessWidget {
               child: Center(
                 child: Text(
                   'No expense categories in this period.',
-                  style: TextStyle(color: cs.onSurface.withValues(alpha: 0.5), fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    color: cs.onSurface.withValues(alpha: 0.5),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             )
@@ -617,13 +843,16 @@ class _CategoryCard extends StatelessWidget {
                       PieChartSectionData(
                         color: s.color,
                         value: s.amount,
-                        title: '${(s.amount / total * 100).clamp(0, 100).toStringAsFixed(0)}%',
+                        title:
+                            '${(s.amount / total * 100).clamp(0, 100).toStringAsFixed(0)}%',
                         radius: 52,
                         titleStyle: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w800,
                           color: Colors.white,
-                          shadows: [Shadow(color: Colors.black26, blurRadius: 2)],
+                          shadows: [
+                            Shadow(color: Colors.black26, blurRadius: 2),
+                          ],
                         ),
                       ),
                   ],
@@ -631,7 +860,9 @@ class _CategoryCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            ...slices.take(8).map(
+            ...slices
+                .take(8)
+                .map(
                   (s) => Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Row(
@@ -639,7 +870,10 @@ class _CategoryCard extends StatelessWidget {
                         Container(
                           width: 10,
                           height: 10,
-                          decoration: BoxDecoration(color: s.color, shape: BoxShape.circle),
+                          decoration: BoxDecoration(
+                            color: s.color,
+                            shape: BoxShape.circle,
+                          ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
@@ -654,7 +888,11 @@ class _CategoryCard extends StatelessWidget {
                         ),
                         Text(
                           format(s.amount),
-                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: cs.primary),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                            color: cs.primary,
+                          ),
                         ),
                       ],
                     ),
@@ -668,7 +906,11 @@ class _CategoryCard extends StatelessWidget {
 }
 
 class _TrendCard extends StatelessWidget {
-  const _TrendCard({required this.payload, required this.format, required this.cs});
+  const _TrendCard({
+    required this.payload,
+    required this.format,
+    required this.cs,
+  });
 
   final InsightsPayload payload;
   final String Function(double) format;
@@ -683,7 +925,10 @@ class _TrendCard extends StatelessWidget {
         child: Center(
           child: Text(
             'No expense data for this view.',
-            style: TextStyle(color: cs.onSurface.withValues(alpha: 0.5), fontWeight: FontWeight.w600),
+            style: TextStyle(
+              color: cs.onSurface.withValues(alpha: 0.5),
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       );
@@ -722,15 +967,24 @@ class _TrendCard extends StatelessWidget {
             ),
             borderData: FlBorderData(show: false),
             titlesData: FlTitlesData(
-              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              topTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              rightTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
               leftTitles: AxisTitles(
                 sideTitles: SideTitles(
                   showTitles: true,
                   reservedSize: 36,
                   getTitlesWidget: (v, m) => Text(
-                    v >= 1000 ? '${(v / 1000).toStringAsFixed(0)}k' : v.toStringAsFixed(0),
-                    style: TextStyle(fontSize: 10, color: cs.onSurface.withValues(alpha: 0.45)),
+                    v >= 1000
+                        ? '${(v / 1000).toStringAsFixed(0)}k'
+                        : v.toStringAsFixed(0),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: cs.onSurface.withValues(alpha: 0.45),
+                    ),
                   ),
                 ),
               ),
@@ -739,12 +993,17 @@ class _TrendCard extends StatelessWidget {
                   showTitles: true,
                   getTitlesWidget: (v, m) {
                     final i = v.toInt();
-                    if (i < 0 || i >= bars.length) return const SizedBox.shrink();
+                    if (i < 0 || i >= bars.length)
+                      return const SizedBox.shrink();
                     return Padding(
                       padding: const EdgeInsets.only(top: 6),
                       child: Text(
                         bars[i].label,
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: cs.primary),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: cs.primary,
+                        ),
                       ),
                     );
                   },
@@ -759,7 +1018,9 @@ class _TrendCard extends StatelessWidget {
                     BarChartRodData(
                       toY: bars[i].amount,
                       width: 18,
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(6),
+                      ),
                       color: cs.primary,
                     ),
                   ],
@@ -786,7 +1047,11 @@ class _TrendCard extends StatelessWidget {
 }
 
 class _CompareCard extends StatelessWidget {
-  const _CompareCard({required this.payload, required this.format, required this.cs});
+  const _CompareCard({
+    required this.payload,
+    required this.format,
+    required this.cs,
+  });
 
   final InsightsPayload payload;
   final String Function(double) format;
@@ -860,20 +1125,35 @@ class _CompareCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: cs.onSurface)),
+        Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 14,
+            color: cs.onSurface,
+          ),
+        ),
         const SizedBox(height: 6),
         Row(
           children: [
             Expanded(
               child: Text(
                 'This: $thisM',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.65)),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface.withValues(alpha: 0.65),
+                ),
               ),
             ),
             Expanded(
               child: Text(
                 'Last: $lastM',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.65)),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface.withValues(alpha: 0.65),
+                ),
               ),
             ),
           ],
@@ -892,7 +1172,11 @@ class _CompareCard extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               pct != null ? formatInsightsPercent(pct) : '— %',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.5)),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: cs.onSurface.withValues(alpha: 0.5),
+              ),
             ),
           ],
         ),
@@ -902,7 +1186,11 @@ class _CompareCard extends StatelessWidget {
 }
 
 class _SubscriptionCard extends StatelessWidget {
-  const _SubscriptionCard({required this.payload, required this.format, required this.cs});
+  const _SubscriptionCard({
+    required this.payload,
+    required this.format,
+    required this.cs,
+  });
 
   final InsightsPayload payload;
   final String Function(double) format;
@@ -930,11 +1218,19 @@ class _SubscriptionCard extends StatelessWidget {
           _kv(cs, 'Inactive', '${s.inactiveCount}'),
           _kv(cs, 'Est. monthly cost', format(s.monthlyRecurringCost)),
           _kv(cs, 'Est. yearly commitment', format(s.yearlyCommittedCost)),
-          _kv(cs, 'Subscription-tagged spend', format(s.subscriptionLinkedExpenseInPeriod)),
+          _kv(
+            cs,
+            'Subscription-tagged spend',
+            format(s.subscriptionLinkedExpenseInPeriod),
+          ),
           const SizedBox(height: 8),
           Text(
             nextLine,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55)),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface.withValues(alpha: 0.55),
+            ),
           ),
         ],
       ),
@@ -950,10 +1246,21 @@ class _SubscriptionCard extends StatelessWidget {
           Expanded(
             child: Text(
               k,
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55)),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: cs.onSurface.withValues(alpha: 0.55),
+              ),
             ),
           ),
-          Text(v, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: cs.primary)),
+          Text(
+            v,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: cs.primary,
+            ),
+          ),
         ],
       ),
     );
@@ -961,7 +1268,11 @@ class _SubscriptionCard extends StatelessWidget {
 }
 
 class _GoalsCard extends StatelessWidget {
-  const _GoalsCard({required this.payload, required this.format, required this.cs});
+  const _GoalsCard({
+    required this.payload,
+    required this.format,
+    required this.cs,
+  });
 
   final InsightsPayload payload;
   final String Function(double) format;
@@ -981,7 +1292,10 @@ class _GoalsCard extends StatelessWidget {
         ),
         child: Text(
           'No goals yet. Create one from Management.',
-          style: TextStyle(color: cs.onSurface.withValues(alpha: 0.55), fontWeight: FontWeight.w600),
+          style: TextStyle(
+            color: cs.onSurface.withValues(alpha: 0.55),
+            fontWeight: FontWeight.w600,
+          ),
         ),
       );
     }
@@ -1025,11 +1339,17 @@ class _GoalsCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               nearLine,
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55)),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: cs.onSurface.withValues(alpha: 0.55),
+              ),
             ),
           ],
           const SizedBox(height: 12),
-          ...g.rows.take(6).map(
+          ...g.rows
+              .take(6)
+              .map(
                 (r) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Column(
@@ -1040,12 +1360,20 @@ class _GoalsCard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               r.title,
-                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: cs.onSurface),
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                                color: cs.onSurface,
+                              ),
                             ),
                           ),
                           Text(
                             '${r.progressPct.toStringAsFixed(0)}%',
-                            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: cs.primary),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                              color: cs.primary,
+                            ),
                           ),
                         ],
                       ),
@@ -1062,7 +1390,10 @@ class _GoalsCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         '${format(r.currentAmount)} / ${format(r.targetAmount)}',
-                        style: TextStyle(fontSize: 11, color: cs.onSurface.withValues(alpha: 0.45)),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: cs.onSurface.withValues(alpha: 0.45),
+                        ),
                       ),
                     ],
                   ),
@@ -1081,12 +1412,163 @@ class _GoalsCard extends StatelessWidget {
           Expanded(
             child: Text(
               k,
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55)),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: cs.onSurface.withValues(alpha: 0.55),
+              ),
             ),
           ),
-          Text(v, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: cs.primary)),
+          Text(
+            v,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: cs.primary,
+            ),
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _EnvironmentalImpactCard extends StatelessWidget {
+  const _EnvironmentalImpactCard({
+    required this.cs,
+    required this.loading,
+    required this.totals,
+  });
+
+  final ColorScheme cs;
+  final bool loading;
+  final ({int green, int orange, int red, int total}) totals;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: cs.outline.withValues(alpha: 0.12)),
+        ),
+        child: Center(child: CircularProgressIndicator(color: cs.primary)),
+      );
+    }
+
+    if (totals.total == 0) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: cs.outline.withValues(alpha: 0.12)),
+        ),
+        child: Text(
+          'No environmental impact data yet. Add expenses to see your impact summary.',
+          style: TextStyle(
+            color: cs.onSurface.withValues(alpha: 0.65),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+    }
+
+    final greenPct = totals.green / totals.total * 100;
+    final orangePct = totals.orange / totals.total * 100;
+    final redPct = totals.red / totals.total * 100;
+    final overallLabel = redPct >= orangePct && redPct >= greenPct
+        ? 'High impact'
+        : orangePct >= greenPct
+        ? 'Moderate impact'
+        : 'Low impact';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.outline.withValues(alpha: 0.12)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            overallLabel,
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              color: cs.primary,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _EnvProgressRow(
+            label: 'Green',
+            percent: greenPct,
+            color: const Color(0xFF2E7D32),
+            cs: cs,
+          ),
+          const SizedBox(height: 10),
+          _EnvProgressRow(
+            label: 'Orange',
+            percent: orangePct,
+            color: const Color(0xFFF57C00),
+            cs: cs,
+          ),
+          const SizedBox(height: 10),
+          _EnvProgressRow(
+            label: 'Red',
+            percent: redPct,
+            color: const Color(0xFFC62828),
+            cs: cs,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EnvProgressRow extends StatelessWidget {
+  const _EnvProgressRow({
+    required this.label,
+    required this.percent,
+    required this.color,
+    required this.cs,
+  });
+  final String label;
+  final double percent;
+  final Color color;
+  final ColorScheme cs;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$label ${percent.toStringAsFixed(1)}%',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+            color: cs.onSurface,
+          ),
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            value: (percent / 100).clamp(0.0, 1.0),
+            minHeight: 8,
+            color: color,
+            backgroundColor: cs.surfaceContainerHighest,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1119,7 +1601,11 @@ class _ExportCard extends StatelessWidget {
         children: [
           Text(
             'Download data',
-            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: cs.onSurface.withValues(alpha: 0.65)),
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+              color: cs.onSurface.withValues(alpha: 0.65),
+            ),
           ),
           const SizedBox(height: 8),
           if (busy)

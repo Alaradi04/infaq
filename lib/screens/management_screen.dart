@@ -42,6 +42,7 @@ class ManagementScreen extends StatefulWidget {
     super.key,
     required this.currencyCode,
     required this.initialMonthlyBudget,
+
     /// Bumped by [HomeScreen] after each successful `_bootstrap()` so this screen refetches from Supabase
     /// (e.g. new transaction from the + button) without an app restart.
     this.transactionsListRefreshToken = 0,
@@ -68,15 +69,24 @@ class _ManagementScreenState extends State<ManagementScreen> {
   double _monthlyBudget = 0;
 
   _PeriodMode _txPeriodMode = _PeriodMode.month;
-  DateTime _txFocusedMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  DateTime _txFocusedMonth = DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+  );
   int _txFocusedYear = DateTime.now().year;
 
   _PeriodMode _subPeriodMode = _PeriodMode.allTime;
-  DateTime _subFocusedMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  DateTime _subFocusedMonth = DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+  );
   int _subFocusedYear = DateTime.now().year;
 
   _PeriodMode _goalPeriodMode = _PeriodMode.allTime;
-  DateTime _goalFocusedMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  DateTime _goalFocusedMonth = DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+  );
   int _goalFocusedYear = DateTime.now().year;
 
   String _searchQuery = '';
@@ -118,7 +128,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
     if (oldWidget.initialMonthlyBudget != widget.initialMonthlyBudget) {
       _monthlyBudget = widget.initialMonthlyBudget;
     }
-    if (oldWidget.transactionsListRefreshToken != widget.transactionsListRefreshToken) {
+    if (oldWidget.transactionsListRefreshToken !=
+        widget.transactionsListRefreshToken) {
       _loadTransactions();
       _loadSubscriptions();
       _loadGoals();
@@ -145,14 +156,18 @@ class _ManagementScreenState extends State<ManagementScreen> {
         try {
           res = await Supabase.instance.client
               .from('transactions')
-              .select('id, amount, description, date, created_at, category_id, categories(id, name, type, icon_key, color)')
+              .select(
+                'id, amount, description, date, created_at, category_id, leaf_color, leaf_title, leaf_message, categories(id, name, type, icon_key, color)',
+              )
               .eq('user_id', user.id)
               .order('date', ascending: false)
               .limit(500);
         } catch (_) {
           res = await Supabase.instance.client
               .from('transactions')
-              .select('id, amount, description, date, created_at, category_id, categories(id, name, type, icon_key)')
+              .select(
+                'id, amount, description, date, created_at, category_id, leaf_color, leaf_title, leaf_message, categories(id, name, type, icon_key)',
+              )
               .eq('user_id', user.id)
               .order('date', ascending: false)
               .limit(500);
@@ -165,7 +180,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
             .order('created_at', ascending: false)
             .limit(500);
       }
-      final list = (res as List<dynamic>).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final list = (res as List<dynamic>)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
       if (!mounted) return;
       setState(() {
         _transactions = list;
@@ -186,7 +203,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
           .select()
           .eq('user_id', user.id)
           .order('created_at', ascending: false);
-      final list = (res as List<dynamic>).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final list = (res as List<dynamic>)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
       if (!mounted) return;
       setState(() {
         _subscriptions = list;
@@ -202,9 +221,14 @@ class _ManagementScreenState extends State<ManagementScreen> {
     if (user == null) return;
     setState(() => _loadingGoals = true);
     try {
-      final res =
-          await Supabase.instance.client.from('goals').select().eq('created_by', user.id).order('created_at', ascending: false);
-      final list = (res as List<dynamic>).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final res = await Supabase.instance.client
+          .from('goals')
+          .select()
+          .eq('created_by', user.id)
+          .order('created_at', ascending: false);
+      final list = (res as List<dynamic>)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
       if (!mounted) return;
       setState(() {
         _goals = list;
@@ -245,8 +269,12 @@ class _ManagementScreenState extends State<ManagementScreen> {
   void _onMainTabChanged(_MgmtMainTab t) {
     setState(() => _mainTab = t);
     widget.onMainTabIndexChanged?.call(t.index);
-    if (t == _MgmtMainTab.subscriptions && _subscriptions.isEmpty && !_loadingSub) _loadSubscriptions();
-    if (t == _MgmtMainTab.goals && _goals.isEmpty && !_loadingGoals) _loadGoals();
+    if (t == _MgmtMainTab.subscriptions &&
+        _subscriptions.isEmpty &&
+        !_loadingSub)
+      _loadSubscriptions();
+    if (t == _MgmtMainTab.goals && _goals.isEmpty && !_loadingGoals)
+      _loadGoals();
   }
 
   String _currencyPrefix() {
@@ -290,7 +318,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
     final catMap = data['categories'];
     String? catType;
     if (catMap is Map) catType = catMap['type']?.toString().toLowerCase();
-    final legacyType = (data['type'] ?? data['transaction_type'] ?? '').toString().toLowerCase();
+    final legacyType = (data['type'] ?? data['transaction_type'] ?? '')
+        .toString()
+        .toLowerCase();
     return catType == 'expense' ||
         (catType == null &&
             (legacyType == 'expense' ||
@@ -305,7 +335,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
       final n = cat['name']?.toString().trim();
       if (n != null && n.isNotEmpty) return n;
     }
-    final legacy = (r['category'] ?? r['category_name'] ?? '').toString().trim();
+    final legacy = (r['category'] ?? r['category_name'] ?? '')
+        .toString()
+        .trim();
     return legacy;
   }
 
@@ -322,12 +354,14 @@ class _ManagementScreenState extends State<ManagementScreen> {
   }
 
   /// Categories present in the current date range, respecting the selected type (All / Income / Expense).
-  ({List<String> named, bool hasUncategorized}) _categoryOptionsForTypeFilter() {
+  ({List<String> named, bool hasUncategorized})
+  _categoryOptionsForTypeFilter() {
     final named = <String>{};
     var hasUncategorized = false;
     for (final r in _transactions) {
       final d = _txDate(r);
-      if (!_inPeriod(d, _txPeriodMode, _txFocusedMonth, _txFocusedYear)) continue;
+      if (!_inPeriod(d, _txPeriodMode, _txFocusedMonth, _txFocusedYear))
+        continue;
       if (!_rowMatchesTypeFilter(r)) continue;
       final label = _categoryDisplayName(r);
       if (label.isEmpty) {
@@ -336,11 +370,17 @@ class _ManagementScreenState extends State<ManagementScreen> {
         named.add(label);
       }
     }
-    final list = named.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final list = named.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     return (named: list, hasUncategorized: hasUncategorized);
   }
 
-  bool _inPeriod(DateTime? d, _PeriodMode mode, DateTime focusedMonth, int focusedYear) {
+  bool _inPeriod(
+    DateTime? d,
+    _PeriodMode mode,
+    DateTime focusedMonth,
+    int focusedYear,
+  ) {
     if (d == null) return false;
     switch (mode) {
       case _PeriodMode.today:
@@ -363,15 +403,20 @@ class _ManagementScreenState extends State<ManagementScreen> {
     }).toList();
 
     if (_typeFilter == _TxTypeFilter.income) {
-      list = list.where((r) => !_isExpenseRow(r, _readAmount(r['amount']))).toList();
+      list = list
+          .where((r) => !_isExpenseRow(r, _readAmount(r['amount'])))
+          .toList();
     } else if (_typeFilter == _TxTypeFilter.expense) {
-      list = list.where((r) => _isExpenseRow(r, _readAmount(r['amount']))).toList();
+      list = list
+          .where((r) => _isExpenseRow(r, _readAmount(r['amount'])))
+          .toList();
     }
 
     if (_categoryFilterKey != null) {
       list = list.where((r) {
         final name = _categoryDisplayName(r);
-        if (_categoryFilterKey == _kUncategorizedCategoryKey) return name.isEmpty;
+        if (_categoryFilterKey == _kUncategorizedCategoryKey)
+          return name.isEmpty;
         return name == _categoryFilterKey;
       }).toList();
     }
@@ -381,15 +426,25 @@ class _ManagementScreenState extends State<ManagementScreen> {
       list = list.where((r) {
         final desc = (r['description'] ?? '').toString().toLowerCase();
         final cat = r['categories'];
-        final catName = cat is Map ? (cat['name'] ?? '').toString().toLowerCase() : '';
+        final catName = cat is Map
+            ? (cat['name'] ?? '').toString().toLowerCase()
+            : '';
         return desc.contains(q) || catName.contains(q);
       }).toList();
     }
 
     if (_amountSort == _AmountSort.highToLow) {
-      list.sort((a, b) => _readAmount(b['amount']).abs().compareTo(_readAmount(a['amount']).abs()));
+      list.sort(
+        (a, b) => _readAmount(
+          b['amount'],
+        ).abs().compareTo(_readAmount(a['amount']).abs()),
+      );
     } else if (_amountSort == _AmountSort.lowToHigh) {
-      list.sort((a, b) => _readAmount(a['amount']).abs().compareTo(_readAmount(b['amount']).abs()));
+      list.sort(
+        (a, b) => _readAmount(
+          a['amount'],
+        ).abs().compareTo(_readAmount(b['amount']).abs()),
+      );
     }
 
     return list;
@@ -397,7 +452,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
 
   double _totalSpentInPeriod() {
     var sum = 0.0;
-    for (final r in _filteredTransactions.where((x) => _isExpenseRow(x, _readAmount(x['amount'])))) {
+    for (final r in _filteredTransactions.where(
+      (x) => _isExpenseRow(x, _readAmount(x['amount'])),
+    )) {
       sum += _readAmount(r['amount']).abs();
     }
     return sum;
@@ -422,7 +479,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
           'September',
           'October',
           'November',
-          'December'
+          'December',
         ];
         return '${months[_txFocusedMonth.month - 1]} ${_txFocusedMonth.year}';
       case _PeriodMode.year:
@@ -445,13 +502,20 @@ class _ManagementScreenState extends State<ManagementScreen> {
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) {
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ListTile(title: Text(_activeHistoryTitle(), style: const TextStyle(fontWeight: FontWeight.w800))),
+              ListTile(
+                title: Text(
+                  _activeHistoryTitle(),
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
               ListTile(
                 title: const Text('Today'),
                 onTap: () {
@@ -509,10 +573,16 @@ class _ManagementScreenState extends State<ManagementScreen> {
                           _txFocusedMonth = DateTime(picked.year, picked.month);
                         case _MgmtMainTab.subscriptions:
                           _subPeriodMode = _PeriodMode.month;
-                          _subFocusedMonth = DateTime(picked.year, picked.month);
+                          _subFocusedMonth = DateTime(
+                            picked.year,
+                            picked.month,
+                          );
                         case _MgmtMainTab.goals:
                           _goalPeriodMode = _PeriodMode.month;
-                          _goalFocusedMonth = DateTime(picked.year, picked.month);
+                          _goalFocusedMonth = DateTime(
+                            picked.year,
+                            picked.month,
+                          );
                       }
                     });
                   }
@@ -542,7 +612,13 @@ class _ManagementScreenState extends State<ManagementScreen> {
                                   onPressed: () => setS(() => year -= 1),
                                   icon: const Icon(Icons.remove),
                                 ),
-                                Text('$year', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                                Text(
+                                  '$year',
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
                                 IconButton(
                                   onPressed: () => setS(() => year += 1),
                                   icon: const Icon(Icons.add),
@@ -552,7 +628,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
                           },
                         ),
                         actions: [
-                          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
+                          TextButton(
+                            onPressed: () => Navigator.pop(c),
+                            child: const Text('Cancel'),
+                          ),
                           FilledButton(
                             onPressed: () => Navigator.pop(c, year),
                             child: const Text('OK'),
@@ -588,7 +667,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
   void _shiftMonth(int delta) {
     setState(() {
       _txPeriodMode = _PeriodMode.month;
-      _txFocusedMonth = DateTime(_txFocusedMonth.year, _txFocusedMonth.month + delta);
+      _txFocusedMonth = DateTime(
+        _txFocusedMonth.year,
+        _txFocusedMonth.month + delta,
+      );
     });
   }
 
@@ -600,7 +682,11 @@ class _ManagementScreenState extends State<ManagementScreen> {
   }
 
   Future<void> _editBudget() async {
-    final ctrl = TextEditingController(text: _monthlyBudget > 0 ? _monthlyBudget.toStringAsFixed(_monthlyBudget % 1 == 0 ? 0 : 2) : '');
+    final ctrl = TextEditingController(
+      text: _monthlyBudget > 0
+          ? _monthlyBudget.toStringAsFixed(_monthlyBudget % 1 == 0 ? 0 : 2)
+          : '',
+    );
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -608,11 +694,20 @@ class _ManagementScreenState extends State<ManagementScreen> {
         content: TextField(
           controller: ctrl,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(hintText: 'e.g. 1000', suffixText: widget.currencyCode ?? ''),
+          decoration: InputDecoration(
+            hintText: 'e.g. 1000',
+            suffixText: widget.currencyCode ?? '',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Save'),
+          ),
         ],
       ),
     );
@@ -625,7 +720,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
     try {
-      await Supabase.instance.client.from('users').update({'Balance': v}).eq('id', user.id);
+      await Supabase.instance.client
+          .from('users')
+          .update({'Balance': v})
+          .eq('id', user.id);
       if (!mounted) return;
       setState(() => _monthlyBudget = v);
       widget.onDataChanged();
@@ -645,10 +743,15 @@ class _ManagementScreenState extends State<ManagementScreen> {
         title: const Text('Delete transaction?'),
         content: Text(
           title.length > 80 ? '${title.substring(0, 80)}…' : title,
-          style: TextStyle(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.72)),
+          style: TextStyle(
+            color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.72),
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
@@ -661,7 +764,11 @@ class _ManagementScreenState extends State<ManagementScreen> {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return false;
     try {
-      await Supabase.instance.client.from('transactions').delete().eq('id', id).eq('user_id', user.id);
+      await Supabase.instance.client
+          .from('transactions')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', user.id);
       if (!mounted) return false;
       await _loadTransactions();
       widget.onDataChanged();
@@ -692,7 +799,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
             width: double.infinity,
             decoration: BoxDecoration(
               color: headerTint,
-              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(24),
+              ),
             ),
             child: SafeArea(
               bottom: false,
@@ -743,8 +852,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
                       progress: progress,
                     )
                   : _mainTab == _MgmtMainTab.subscriptions
-                      ? _buildSubscriptionsTab()
-                      : _buildGoalsTab(),
+                  ? _buildSubscriptionsTab()
+                  : _buildGoalsTab(),
             ),
           ),
         ],
@@ -758,10 +867,16 @@ class _ManagementScreenState extends State<ManagementScreen> {
     required double progress,
   }) {
     if (_loadingTx) {
-      return ListView(children: [
-        SizedBox(height: 120),
-        Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
-      ]);
+      return ListView(
+        children: [
+          SizedBox(height: 120),
+          Center(
+            child: CircularProgressIndicator(
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ],
+      );
     }
 
     final list = _filteredTransactions;
@@ -774,13 +889,13 @@ class _ManagementScreenState extends State<ManagementScreen> {
           onPrev: _txPeriodMode == _PeriodMode.month
               ? () => _shiftMonth(-1)
               : _txPeriodMode == _PeriodMode.year
-                  ? () => _shiftYear(-1)
-                  : null,
+              ? () => _shiftYear(-1)
+              : null,
           onNext: _txPeriodMode == _PeriodMode.month
               ? () => _shiftMonth(1)
               : _txPeriodMode == _PeriodMode.year
-                  ? () => _shiftYear(1)
-                  : null,
+              ? () => _shiftYear(1)
+              : null,
           onEditBudget: _editBudget,
           spent: spent,
           budget: budget,
@@ -804,7 +919,11 @@ class _ManagementScreenState extends State<ManagementScreen> {
             child: Text(
               'No transactions for this view. Change filters or add a transaction.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55)),
+              style: TextStyle(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.55),
+              ),
             ),
           )
         else
@@ -823,12 +942,19 @@ class _ManagementScreenState extends State<ManagementScreen> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const ListTile(title: Text('Type', style: TextStyle(fontWeight: FontWeight.w800))),
+            const ListTile(
+              title: Text(
+                'Type',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
             RadioListTile<_TxTypeFilter>(
               title: const Text('All'),
               value: _TxTypeFilter.all,
@@ -883,7 +1009,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) {
         final sheetOn = Theme.of(ctx).colorScheme.onSurface;
         return SafeArea(
@@ -891,8 +1019,17 @@ class _ManagementScreenState extends State<ManagementScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                title: const Text('Category', style: TextStyle(fontWeight: FontWeight.w800)),
-                subtitle: Text('For: $typeLabel', style: TextStyle(color: sheetOn.withValues(alpha: 0.55), fontSize: 13)),
+                title: const Text(
+                  'Category',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                subtitle: Text(
+                  'For: $typeLabel',
+                  style: TextStyle(
+                    color: sheetOn.withValues(alpha: 0.55),
+                    fontSize: 13,
+                  ),
+                ),
               ),
               Flexible(
                 child: ListView(
@@ -941,12 +1078,19 @@ class _ManagementScreenState extends State<ManagementScreen> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const ListTile(title: Text('Sort by amount', style: TextStyle(fontWeight: FontWeight.w800))),
+            const ListTile(
+              title: Text(
+                'Sort by amount',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
             RadioListTile<_AmountSort>(
               title: const Text('Default (date)'),
               value: _AmountSort.none,
@@ -983,35 +1127,49 @@ class _ManagementScreenState extends State<ManagementScreen> {
   List<Map<String, dynamic>> get _filteredSubscriptionsList {
     var list = List<Map<String, dynamic>>.from(_subscriptions);
     list = list.where((s) {
-      final raw = s['next_payment'] ?? s['next_payment_date'] ?? s['created_at'];
+      final raw =
+          s['next_payment'] ?? s['next_payment_date'] ?? s['created_at'];
       final d = raw != null ? DateTime.tryParse(raw.toString()) : null;
       return _inPeriod(d, _subPeriodMode, _subFocusedMonth, _subFocusedYear);
     }).toList();
     final q = _subSearchQuery.trim().toLowerCase();
     if (q.isNotEmpty) {
-      list = list.where((s) => (s['name'] ?? '').toString().toLowerCase().contains(q)).toList();
+      list = list
+          .where((s) => (s['name'] ?? '').toString().toLowerCase().contains(q))
+          .toList();
     }
     switch (_subFilter) {
       case _SubFilter.activeOnly:
-        list = list.where((s) => parseSubscriptionIsActive(s['is_active'])).toList();
+        list = list
+            .where((s) => parseSubscriptionIsActive(s['is_active']))
+            .toList();
         break;
       case _SubFilter.inactiveOnly:
-        list = list.where((s) => !parseSubscriptionIsActive(s['is_active'])).toList();
+        list = list
+            .where((s) => !parseSubscriptionIsActive(s['is_active']))
+            .toList();
         break;
       case _SubFilter.all:
         break;
     }
     switch (_subSort) {
       case _SubSort.amountHigh:
-        list.sort((a, b) => _readAmount(b['amount']).compareTo(_readAmount(a['amount'])));
+        list.sort(
+          (a, b) =>
+              _readAmount(b['amount']).compareTo(_readAmount(a['amount'])),
+        );
         break;
       case _SubSort.amountLow:
-        list.sort((a, b) => _readAmount(a['amount']).compareTo(_readAmount(b['amount'])));
+        list.sort(
+          (a, b) =>
+              _readAmount(a['amount']).compareTo(_readAmount(b['amount'])),
+        );
         break;
       case _SubSort.nameAz:
         list.sort(
-          (a, b) =>
-              (a['name'] ?? '').toString().toLowerCase().compareTo((b['name'] ?? '').toString().toLowerCase()),
+          (a, b) => (a['name'] ?? '').toString().toLowerCase().compareTo(
+            (b['name'] ?? '').toString().toLowerCase(),
+          ),
         );
         break;
       case _SubSort.none:
@@ -1050,12 +1208,19 @@ class _ManagementScreenState extends State<ManagementScreen> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const ListTile(title: Text('Filter', style: TextStyle(fontWeight: FontWeight.w800))),
+            const ListTile(
+              title: Text(
+                'Filter',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
             RadioListTile<_SubFilter>(
               title: const Text('All'),
               value: _SubFilter.all,
@@ -1093,12 +1258,19 @@ class _ManagementScreenState extends State<ManagementScreen> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const ListTile(title: Text('Sort', style: TextStyle(fontWeight: FontWeight.w800))),
+            const ListTile(
+              title: Text(
+                'Sort',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
             RadioListTile<_SubSort>(
               title: const Text('Default'),
               value: _SubSort.none,
@@ -1147,15 +1319,30 @@ class _ManagementScreenState extends State<ManagementScreen> {
       s['icon_url']?.toString(),
     );
     final cs = Theme.of(context).colorScheme;
-    final placeholderIconColor = Color.lerp(cs.onSurfaceVariant, cs.primary, 0.35)!;
+    final placeholderIconColor = Color.lerp(
+      cs.onSurfaceVariant,
+      cs.primary,
+      0.35,
+    )!;
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: Container(
         width: 44,
         height: 44,
-        color: Color.lerp(cs.primaryContainer, cs.surface, Theme.of(context).brightness == Brightness.dark ? 0.5 : 0.2)!,
+        color: Color.lerp(
+          cs.primaryContainer,
+          cs.surface,
+          Theme.of(context).brightness == Brightness.dark ? 0.5 : 0.2,
+        )!,
         child: resolved != null && resolved.isNotEmpty
-            ? Image.network(resolved, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Icon(Icons.subscriptions_outlined, color: placeholderIconColor))
+            ? Image.network(
+                resolved,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Icon(
+                  Icons.subscriptions_outlined,
+                  color: placeholderIconColor,
+                ),
+              )
             : Icon(Icons.subscriptions_outlined, color: placeholderIconColor),
       ),
     );
@@ -1166,10 +1353,16 @@ class _ManagementScreenState extends State<ManagementScreen> {
     if (_loadingSub) {
       return ColoredBox(
         color: listBg,
-        child: ListView(children: [
-          SizedBox(height: 120),
-          Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
-        ]),
+        child: ListView(
+          children: [
+            SizedBox(height: 120),
+            Center(
+              child: CircularProgressIndicator(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ],
+        ),
       );
     }
     if (_subscriptions.isEmpty) {
@@ -1183,17 +1376,27 @@ class _ManagementScreenState extends State<ManagementScreen> {
                 children: [
                   Text(
                     'No subscriptions yet',
-                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55)),
+                    style: TextStyle(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.55),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   FilledButton(
                     onPressed: () async {
                       final ok = await Navigator.of(context).push<bool>(
-                        MaterialPageRoute(builder: (_) => AddSubscriptionScreen(currencyCode: widget.currencyCode)),
+                        MaterialPageRoute(
+                          builder: (_) => AddSubscriptionScreen(
+                            currencyCode: widget.currencyCode,
+                          ),
+                        ),
                       );
                       if (ok == true && mounted) await _loadSubscriptions();
                     },
-                    style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                    ),
                     child: const Text('Add subscription'),
                   ),
                 ],
@@ -1226,7 +1429,11 @@ class _ManagementScreenState extends State<ManagementScreen> {
               child: Text(
                 'No subscriptions match your search or filters.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55)),
+                style: TextStyle(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.55),
+                ),
               ),
             )
           else
@@ -1248,8 +1455,15 @@ class _ManagementScreenState extends State<ManagementScreen> {
         background: Container(
           alignment: Alignment.centerRight,
           padding: const EdgeInsets.only(right: 20),
-          decoration: BoxDecoration(color: Colors.red.shade600, borderRadius: BorderRadius.circular(20)),
-          child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 28),
+          decoration: BoxDecoration(
+            color: Colors.red.shade600,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: const Icon(
+            Icons.delete_outline_rounded,
+            color: Colors.white,
+            size: 28,
+          ),
         ),
         confirmDismiss: (_) => _confirmDeleteSubscription(s),
         child: Opacity(
@@ -1268,38 +1482,62 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   color: cs.surfaceContainerLow,
                   boxShadow: [
                     BoxShadow(
-                      color: cs.shadow.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.35 : 0.07),
+                      color: cs.shadow.withValues(
+                        alpha: Theme.of(context).brightness == Brightness.dark
+                            ? 0.35
+                            : 0.07,
+                      ),
                       blurRadius: 14,
                       offset: const Offset(0, 5),
                     ),
                   ],
-                  border: Border.all(color: cs.outline.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.35 : 0.12)),
+                  border: Border.all(
+                    color: cs.outline.withValues(
+                      alpha: Theme.of(context).brightness == Brightness.dark
+                          ? 0.35
+                          : 0.12,
+                    ),
+                  ),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   child: Row(
                     children: [
                       _subscriptionSquircleIcon(s),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        s['name']?.toString() ?? 'Subscription',
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: cs.onSurface),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        _subscriptionSubtitle(s),
-                        style: TextStyle(fontSize: 11, color: cs.onSurface.withValues(alpha: 0.55)),
-                      ),
-                    ],
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              s['name']?.toString() ?? 'Subscription',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                color: cs.onSurface,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              _subscriptionSubtitle(s),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: cs.onSurface.withValues(alpha: 0.55),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       Text(
                         _fmtMoney(_readAmount(s['amount'])),
-                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5, color: cs.onSurface),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12.5,
+                          color: cs.onSurface,
+                        ),
                       ),
                     ],
                   ),
@@ -1321,14 +1559,24 @@ class _ManagementScreenState extends State<ManagementScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Delete subscription?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Delete', style: TextStyle(color: Colors.red.shade700))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Delete', style: TextStyle(color: Colors.red.shade700)),
+          ),
         ],
       ),
     );
     if (ok != true || !mounted) return false;
     try {
-      await Supabase.instance.client.from('subscriptions').delete().eq('id', id).eq('user_id', user.id);
+      await Supabase.instance.client
+          .from('subscriptions')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', user.id);
       if (mounted) {
         await _loadSubscriptions();
         widget.onDataChanged();
@@ -1349,14 +1597,24 @@ class _ManagementScreenState extends State<ManagementScreen> {
     }).toList();
     final q = _goalSearchQuery.trim().toLowerCase();
     if (q.isNotEmpty) {
-      list = list.where((g) => (g['title'] ?? '').toString().toLowerCase().contains(q)).toList();
+      list = list
+          .where((g) => (g['title'] ?? '').toString().toLowerCase().contains(q))
+          .toList();
     }
     switch (_goalSort) {
       case _GoalSort.targetHighToLow:
-        list.sort((a, b) => _readAmount(b['target_amount']).compareTo(_readAmount(a['target_amount'])));
+        list.sort(
+          (a, b) => _readAmount(
+            b['target_amount'],
+          ).compareTo(_readAmount(a['target_amount'])),
+        );
         break;
       case _GoalSort.targetLowToHigh:
-        list.sort((a, b) => _readAmount(a['target_amount']).compareTo(_readAmount(b['target_amount'])));
+        list.sort(
+          (a, b) => _readAmount(
+            a['target_amount'],
+          ).compareTo(_readAmount(b['target_amount'])),
+        );
         break;
       case _GoalSort.none:
         break;
@@ -1393,7 +1651,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
     if (months < 0) months = 0;
     final y = months ~/ 12;
     final m = months % 12;
-    if (y > 0 && m > 0) return '$y ${y == 1 ? 'year' : 'years'} $m ${m == 1 ? 'month' : 'months'}';
+    if (y > 0 && m > 0)
+      return '$y ${y == 1 ? 'year' : 'years'} $m ${m == 1 ? 'month' : 'months'}';
     if (y > 0) return '$y ${y == 1 ? 'year' : 'years'}';
     return '$m ${m == 1 ? 'month' : 'months'}';
   }
@@ -1401,7 +1660,20 @@ class _ManagementScreenState extends State<ManagementScreen> {
   String _formatGoalDeadlineShort(dynamic raw) {
     final d = raw != null ? DateTime.tryParse(raw.toString()) : null;
     if (d == null) return '—';
-    const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+    const months = [
+      'jan',
+      'feb',
+      'mar',
+      'apr',
+      'may',
+      'jun',
+      'jul',
+      'aug',
+      'sep',
+      'oct',
+      'nov',
+      'dec',
+    ];
     return '${months[d.month - 1]} ${d.day} ${d.year}';
   }
 
@@ -1409,12 +1681,19 @@ class _ManagementScreenState extends State<ManagementScreen> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const ListTile(title: Text('Sort by target amount', style: TextStyle(fontWeight: FontWeight.w800))),
+            const ListTile(
+              title: Text(
+                'Sort by target amount',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
             RadioListTile<_GoalSort>(
               title: const Text('Default (newest first)'),
               value: _GoalSort.none,
@@ -1459,7 +1738,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
     final progress = target > 0 ? (current / target).clamp(0.0, 1.0) : 0.0;
     final deadline = _formatGoalDeadlineShort(g['deadline']);
     final iconCp = idStr != null ? _goalIconCodePoints[idStr] : null;
-    final goalIcon = iconCp != null ? IconData(iconCp, fontFamily: 'MaterialIcons') : Icons.menu_book_rounded;
+    final goalIcon = iconCp != null
+        ? IconData(iconCp, fontFamily: 'MaterialIcons')
+        : Icons.menu_book_rounded;
     final goalColor = idStr != null
         ? (_goalIconColors[idStr] ?? categoryDisplayColor(title))
         : categoryDisplayColor(title);
@@ -1472,8 +1753,15 @@ class _ManagementScreenState extends State<ManagementScreen> {
         background: Container(
           alignment: Alignment.centerRight,
           padding: const EdgeInsets.only(right: 20),
-          decoration: BoxDecoration(color: Colors.red.shade600, borderRadius: BorderRadius.circular(20)),
-          child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 28),
+          decoration: BoxDecoration(
+            color: Colors.red.shade600,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: const Icon(
+            Icons.delete_outline_rounded,
+            color: Colors.white,
+            size: 28,
+          ),
         ),
         confirmDismiss: (_) => _confirmDeleteGoal(g),
         child: Material(
@@ -1505,7 +1793,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
                     offset: const Offset(0, 5),
                   ),
                 ],
-                border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.35 : 0.12)),
+                border: Border.all(
+                  color: cs.outline.withValues(alpha: isDark ? 0.35 : 0.12),
+                ),
               ),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 14, 14, 12),
@@ -1537,12 +1827,19 @@ class _ManagementScreenState extends State<ManagementScreen> {
                                 title,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: cs.onSurface),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 16,
+                                  color: cs.onSurface,
+                                ),
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 '${_fmtMoney(current)} · $deadline',
-                                style: TextStyle(fontSize: 13, color: cs.onSurface.withValues(alpha: 0.55)),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: cs.onSurface.withValues(alpha: 0.55),
+                                ),
                               ),
                             ],
                           ),
@@ -1550,7 +1847,11 @@ class _ManagementScreenState extends State<ManagementScreen> {
                         const SizedBox(width: 8),
                         Text(
                           _fmtMoney(target),
-                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: cs.onSurface),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                            color: cs.onSurface,
+                          ),
                         ),
                       ],
                     ),
@@ -1577,10 +1878,12 @@ class _ManagementScreenState extends State<ManagementScreen> {
   Widget _buildGoalsTab() {
     final cs = Theme.of(context).colorScheme;
     if (_loadingGoals) {
-      return ListView(children: [
-        SizedBox(height: 120),
-        Center(child: CircularProgressIndicator(color: cs.primary)),
-      ]);
+      return ListView(
+        children: [
+          SizedBox(height: 120),
+          Center(child: CircularProgressIndicator(color: cs.primary)),
+        ],
+      );
     }
     if (_goals.isEmpty) {
       return ListView(
@@ -1589,11 +1892,19 @@ class _ManagementScreenState extends State<ManagementScreen> {
           Center(
             child: Column(
               children: [
-                Text('No goals yet', style: TextStyle(color: cs.onSurface.withValues(alpha: 0.55))),
+                Text(
+                  'No goals yet',
+                  style: TextStyle(color: cs.onSurface.withValues(alpha: 0.55)),
+                ),
                 const SizedBox(height: 12),
                 FilledButton(
                   onPressed: () async {
-                    final ok = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => AddGoalScreen(currencyCode: widget.currencyCode)));
+                    final ok = await Navigator.of(context).push<bool>(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            AddGoalScreen(currencyCode: widget.currencyCode),
+                      ),
+                    );
                     if (ok == true && mounted) await _loadGoals();
                   },
                   style: FilledButton.styleFrom(backgroundColor: cs.primary),
@@ -1608,7 +1919,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
     final totals = _goalsAggregateTotals();
     final list = _filteredGoalsList;
     final remaining = totals.targets - totals.saved;
-    final progress = totals.targets > 0 ? (totals.saved / totals.targets).clamp(0.0, 1.0) : 0.0;
+    final progress = totals.targets > 0
+        ? (totals.saved / totals.targets).clamp(0.0, 1.0)
+        : 0.0;
     final horizon = _goalsHorizonLine();
 
     return ListView(
@@ -1619,7 +1932,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
           totalTargets: totals.targets,
           progress: progress,
           format: _fmtMoney,
-          remainingMoneyLabel: remaining >= 0 ? '${_fmtMoney(remaining)} remaining' : '${_fmtMoney(-remaining)} over target',
+          remainingMoneyLabel: remaining >= 0
+              ? '${_fmtMoney(remaining)} remaining'
+              : '${_fmtMoney(-remaining)} over target',
           horizonLine: horizon,
         ),
         const SizedBox(height: 14),
@@ -1657,14 +1972,24 @@ class _ManagementScreenState extends State<ManagementScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Delete goal?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Delete', style: TextStyle(color: Colors.red.shade700))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Delete', style: TextStyle(color: Colors.red.shade700)),
+          ),
         ],
       ),
     );
     if (ok != true || !mounted) return false;
     try {
-      await Supabase.instance.client.from('goals').delete().eq('id', id).eq('created_by', user.id);
+      await Supabase.instance.client
+          .from('goals')
+          .delete()
+          .eq('id', id)
+          .eq('created_by', user.id);
       if (mounted) {
         await _loadGoals();
         widget.onDataChanged();
@@ -1717,7 +2042,9 @@ class _MgmtPillTabs extends StatelessWidget {
                     letterSpacing: -0.12,
                     color: on
                         ? Colors.white
-                        : (isDark ? cs.onSurface.withValues(alpha: 0.65) : Colors.black.withValues(alpha: 0.65)),
+                        : (isDark
+                              ? cs.onSurface.withValues(alpha: 0.65)
+                              : Colors.black.withValues(alpha: 0.65)),
                   ),
                 ),
               ),
@@ -1787,7 +2114,9 @@ class _SummaryCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(_cardRadius),
-        border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.22 : 0.12)),
+        border: Border.all(
+          color: cs.outline.withValues(alpha: isDark ? 0.22 : 0.12),
+        ),
         boxShadow: [
           BoxShadow(
             color: cs.shadow.withValues(alpha: isDark ? 0.22 : 0.06),
@@ -1804,7 +2133,11 @@ class _SummaryCard extends StatelessWidget {
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   onPressed: onPrev,
-                  icon: Icon(Icons.chevron_left_rounded, color: cs.primary, size: 22),
+                  icon: Icon(
+                    Icons.chevron_left_rounded,
+                    color: cs.primary,
+                    size: 22,
+                  ),
                 )
               else
                 const SizedBox(width: 40),
@@ -1812,14 +2145,22 @@ class _SummaryCard extends StatelessWidget {
                 child: Text(
                   periodTitle,
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: cs.primary),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    color: cs.primary,
+                  ),
                 ),
               ),
               if (onNext != null)
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   onPressed: onNext,
-                  icon: Icon(Icons.chevron_right_rounded, color: cs.primary, size: 22),
+                  icon: Icon(
+                    Icons.chevron_right_rounded,
+                    color: cs.primary,
+                    size: 22,
+                  ),
                 )
               else
                 const SizedBox(width: 40),
@@ -1841,7 +2182,11 @@ class _SummaryCard extends StatelessWidget {
                   children: [
                     Text(
                       'Total spent',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: onSurface.withValues(alpha: 0.55)),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: onSurface.withValues(alpha: 0.55),
+                      ),
                     ),
                     const SizedBox(height: 4),
                     FittedBox(
@@ -1849,7 +2194,12 @@ class _SummaryCard extends StatelessWidget {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         format(spent),
-                        style: TextStyle(fontSize: _amountSize, fontWeight: FontWeight.w800, color: cs.primary, height: 1.1),
+                        style: TextStyle(
+                          fontSize: _amountSize,
+                          fontWeight: FontWeight.w800,
+                          color: cs.primary,
+                          height: 1.1,
+                        ),
                       ),
                     ),
                   ],
@@ -1874,7 +2224,11 @@ class _SummaryCard extends StatelessWidget {
                   children: [
                     Text(
                       'Budget',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: onSurface.withValues(alpha: 0.55)),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: onSurface.withValues(alpha: 0.55),
+                      ),
                     ),
                     const SizedBox(height: 4),
                     FittedBox(
@@ -1932,14 +2286,18 @@ class _GoalsSummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final subLine = horizonLine.isEmpty ? remainingMoneyLabel : '$remainingMoneyLabel · $horizonLine';
+    final subLine = horizonLine.isEmpty
+        ? remainingMoneyLabel
+        : '$remainingMoneyLabel · $horizonLine';
 
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.22 : 0.12)),
+        border: Border.all(
+          color: cs.outline.withValues(alpha: isDark ? 0.22 : 0.12),
+        ),
         boxShadow: [
           BoxShadow(
             color: cs.shadow.withValues(alpha: isDark ? 0.22 : 0.06),
@@ -1960,7 +2318,11 @@ class _GoalsSummaryCard extends StatelessWidget {
                   children: [
                     Text(
                       'Total saved',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55)),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSurface.withValues(alpha: 0.55),
+                      ),
                     ),
                     const SizedBox(height: 4),
                     FittedBox(
@@ -1968,7 +2330,12 @@ class _GoalsSummaryCard extends StatelessWidget {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         format(totalSaved),
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, height: 1.1, color: cs.onSurface),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          height: 1.1,
+                          color: cs.onSurface,
+                        ),
                       ),
                     ),
                   ],
@@ -1993,7 +2360,11 @@ class _GoalsSummaryCard extends StatelessWidget {
                   children: [
                     Text(
                       'Goals',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55)),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSurface.withValues(alpha: 0.55),
+                      ),
                     ),
                     const SizedBox(height: 4),
                     FittedBox(
@@ -2001,7 +2372,12 @@ class _GoalsSummaryCard extends StatelessWidget {
                       alignment: Alignment.centerRight,
                       child: Text(
                         format(totalTargets),
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, height: 1.1, color: cs.onSurface),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          height: 1.1,
+                          color: cs.onSurface,
+                        ),
                       ),
                     ),
                   ],
@@ -2022,7 +2398,11 @@ class _GoalsSummaryCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             subLine,
-            style: TextStyle(fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.55), fontSize: 13),
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface.withValues(alpha: 0.55),
+              fontSize: 13,
+            ),
           ),
         ],
       ),
@@ -2080,23 +2460,46 @@ class _SearchFilterBar extends StatelessWidget {
                 hintText: searchHint,
                 border: InputBorder.none,
                 isDense: true,
-                hintStyle: TextStyle(color: cs.onSurface.withValues(alpha: 0.42)),
+                hintStyle: TextStyle(
+                  color: cs.onSurface.withValues(alpha: 0.42),
+                ),
               ),
             ),
           ),
           if (showTypeButton && onType != null)
             TextButton(
               onPressed: onType,
-              child: Text('Type', style: TextStyle(fontWeight: FontWeight.w700, color: cs.primary, fontSize: 13)),
+              child: Text(
+                'Type',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: cs.primary,
+                  fontSize: 13,
+                ),
+              ),
             ),
           if (showFilterButton)
             TextButton(
               onPressed: onFilter,
-              child: Text('Filter', style: TextStyle(fontWeight: FontWeight.w700, color: cs.primary, fontSize: 13)),
+              child: Text(
+                'Filter',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: cs.primary,
+                  fontSize: 13,
+                ),
+              ),
             ),
           TextButton(
             onPressed: onSort,
-            child: Text('Sort', style: TextStyle(fontWeight: FontWeight.w700, color: cs.primary, fontSize: 13)),
+            child: Text(
+              'Sort',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: cs.primary,
+                fontSize: 13,
+              ),
+            ),
           ),
         ],
       ),
@@ -2104,7 +2507,7 @@ class _SearchFilterBar extends StatelessWidget {
   }
 }
 
-class _MgmtTxTile extends StatelessWidget {
+class _MgmtTxTile extends StatefulWidget {
   const _MgmtTxTile({
     required this.data,
     required this.format,
@@ -2117,6 +2520,11 @@ class _MgmtTxTile extends StatelessWidget {
   final VoidCallback onTap;
   final Future<bool> Function() confirmDismissDelete;
 
+  @override
+  State<_MgmtTxTile> createState() => _MgmtTxTileState();
+}
+
+class _MgmtTxTileState extends State<_MgmtTxTile> {
   static double _parseAmount(dynamic raw) {
     if (raw == null) return 0;
     if (raw is num) return raw.toDouble();
@@ -2127,7 +2535,9 @@ class _MgmtTxTile extends StatelessWidget {
     final catMap = data['categories'];
     String? catType;
     if (catMap is Map) catType = catMap['type']?.toString().toLowerCase();
-    final legacyType = (data['type'] ?? data['transaction_type'] ?? '').toString().toLowerCase();
+    final legacyType = (data['type'] ?? data['transaction_type'] ?? '')
+        .toString()
+        .toLowerCase();
     return catType == 'expense' ||
         (catType == null &&
             (legacyType == 'expense' ||
@@ -2143,7 +2553,20 @@ class _MgmtTxTile extends StatelessWidget {
     final asDay = DateTime(d.year, d.month, d.day);
     if (asDay == today) return 'today';
     if (asDay == yest) return 'yesterday';
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${months[d.month - 1]} ${d.day} ${d.year}';
   }
 
@@ -2151,25 +2574,36 @@ class _MgmtTxTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final amountMaxWidth = (MediaQuery.sizeOf(context).width * 0.28).clamp(90.0, 132.0);
-    final title = (data['description'] ?? data['title'] ?? 'Transaction').toString();
-    var category = (data['category'] ?? '').toString();
-    final catMap = data['categories'];
+    final amountMaxWidth = (MediaQuery.sizeOf(context).width * 0.28).clamp(
+      90.0,
+      132.0,
+    );
+    final title =
+        (widget.data['description'] ?? widget.data['title'] ?? 'Transaction')
+            .toString();
+    var category = (widget.data['category'] ?? '').toString();
+    final catMap = widget.data['categories'];
     if (catMap is Map && (catMap['name']?.toString().isNotEmpty ?? false)) {
       category = catMap['name'].toString();
     }
     // Use the transaction date selected by user; fallback for old rows.
-    final createdRaw = data['date'] ?? data['created_at'];
-    final d = createdRaw != null ? DateTime.tryParse(createdRaw.toString()) : null;
+    final createdRaw = widget.data['date'] ?? widget.data['created_at'];
+    final d = createdRaw != null
+        ? DateTime.tryParse(createdRaw.toString())
+        : null;
     final subtitle = [
       if (category.isNotEmpty) category,
       if (d != null) _prettyDate(d),
     ].join(' - ');
-    final catId = (catMap is Map ? catMap['id'] : null)?.toString() ?? data['category_id']?.toString();
-    final savedCategoryColor = catMap is Map ? (catMap['color'] ?? catMap['color_value'] ?? catMap['hex_color']) : null;
+    final catId =
+        (catMap is Map ? catMap['id'] : null)?.toString() ??
+        widget.data['category_id']?.toString();
+    final savedCategoryColor = catMap is Map
+        ? (catMap['color'] ?? catMap['color_value'] ?? catMap['hex_color'])
+        : null;
     final categoryLabel = category.isEmpty ? title : category;
-    final amount = _parseAmount(data['amount']);
-    final isExpense = _isExpense(data, amount);
+    final amount = _parseAmount(widget.data['amount']);
+    final isExpense = _isExpense(widget.data, amount);
     final iconColor = categoryDisplayColor(
       categoryLabel,
       categoryId: catId,
@@ -2186,22 +2620,51 @@ class _MgmtTxTile extends StatelessWidget {
       savedColor: savedCategoryColor,
       depth: 0.84,
     );
-    final categoryType = catMap is Map ? (catMap['type']?.toString() ?? '') : '';
+    final categoryType = catMap is Map
+        ? (catMap['type']?.toString() ?? '')
+        : '';
     final categoryIcon = categoryIconForDisplay(
       iconKey: catMap is Map ? catMap['icon_key']?.toString() : null,
       name: categoryLabel,
-      type: categoryType.isEmpty ? (isExpense ? 'expense' : 'income') : categoryType,
+      type: categoryType.isEmpty
+          ? (isExpense ? 'expense' : 'income')
+          : categoryType,
       categoryId: catId,
     );
 
-    IconData leafIcon;
-    Color leafColor;
-    if (isExpense) {
-      leafIcon = Icons.eco_outlined;
-      leafColor = Colors.orange.shade700;
-    } else {
-      leafIcon = Icons.eco_outlined;
-      leafColor = Colors.green.shade700;
+    Color? leafColorFor(String? value) {
+      switch (value?.toLowerCase().trim()) {
+        case 'green':
+          return const Color(0xFF2E7D32);
+        case 'orange':
+          return const Color(0xFFF57C00);
+        case 'red':
+          return const Color(0xFFC62828);
+        default:
+          return null;
+      }
+    }
+
+    final leafColor = leafColorFor(widget.data['leaf_color']?.toString());
+    final leafTitle = widget.data['leaf_title']?.toString().trim();
+    final leafMessage = widget.data['leaf_message']?.toString().trim();
+    final showLeaf = isExpense && leafColor != null;
+
+    void showLeafTooltip(Offset anchor) {
+      if ((leafTitle == null || leafTitle.isEmpty) &&
+          (leafMessage == null || leafMessage.isEmpty)) {
+        return;
+      }
+      _MgmtLeafTooltipOverlay.show(
+        context: context,
+        anchorGlobalPosition: anchor,
+        title: leafTitle?.isNotEmpty == true
+            ? leafTitle!
+            : 'Environmental impact',
+        message: leafMessage?.isNotEmpty == true
+            ? leafMessage!
+            : 'This transaction has an environmental impact rating.',
+      );
     }
 
     final tile = Container(
@@ -2209,7 +2672,11 @@ class _MgmtTxTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: cs.shadow.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.16 : 0.08),
+            color: cs.shadow.withValues(
+              alpha: Theme.of(context).brightness == Brightness.dark
+                  ? 0.16
+                  : 0.08,
+            ),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -2219,7 +2686,10 @@ class _MgmtTxTile extends StatelessWidget {
         color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
-          onTap: onTap,
+          onTap: () {
+            _MgmtLeafTooltipOverlay.hide();
+            widget.onTap();
+          },
           borderRadius: BorderRadius.circular(20),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -2239,11 +2709,7 @@ class _MgmtTxTile extends StatelessWidget {
                       width: 1,
                     ),
                   ),
-                  child: Icon(
-                    categoryIcon,
-                    size: 22,
-                    color: iconColor,
-                  ),
+                  child: Icon(categoryIcon, size: 22, color: iconColor),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -2285,12 +2751,31 @@ class _MgmtTxTile extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Icon(leafIcon, size: 15, color: leafColor),
-                      const SizedBox(width: 4),
+                      if (showLeaf) ...[
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTapDown: (details) =>
+                              showLeafTooltip(details.globalPosition),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 4,
+                              horizontal: 2,
+                            ),
+                            child: Icon(
+                              Icons.eco_outlined,
+                              size: 15,
+                              color: leafColor,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
                       ConstrainedBox(
                         constraints: BoxConstraints(maxWidth: amountMaxWidth),
                         child: Text(
-                          isExpense ? '-${format(amount.abs())}' : '+${format(amount.abs())}',
+                          isExpense
+                              ? '-${widget.format(amount.abs())}'
+                              : '+${widget.format(amount.abs())}',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.right,
@@ -2313,7 +2798,7 @@ class _MgmtTxTile extends StatelessWidget {
       ),
     );
 
-    final id = data['id']?.toString() ?? '';
+    final id = widget.data['id']?.toString() ?? '';
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Dismissible(
@@ -2322,12 +2807,121 @@ class _MgmtTxTile extends StatelessWidget {
         background: Container(
           alignment: Alignment.centerRight,
           padding: const EdgeInsets.only(right: 20),
-          decoration: BoxDecoration(color: Colors.red.shade600, borderRadius: BorderRadius.circular(20)),
-          child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 28),
+          decoration: BoxDecoration(
+            color: Colors.red.shade600,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: const Icon(
+            Icons.delete_outline_rounded,
+            color: Colors.white,
+            size: 28,
+          ),
         ),
-        confirmDismiss: (_) => confirmDismissDelete(),
+        confirmDismiss: (_) {
+          _MgmtLeafTooltipOverlay.hide();
+          return widget.confirmDismissDelete();
+        },
         child: tile,
       ),
     );
+  }
+}
+
+class _MgmtLeafTooltipOverlay {
+  static OverlayEntry? _entry;
+  static void hide() {
+    _entry?.remove();
+    _entry = null;
+  }
+
+  static void show({
+    required BuildContext context,
+    required Offset anchorGlobalPosition,
+    required String title,
+    required String message,
+  }) {
+    hide();
+    final overlay = Overlay.maybeOf(context);
+    if (overlay == null) return;
+    _entry = OverlayEntry(
+      builder: (context) {
+        final cs = Theme.of(context).colorScheme;
+        final screen = MediaQuery.sizeOf(context);
+        const maxWidth = 260.0;
+        const margin = 12.0;
+        final width = (screen.width - margin * 2).clamp(180.0, maxWidth);
+        final left = (anchorGlobalPosition.dx - width / 2).clamp(
+          margin,
+          screen.width - width - margin,
+        );
+        final showAbove = anchorGlobalPosition.dy > 180;
+        final top = showAbove
+            ? anchorGlobalPosition.dy - 152
+            : anchorGlobalPosition.dy + 14;
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: hide,
+                child: const SizedBox.expand(),
+              ),
+            ),
+            Positioned(
+              left: left,
+              top: top.clamp(12.0, screen.height - 164),
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  width: width,
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: cs.outline.withValues(alpha: 0.16),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.12),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        softWrap: true,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        message,
+                        softWrap: true,
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.3,
+                          fontWeight: FontWeight.w500,
+                          color: cs.onSurface.withValues(alpha: 0.82),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    overlay.insert(_entry!);
   }
 }

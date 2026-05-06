@@ -15,12 +15,16 @@ class AiService {
     );
 
     if (kDebugMode) {
-      debugPrint('generate-home-insights status=${response.status} data=${response.data}');
+      debugPrint(
+        'generate-home-insights status=${response.status} data=${response.data}',
+      );
     }
 
     final raw = response.data;
     if (raw is! Map) return [];
-    final data = raw is Map<String, dynamic> ? raw : Map<String, dynamic>.from(raw);
+    final data = raw is Map<String, dynamic>
+        ? raw
+        : Map<String, dynamic>.from(raw);
     final cards = data['cards'];
     if (cards is! List) return [];
 
@@ -56,6 +60,29 @@ class AiService {
     final data = response.data;
     if (data is Map<String, dynamic>) return data;
     if (data is Map) return Map<String, dynamic>.from(data);
-    throw const FormatException('Unexpected response format from categorize-transaction');
+    throw const FormatException(
+      'Unexpected response format from categorize-transaction',
+    );
+  }
+
+  Future<Map<String, dynamic>> classifyLeafImpact({
+    required String transactionName,
+    required String category,
+    required String transactionType,
+  }) async {
+    final response = await _client.functions.invoke(
+      'classify-leaf-impact',
+      body: {
+        'transaction_name': transactionName,
+        'category': category,
+        'transaction_type': transactionType,
+      },
+    );
+    final data = response.data;
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    throw const FormatException(
+      'Unexpected response format from classify-leaf-impact',
+    );
   }
 }

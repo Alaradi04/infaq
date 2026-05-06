@@ -24,6 +24,7 @@ import 'package:infaq/ui/infaq_widgets.dart';
 import 'package:infaq/user_profile_sync.dart';
 
 const Color _kHeaderGreen = Color(0xFFE8F2EA);
+
 /// Reserves vertical space in the scroll view while the edit layer is shown above the dimmed stack.
 const double _kServicesEditPlaceholderHeight = 420;
 
@@ -45,6 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
   double _balance = 0;
   double _spentToday = 0;
   List<Map<String, dynamic>> _transactions = [];
+
   /// Incremented after each successful `_bootstrap()` so [ManagementScreen] reloads its transaction list.
   int _transactionsListRefreshToken = 0;
   String? _profilePhotoStoragePath;
@@ -52,6 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// 0 home, 1 currency, 2 analytics, 3 profile (center + is separate action).
   int _tabIndex = 0;
+
   /// Mirrors Management tab: 0 transactions, 1 subscriptions, 2 goals.
   int _managementTabIndex = 0;
 
@@ -59,10 +62,16 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loadingAiInsights = false;
   final _aiService = AiService();
 
-  List<String> _serviceKeyOrder = List<String>.from(HomeServicesLayoutStore.defaultOrder);
+  List<String> _serviceKeyOrder = List<String>.from(
+    HomeServicesLayoutStore.defaultOrder,
+  );
   bool _servicesEditMode = false;
-  List<String> _editDraftKeys = List<String>.from(HomeServicesLayoutStore.defaultOrder);
-  List<String> _savedOrderSnapshot = List<String>.from(HomeServicesLayoutStore.defaultOrder);
+  List<String> _editDraftKeys = List<String>.from(
+    HomeServicesLayoutStore.defaultOrder,
+  );
+  List<String> _savedOrderSnapshot = List<String>.from(
+    HomeServicesLayoutStore.defaultOrder,
+  );
   final LayerLink _servicesLayerLink = LayerLink();
 
   @override
@@ -70,6 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _bootstrap();
     _loadAiHomeInsights();
+    unawaited(_migrateMissingLeafImpacts());
   }
 
   Future<void> _loadAiHomeInsights() async {
@@ -98,11 +108,15 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     try {
-      await _bootstrapLoadUserData(supabase, user).timeout(const Duration(seconds: 30));
+      await _bootstrapLoadUserData(
+        supabase,
+        user,
+      ).timeout(const Duration(seconds: 30));
     } on TimeoutException {
       if (!mounted) return;
       setState(() {
-        _error = 'Loading your dashboard timed out. Check your connection and tap Retry on the error screen if shown, or pull to refresh.';
+        _error =
+            'Loading your dashboard timed out. Check your connection and tap Retry on the error screen if shown, or pull to refresh.';
         _loading = false;
       });
     } catch (e) {
@@ -114,7 +128,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _bootstrapLoadUserData(SupabaseClient supabase, User user) async {
+  Future<void> _bootstrapLoadUserData(
+    SupabaseClient supabase,
+    User user,
+  ) async {
     var profile = await supabase
         .from('users')
         .select('name,username,currency,Balance,profile_photo_path')
@@ -126,28 +143,28 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       final meta = (user.userMetadata ?? const <String, dynamic>{});
       final rawUsername = (meta['username'] ?? '').toString().trim();
-      final rawName = (meta['name'] ?? meta['full_name'] ?? '').toString().trim();
+      final rawName = (meta['name'] ?? meta['full_name'] ?? '')
+          .toString()
+          .trim();
       final email = (user.email ?? '').toString().trim();
       final derivedUsername = rawUsername.isNotEmpty
           ? rawUsername
           : (email.contains('@') ? email.split('@').first : email);
       final derivedName = rawName.isNotEmpty ? rawName : email;
-      final safeUsername =
-          derivedUsername.isNotEmpty ? derivedUsername : 'user_${user.id.substring(0, 6)}';
+      final safeUsername = derivedUsername.isNotEmpty
+          ? derivedUsername
+          : 'user_${user.id.substring(0, 6)}';
       final rawCurrency = (meta['currency'] ?? 'BHD').toString().trim();
       final currency = rawCurrency.isNotEmpty ? rawCurrency : 'BHD';
       final balance = balanceFromMetadata(meta['balance']);
 
-      await supabase.from('users').upsert(
-        <String, Object?>{
-          'id': user.id,
-          'name': derivedName,
-          'username': safeUsername,
-          'currency': currency,
-          'Balance': balance.toDouble(),
-        },
-        onConflict: 'id',
-      );
+      await supabase.from('users').upsert(<String, Object?>{
+        'id': user.id,
+        'name': derivedName,
+        'username': safeUsername,
+        'currency': currency,
+        'Balance': balance.toDouble(),
+      }, onConflict: 'id');
       await syncRegistrationMetadataToUsersRow(supabase, user);
 
       profile = await supabase
@@ -177,12 +194,18 @@ class _HomeScreenState extends State<HomeScreen> {
       _transactions = tx;
       _spentToday = spent;
       _transactionsListRefreshToken++;
-      _profilePhotoStoragePath = photoPath != null && photoPath.isNotEmpty ? photoPath : null;
-      _profileAvatarPublicUrl = InfaqAvatarStorage.publicUrl(supabase, _profilePhotoStoragePath);
+      _profilePhotoStoragePath = photoPath != null && photoPath.isNotEmpty
+          ? photoPath
+          : null;
+      _profileAvatarPublicUrl = InfaqAvatarStorage.publicUrl(
+        supabase,
+        _profilePhotoStoragePath,
+      );
       _serviceKeyOrder = serviceOrder;
       _loading = false;
       _error = null;
     });
+    unawaited(_migrateMissingLeafImpacts());
   }
 
   double _readBalance(dynamic raw) {
@@ -191,21 +214,27 @@ class _HomeScreenState extends State<HomeScreen> {
     return double.tryParse(raw.toString()) ?? 0;
   }
 
-  Future<List<Map<String, dynamic>>> _fetchRecentTransactions(String userId) async {
+  Future<List<Map<String, dynamic>>> _fetchRecentTransactions(
+    String userId,
+  ) async {
     try {
       dynamic res;
       try {
         try {
           res = await Supabase.instance.client
               .from('transactions')
-              .select('id, amount, description, date, created_at, category_id, categories(id, name, type, icon_key, color)')
+              .select(
+                'id, amount, description, date, created_at, category_id, leaf_color, leaf_title, leaf_message, categories(id, name, type, icon_key, color)',
+              )
               .eq('user_id', userId)
               .order('created_at', ascending: false)
               .limit(100);
         } catch (_) {
           res = await Supabase.instance.client
               .from('transactions')
-              .select('id, amount, description, date, created_at, category_id, categories(id, name, type, icon_key)')
+              .select(
+                'id, amount, description, date, created_at, category_id, leaf_color, leaf_title, leaf_message, categories(id, name, type, icon_key)',
+              )
               .eq('user_id', userId)
               .order('created_at', ascending: false)
               .limit(100);
@@ -246,7 +275,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (catType == 'expense') {
         sum += amount.abs();
       } else if (catType == null || catType.isEmpty) {
-        final type = (r['type'] ?? r['transaction_type'] ?? '').toString().toLowerCase();
+        final type = (r['type'] ?? r['transaction_type'] ?? '')
+            .toString()
+            .toLowerCase();
         if (type == 'expense' || type == 'debit' || type == 'out') {
           sum += amount.abs();
         } else if (type.isEmpty && amount < 0) {
@@ -261,6 +292,80 @@ class _HomeScreenState extends State<HomeScreen> {
     if (raw == null) return 0;
     if (raw is num) return raw.toDouble();
     return double.tryParse(raw.toString()) ?? 0;
+  }
+
+  Future<void> _migrateMissingLeafImpacts() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    try {
+      final missing = await Supabase.instance.client
+          .from('transactions')
+          .select('id, description, category_id')
+          .eq('user_id', user.id)
+          .isFilter('leaf_color', null)
+          .limit(5);
+      final missingRows = (missing as List<dynamic>)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList(growable: false);
+      if (missingRows.isEmpty) return;
+      debugPrint(
+        'Leaf migration old transactions found: ${missingRows.length}',
+      );
+
+      final categoryIds = missingRows
+          .map((row) => row['category_id']?.toString())
+          .where((id) => id != null && id.isNotEmpty)
+          .cast<String>()
+          .toSet()
+          .toList();
+      if (categoryIds.isEmpty) return;
+      final categories = await Supabase.instance.client
+          .from('categories')
+          .select('id, name, type')
+          .inFilter('id', categoryIds);
+      final categoryById = <String, Map<String, dynamic>>{};
+      for (final c in (categories as List<dynamic>)) {
+        final map = Map<String, dynamic>.from(c as Map);
+        final id = map['id']?.toString();
+        if (id == null || id.isEmpty) continue;
+        categoryById[id] = map;
+      }
+
+      for (final tx in missingRows) {
+        final txId = tx['id']?.toString();
+        final catId = tx['category_id']?.toString();
+        if (txId == null || txId.isEmpty || catId == null || catId.isEmpty) {
+          continue;
+        }
+        final cat = categoryById[catId];
+        final catType = cat?['type']?.toString().toLowerCase();
+        if (catType != 'expense') continue;
+        final txName = (tx['description'] ?? '').toString().trim();
+        final categoryName = (cat?['name'] ?? '').toString().trim();
+        if (txName.isEmpty || categoryName.isEmpty) continue;
+        try {
+          final impact = await _aiService.classifyLeafImpact(
+            transactionName: txName,
+            category: categoryName,
+            transactionType: 'expense',
+          );
+          await Supabase.instance.client
+              .from('transactions')
+              .update({
+                'leaf_color': impact['leaf_color'],
+                'leaf_title': impact['title'],
+                'leaf_message': impact['message'],
+              })
+              .eq('id', txId)
+              .eq('user_id', user.id);
+          debugPrint('Leaf migration updated transaction id=$txId');
+        } catch (e, st) {
+          debugPrint('Leaf migration error tx=$txId: $e\n$st');
+        }
+      }
+    } catch (e, st) {
+      debugPrint('Leaf migration background query failed: $e\n$st');
+    }
   }
 
   String _currencyPrefix() {
@@ -335,7 +440,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// For [Dismissible]: returns `true` if the row should be removed, `false` to snap back.
-  Future<bool> _confirmDeleteTransactionDismissible(Map<String, dynamic> row) async {
+  Future<bool> _confirmDeleteTransactionDismissible(
+    Map<String, dynamic> row,
+  ) async {
     final id = row['id']?.toString();
     if (id == null || id.isEmpty) return false;
 
@@ -349,7 +456,10 @@ class _HomeScreenState extends State<HomeScreen> {
           style: TextStyle(color: Colors.black.withValues(alpha: 0.7)),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
@@ -364,7 +474,11 @@ class _HomeScreenState extends State<HomeScreen> {
     if (user == null) return false;
 
     try {
-      await Supabase.instance.client.from('transactions').delete().eq('id', id).eq('user_id', user.id);
+      await Supabase.instance.client
+          .from('transactions')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', user.id);
       if (!mounted) return false;
       await _bootstrap();
       if (mounted) showInfaqSnack(context, 'Transaction deleted');
@@ -456,7 +570,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _openManageCategories() async {
     await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (context) => const ManageCategoriesScreen()),
+      MaterialPageRoute<void>(
+        builder: (context) => const ManageCategoriesScreen(),
+      ),
     );
   }
 
@@ -504,7 +620,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
       try {
-        await HomeServicesLayoutStore.save(user.id, List<String>.from(_editDraftKeys));
+        await HomeServicesLayoutStore.save(
+          user.id,
+          List<String>.from(_editDraftKeys),
+        );
       } catch (e) {
         if (mounted) showInfaqSnack(context, 'Could not save layout.');
         return;
@@ -532,7 +651,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _removeServiceDraft(String key) {
     if (_editDraftKeys.length <= HomeServicesLayoutStore.minVisible) {
-      showInfaqSnack(context, 'Keep at least ${HomeServicesLayoutStore.minVisible} shortcuts.');
+      showInfaqSnack(
+        context,
+        'Keep at least ${HomeServicesLayoutStore.minVisible} shortcuts.',
+      );
       return;
     }
     setState(() => _editDraftKeys.remove(key));
@@ -578,18 +700,32 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    final progress = _balance > 0 ? (_spentToday / _balance).clamp(0.0, 1.0) : 0.0;
+    final progress = _balance > 0
+        ? (_spentToday / _balance).clamp(0.0, 1.0)
+        : 0.0;
 
     return Scaffold(
       backgroundColor: cs.surface,
       extendBody: true,
       bottomNavigationBar: InfaqBottomNavBar(
         tabIndex: _tabIndex,
-        onHome: () => setState(() => _tabIndex = 0),
-        onCurrency: () => setState(() => _tabIndex = 1),
+        onHome: () {
+          _LeafImpactTooltipOverlay.hide();
+          setState(() => _tabIndex = 0);
+        },
+        onCurrency: () {
+          _LeafImpactTooltipOverlay.hide();
+          setState(() => _tabIndex = 1);
+        },
         onAdd: _handleBottomAdd,
-        onAnalytics: () => setState(() => _tabIndex = 2),
-        onProfile: () => setState(() => _tabIndex = 3),
+        onAnalytics: () {
+          _LeafImpactTooltipOverlay.hide();
+          setState(() => _tabIndex = 2);
+        },
+        onProfile: () {
+          _LeafImpactTooltipOverlay.hide();
+          setState(() => _tabIndex = 3);
+        },
       ),
       body: ColoredBox(
         color: cs.surface,
@@ -606,139 +742,174 @@ class _HomeScreenState extends State<HomeScreen> {
                     await _bootstrap();
                     await _loadAiHomeInsights();
                   },
-                  child: CustomScrollView(
-                    physics: _servicesEditMode
-                        ? const NeverScrollableScrollPhysics()
-                        : const AlwaysScrollableScrollPhysics(),
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: Container(
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                isDark ? const Color(0xFF1A2520) : _kHeaderGreen,
-                                cs.surface,
-                              ],
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (_) {
+                      _LeafImpactTooltipOverlay.hide();
+                      return false;
+                    },
+                    child: CustomScrollView(
+                      physics: _servicesEditMode
+                          ? const NeverScrollableScrollPhysics()
+                          : const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: Container(
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  isDark
+                                      ? const Color(0xFF1A2520)
+                                      : _kHeaderGreen,
+                                  cs.surface,
+                                ],
+                              ),
                             ),
-                          ),
-                          child: SafeArea(
-                            bottom: false,
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          _greetingLine(),
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            color: cs.onSurface.withValues(alpha: 0.55),
-                                            fontWeight: FontWeight.w600,
+                            child: SafeArea(
+                              bottom: false,
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  10,
+                                  20,
+                                  8,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            _greetingLine(),
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: cs.onSurface.withValues(
+                                                alpha: 0.55,
+                                              ),
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      IconButton(
-                                        tooltip: 'Sign out',
-                                        visualDensity: VisualDensity.compact,
-                                        onPressed: () => Supabase.instance.client.auth.signOut(),
-                                        icon: Icon(Icons.logout_rounded, color: cs.primary, size: 22),
-                                      ),
-                                    ],
-                                  ),
-                                  Text(
-                                    _firstName(),
-                                    style: TextStyle(
-                                      fontSize: 26,
-                                      fontWeight: FontWeight.w800,
-                                      color: cs.primary,
-                                      height: 1.15,
+                                        IconButton(
+                                          tooltip: 'Sign out',
+                                          visualDensity: VisualDensity.compact,
+                                          onPressed: () => Supabase
+                                              .instance
+                                              .client
+                                              .auth
+                                              .signOut(),
+                                          icon: Icon(
+                                            Icons.logout_rounded,
+                                            color: cs.primary,
+                                            size: 22,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                  const SizedBox(height: 14),
-                                  _SummaryCard(
-                                    monthLabel: _monthYearLabel(),
-                                    dateDayLabel: _todayLabel(),
-                                    spentToday: _spentToday,
-                                    balance: _balance,
-                                    progress: progress,
-                                    format: _fmtMoney,
-                                  ),
-                                ],
+                                    Text(
+                                      _firstName(),
+                                      style: TextStyle(
+                                        fontSize: 26,
+                                        fontWeight: FontWeight.w800,
+                                        color: cs.primary,
+                                        height: 1.15,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 14),
+                                    _SummaryCard(
+                                      monthLabel: _monthYearLabel(),
+                                      dateDayLabel: _todayLabel(),
+                                      spentToday: _spentToday,
+                                      balance: _balance,
+                                      progress: progress,
+                                      format: _fmtMoney,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Services',
-                                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: cs.onSurface),
-                              ),
-                              const SizedBox(height: 12),
-                              CompositedTransformTarget(
-                                link: _servicesLayerLink,
-                                child: _servicesEditMode
-                                    ? const SizedBox(width: double.infinity, height: _kServicesEditPlaceholderHeight)
-                                    : _ServicesGridOrdered(
-                                        orderedKeys: _serviceKeyOrder,
-                                        onServiceTap: _onServiceTap,
-                                      ),
-                              ),
-                              const SizedBox(height: 28),
-                          _SectionHeader(
-                            title: 'Insights',
-                            action: 'View all',
-                            onAction: () => setState(() => _tabIndex = 2),
-                          ),
-                          const SizedBox(height: 12),
-                          Column(
-                            children: _loadingAiInsights
-                                ? [AiInsightCard.loading()]
-                                : _aiInsightCards.isEmpty
-                                    ? [AiInsightCard.fallback()]
-                                    : _aiInsightCards
-                                        .take(3)
-                                        .map(
-                                          (c) => Padding(
-                                            padding: const EdgeInsets.only(bottom: 10),
-                                            child: AiInsightCard.fromMap(c),
-                                          ),
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Services',
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w800,
+                                    color: cs.onSurface,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                CompositedTransformTarget(
+                                  link: _servicesLayerLink,
+                                  child: _servicesEditMode
+                                      ? const SizedBox(
+                                          width: double.infinity,
+                                          height:
+                                              _kServicesEditPlaceholderHeight,
                                         )
-                                        .toList(),
+                                      : _ServicesGridOrdered(
+                                          orderedKeys: _serviceKeyOrder,
+                                          onServiceTap: _onServiceTap,
+                                        ),
+                                ),
+                                const SizedBox(height: 28),
+                                _SectionHeader(
+                                  title: 'Insights',
+                                  action: 'View all',
+                                  onAction: () => setState(() => _tabIndex = 2),
+                                ),
+                                const SizedBox(height: 12),
+                                Column(
+                                  children: _loadingAiInsights
+                                      ? [AiInsightCard.loading()]
+                                      : _aiInsightCards.isEmpty
+                                      ? [AiInsightCard.fallback()]
+                                      : _aiInsightCards
+                                            .take(3)
+                                            .map(
+                                              (c) => Padding(
+                                                padding: const EdgeInsets.only(
+                                                  bottom: 10,
+                                                ),
+                                                child: AiInsightCard.fromMap(c),
+                                              ),
+                                            )
+                                            .toList(),
+                                ),
+                                const SizedBox(height: 28),
+                                _SectionHeader(
+                                  title: 'Recent transactions',
+                                  action: 'View all',
+                                  onAction: () => setState(() => _tabIndex = 1),
+                                ),
+                                const SizedBox(height: 12),
+                                _TransactionsList(
+                                  transactions: _transactions,
+                                  format: _fmtMoney,
+                                  onEdit: _openEditTransaction,
+                                  onConfirmDismissDelete:
+                                      _confirmDeleteTransactionDismissible,
+                                ),
+                                const SizedBox(height: 120),
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 28),
-                          _SectionHeader(
-                            title: 'Recent transactions',
-                            action: 'View all',
-                            onAction: () => setState(() => _tabIndex = 1),
-                          ),
-                          const SizedBox(height: 12),
-                          _TransactionsList(
-                            transactions: _transactions,
-                            format: _fmtMoney,
-                            onEdit: _openEditTransaction,
-                            onConfirmDismissDelete: _confirmDeleteTransactionDismissible,
-                          ),
-                          const SizedBox(height: 120),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
-                if (_servicesEditMode) const Positioned.fill(child: _ServicesEditBackdrop()),
+                ),
+                if (_servicesEditMode)
+                  const Positioned.fill(child: _ServicesEditBackdrop()),
                 if (_servicesEditMode)
                   CompositedTransformFollower(
                     link: _servicesLayerLink,
@@ -765,7 +936,8 @@ class _HomeScreenState extends State<HomeScreen> {
               transactionsListRefreshToken: _transactionsListRefreshToken,
               onDataChanged: _bootstrap,
               onEditTransaction: _openEditTransaction,
-              onMainTabIndexChanged: (index) => setState(() => _managementTabIndex = index),
+              onMainTabIndexChanged: (index) =>
+                  setState(() => _managementTabIndex = index),
             ),
             InsightsScreen(
               refreshToken: _transactionsListRefreshToken,
@@ -844,7 +1016,9 @@ class _SummaryCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(_cardRadius),
-        border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.22 : 0.12)),
+        border: Border.all(
+          color: cs.outline.withValues(alpha: isDark ? 0.22 : 0.12),
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.06),
@@ -965,7 +1139,10 @@ class _SummaryCard extends StatelessWidget {
 }
 
 class _ServicesGridOrdered extends StatelessWidget {
-  const _ServicesGridOrdered({required this.orderedKeys, required this.onServiceTap});
+  const _ServicesGridOrdered({
+    required this.orderedKeys,
+    required this.onServiceTap,
+  });
 
   final List<String> orderedKeys;
   final void Function(String serviceKey) onServiceTap;
@@ -1035,6 +1212,7 @@ class _ServicesEditPanel extends StatelessWidget {
 
   static const int _cols = 3;
   static const double _gridSpacing = 12;
+
   /// Target row height so labels + badges fit without clipping inside grid cells.
   static const double _cellHeight = 96;
 
@@ -1048,7 +1226,9 @@ class _ServicesEditPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final available = HomeServicesLayoutStore.defaultOrder.where((k) => !draftKeys.contains(k)).toList();
+    final available = HomeServicesLayoutStore.defaultOrder
+        .where((k) => !draftKeys.contains(k))
+        .toList();
 
     return Material(
       color: Colors.transparent,
@@ -1058,7 +1238,8 @@ class _ServicesEditPanel extends StatelessWidget {
           final cellW = (w - (_cols - 1) * _gridSpacing) / _cols;
           final aspect = cellW / _cellHeight;
 
-          SliverGridDelegate gridDelegate() => SliverGridDelegateWithFixedCrossAxisCount(
+          SliverGridDelegate gridDelegate() =>
+              SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: _cols,
                 mainAxisSpacing: _gridSpacing,
                 crossAxisSpacing: _gridSpacing,
@@ -1088,7 +1269,10 @@ class _ServicesEditPanel extends StatelessWidget {
                       onPressed: () => onDone(),
                       child: Text(
                         'Done',
-                        style: TextStyle(fontWeight: FontWeight.w800, color: cs.primary),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: cs.primary,
+                        ),
                       ),
                     ),
                   ],
@@ -1168,7 +1352,11 @@ class _ServicesEditPanel extends StatelessWidget {
                                     onTap: () => onAdd(key),
                                     child: const Padding(
                                       padding: EdgeInsets.all(4),
-                                      child: Icon(Icons.add, size: 13, color: Colors.white),
+                                      child: Icon(
+                                        Icons.add,
+                                        size: 13,
+                                        color: Colors.white,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -1240,7 +1428,11 @@ class _ActiveShortcutDragCell extends StatelessWidget {
                     scale: 1.08,
                     child: SizedBox(
                       width: cellWidth * 0.96,
-                      child: _ServiceTile(icon: meta.$1, label: meta.$2, onTap: () {}),
+                      child: _ServiceTile(
+                        icon: meta.$1,
+                        label: meta.$2,
+                        onTap: () {},
+                      ),
                     ),
                   ),
                 ),
@@ -1253,10 +1445,16 @@ class _ActiveShortcutDragCell extends StatelessWidget {
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: colorScheme.outline.withValues(alpha: 0.28)),
+                        border: Border.all(
+                          color: colorScheme.outline.withValues(alpha: 0.28),
+                        ),
                       ),
                       child: Center(
-                        child: _ServiceTile(icon: meta.$1, label: meta.$2, onTap: () {}),
+                        child: _ServiceTile(
+                          icon: meta.$1,
+                          label: meta.$2,
+                          onTap: () {},
+                        ),
                       ),
                     ),
                   ),
@@ -1268,7 +1466,11 @@ class _ActiveShortcutDragCell extends StatelessWidget {
                     child: Stack(
                       clipBehavior: Clip.none,
                       children: [
-                        _ServiceTile(icon: meta.$1, label: meta.$2, onTap: () {}),
+                        _ServiceTile(
+                          icon: meta.$1,
+                          label: meta.$2,
+                          onTap: () {},
+                        ),
                         Positioned(
                           top: 2,
                           left: 2,
@@ -1281,7 +1483,11 @@ class _ActiveShortcutDragCell extends StatelessWidget {
                               onTap: () => onRemove(serviceKey),
                               child: const Padding(
                                 padding: EdgeInsets.all(4),
-                                child: Icon(Icons.remove, size: 13, color: Colors.white),
+                                child: Icon(
+                                  Icons.remove,
+                                  size: 13,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ),
@@ -1300,7 +1506,11 @@ class _ActiveShortcutDragCell extends StatelessWidget {
 }
 
 class _ServiceTile extends StatelessWidget {
-  const _ServiceTile({required this.icon, required this.label, required this.onTap});
+  const _ServiceTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String label;
@@ -1325,7 +1535,9 @@ class _ServiceTile extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: isDark ? cs.surfaceContainerHigh : _kHeaderGreen,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.35 : 0.22)),
+                  border: Border.all(
+                    color: cs.outline.withValues(alpha: isDark ? 0.35 : 0.22),
+                  ),
                 ),
                 child: Icon(icon, color: cs.primary, size: 22),
               ),
@@ -1333,7 +1545,11 @@ class _ServiceTile extends StatelessWidget {
               Text(
                 label,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cs.onSurface),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurface,
+                ),
               ),
             ],
           ),
@@ -1361,12 +1577,19 @@ class _SectionHeader extends StatelessWidget {
         Expanded(
           child: Text(
             title,
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface),
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
           ),
         ),
         TextButton(
           onPressed: onAction,
-          child: Text('$action →', style: const TextStyle(fontWeight: FontWeight.w700)),
+          child: Text(
+            '$action →',
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
         ),
       ],
     );
@@ -1400,7 +1623,10 @@ class _TransactionsList extends StatelessWidget {
         ),
         child: Text(
           'No transactions yet. Add your first income or expense from Services.',
-          style: TextStyle(color: cs.onSurface.withValues(alpha: 0.55), height: 1.4),
+          style: TextStyle(
+            color: cs.onSurface.withValues(alpha: 0.55),
+            height: 1.4,
+          ),
         ),
       );
     }
@@ -1419,7 +1645,7 @@ class _TransactionsList extends StatelessWidget {
   }
 }
 
-class _TxRow extends StatelessWidget {
+class _TxRow extends StatefulWidget {
   const _TxRow({
     required this.data,
     required this.format,
@@ -1432,6 +1658,11 @@ class _TxRow extends StatelessWidget {
   final VoidCallback onTap;
   final Future<bool> Function() confirmDismissDelete;
 
+  @override
+  State<_TxRow> createState() => _TxRowState();
+}
+
+class _TxRowState extends State<_TxRow> {
   static double _parseAmount(dynamic raw) {
     if (raw == null) return 0;
     if (raw is num) return raw.toDouble();
@@ -1442,7 +1673,9 @@ class _TxRow extends StatelessWidget {
     final catMap = data['categories'];
     String? catType;
     if (catMap is Map) catType = catMap['type']?.toString().toLowerCase();
-    final legacyType = (data['type'] ?? data['transaction_type'] ?? '').toString().toLowerCase();
+    final legacyType = (data['type'] ?? data['transaction_type'] ?? '')
+        .toString()
+        .toLowerCase();
     return catType == 'expense' ||
         (catType == null &&
             (legacyType == 'expense' ||
@@ -1458,7 +1691,20 @@ class _TxRow extends StatelessWidget {
     final asDay = DateTime(d.year, d.month, d.day);
     if (asDay == today) return 'today';
     if (asDay == yest) return 'yesterday';
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${months[d.month - 1]} ${d.day} ${d.year}';
   }
 
@@ -1466,24 +1712,41 @@ class _TxRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final amountMaxWidth = (MediaQuery.sizeOf(context).width * 0.28).clamp(90.0, 132.0);
-    final title = (data['description'] ?? data['title'] ?? data['merchant'] ?? data['name'] ?? 'Transaction').toString();
-    var category = (data['category'] ?? data['category_name'] ?? '').toString();
-    final catMap = data['categories'];
+    final amountMaxWidth = (MediaQuery.sizeOf(context).width * 0.28).clamp(
+      90.0,
+      132.0,
+    );
+    final title =
+        (widget.data['description'] ??
+                widget.data['title'] ??
+                widget.data['merchant'] ??
+                widget.data['name'] ??
+                'Transaction')
+            .toString();
+    var category =
+        (widget.data['category'] ?? widget.data['category_name'] ?? '')
+            .toString();
+    final catMap = widget.data['categories'];
     if (catMap is Map && (catMap['name']?.toString().isNotEmpty ?? false)) {
       category = catMap['name'].toString();
     }
-    final createdRaw = data['date'] ?? data['created_at'];
-    final d = createdRaw != null ? DateTime.tryParse(createdRaw.toString()) : null;
+    final createdRaw = widget.data['date'] ?? widget.data['created_at'];
+    final d = createdRaw != null
+        ? DateTime.tryParse(createdRaw.toString())
+        : null;
     final subtitle = [
       if (category.isNotEmpty) category,
       if (d != null) _prettyDate(d),
     ].join(' - ');
-    final catId = (catMap is Map ? catMap['id'] : null)?.toString() ?? data['category_id']?.toString();
-    final savedCategoryColor = catMap is Map ? (catMap['color'] ?? catMap['color_value'] ?? catMap['hex_color']) : null;
+    final catId =
+        (catMap is Map ? catMap['id'] : null)?.toString() ??
+        widget.data['category_id']?.toString();
+    final savedCategoryColor = catMap is Map
+        ? (catMap['color'] ?? catMap['color_value'] ?? catMap['hex_color'])
+        : null;
     final categoryLabel = category.isEmpty ? title : category;
-    final amount = _parseAmount(data['amount']);
-    final isExpense = _isExpense(data, amount);
+    final amount = _parseAmount(widget.data['amount']);
+    final isExpense = _isExpense(widget.data, amount);
     final iconColor = categoryDisplayColor(
       categoryLabel,
       categoryId: catId,
@@ -1500,25 +1763,54 @@ class _TxRow extends StatelessWidget {
       savedColor: savedCategoryColor,
       depth: 0.84,
     );
-    final categoryType = catMap is Map ? (catMap['type']?.toString() ?? '') : '';
+    final categoryType = catMap is Map
+        ? (catMap['type']?.toString() ?? '')
+        : '';
     final categoryIcon = categoryIconForDisplay(
       iconKey: catMap is Map ? catMap['icon_key']?.toString() : null,
       name: categoryLabel,
-      type: categoryType.isEmpty ? (isExpense ? 'expense' : 'income') : categoryType,
+      type: categoryType.isEmpty
+          ? (isExpense ? 'expense' : 'income')
+          : categoryType,
       categoryId: catId,
     );
 
-    IconData leafIcon;
-    Color leafColor;
-    if (isExpense) {
-      leafIcon = Icons.eco_outlined;
-      leafColor = Colors.orange.shade700;
-    } else {
-      leafIcon = Icons.eco_outlined;
-      leafColor = Colors.green.shade700;
+    Color? leafColorFor(String? value) {
+      switch (value?.toLowerCase().trim()) {
+        case 'green':
+          return const Color(0xFF2E7D32);
+        case 'orange':
+          return const Color(0xFFF57C00);
+        case 'red':
+          return const Color(0xFFC62828);
+        default:
+          return null;
+      }
     }
 
-    final txId = data['id']?.toString() ?? '';
+    final leafColor = leafColorFor(widget.data['leaf_color']?.toString());
+    final leafTitle = widget.data['leaf_title']?.toString().trim();
+    final leafMessage = widget.data['leaf_message']?.toString().trim();
+    final showLeaf = isExpense && leafColor != null;
+
+    void showLeafTooltip(Offset anchor) {
+      if ((leafTitle == null || leafTitle.isEmpty) &&
+          (leafMessage == null || leafMessage.isEmpty)) {
+        return;
+      }
+      _LeafImpactTooltipOverlay.show(
+        context: context,
+        anchorGlobalPosition: anchor,
+        title: leafTitle?.isNotEmpty == true
+            ? leafTitle!
+            : 'Environmental impact',
+        message: leafMessage?.isNotEmpty == true
+            ? leafMessage!
+            : 'This transaction has an environmental impact rating.',
+      );
+    }
+
+    final txId = widget.data['id']?.toString() ?? '';
     final canMutate = txId.isNotEmpty;
 
     final tile = Container(
@@ -1526,7 +1818,11 @@ class _TxRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: cs.shadow.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.16 : 0.08),
+            color: cs.shadow.withValues(
+              alpha: Theme.of(context).brightness == Brightness.dark
+                  ? 0.16
+                  : 0.08,
+            ),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -1536,7 +1832,12 @@ class _TxRow extends StatelessWidget {
         color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
-          onTap: canMutate ? onTap : null,
+          onTap: canMutate
+              ? () {
+                  _LeafImpactTooltipOverlay.hide();
+                  widget.onTap();
+                }
+              : null,
           borderRadius: BorderRadius.circular(20),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1556,11 +1857,7 @@ class _TxRow extends StatelessWidget {
                       width: 1,
                     ),
                   ),
-                  child: Icon(
-                    categoryIcon,
-                    size: 22,
-                    color: iconColor,
-                  ),
+                  child: Icon(categoryIcon, size: 22, color: iconColor),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -1602,12 +1899,31 @@ class _TxRow extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Icon(leafIcon, size: 15, color: leafColor),
-                      const SizedBox(width: 4),
+                      if (showLeaf) ...[
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTapDown: (details) =>
+                              showLeafTooltip(details.globalPosition),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 4,
+                              horizontal: 2,
+                            ),
+                            child: Icon(
+                              Icons.eco_outlined,
+                              size: 15,
+                              color: leafColor,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
                       ConstrainedBox(
                         constraints: BoxConstraints(maxWidth: amountMaxWidth),
                         child: Text(
-                          isExpense ? '-${format(amount.abs())}' : '+${format(amount.abs())}',
+                          isExpense
+                              ? '-${widget.format(amount.abs())}'
+                              : '+${widget.format(amount.abs())}',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.right,
@@ -1639,13 +1955,191 @@ class _TxRow extends StatelessWidget {
               background: Container(
                 alignment: Alignment.centerRight,
                 padding: const EdgeInsets.only(right: 20),
-                decoration: BoxDecoration(color: Colors.red.shade600, borderRadius: BorderRadius.circular(20)),
-                child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 28),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade600,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.white,
+                  size: 28,
+                ),
               ),
-              confirmDismiss: (_) => confirmDismissDelete(),
+              confirmDismiss: (_) {
+                _LeafImpactTooltipOverlay.hide();
+                return widget.confirmDismissDelete();
+              },
               child: tile,
             )
           : tile,
     );
   }
+}
+
+class _LeafImpactTooltipOverlay {
+  static OverlayEntry? _entry;
+
+  static void hide() {
+    _entry?.remove();
+    _entry = null;
+  }
+
+  static void show({
+    required BuildContext context,
+    required Offset anchorGlobalPosition,
+    required String title,
+    required String message,
+  }) {
+    hide();
+    final overlay = Overlay.maybeOf(context);
+    if (overlay == null) return;
+    _entry = OverlayEntry(
+      builder: (context) {
+        final cs = Theme.of(context).colorScheme;
+        const horizontalMargin = 12.0;
+        const maxWidth = 260.0;
+        const verticalGap = 10.0;
+        const arrowHeight = 7.0;
+        final screen = MediaQuery.sizeOf(context);
+        final bubbleWidth = (screen.width - horizontalMargin * 2).clamp(
+          180.0,
+          maxWidth,
+        );
+        final left = (anchorGlobalPosition.dx - bubbleWidth / 2).clamp(
+          horizontalMargin,
+          screen.width - bubbleWidth - horizontalMargin,
+        );
+        final showAbove = anchorGlobalPosition.dy > 180;
+        final bubbleHeightEstimate = 128.0;
+        final top = showAbove
+            ? (anchorGlobalPosition.dy -
+                      bubbleHeightEstimate -
+                      verticalGap -
+                      arrowHeight)
+                  .clamp(12.0, screen.height - bubbleHeightEstimate - 12)
+            : (anchorGlobalPosition.dy + verticalGap + arrowHeight).clamp(
+                12.0,
+                screen.height - bubbleHeightEstimate - 12,
+              );
+        final arrowLeft = (anchorGlobalPosition.dx - left - 7).clamp(
+          12.0,
+          bubbleWidth - 26,
+        );
+
+        Widget arrow(bool up) => Align(
+          alignment: Alignment.topLeft,
+          child: Padding(
+            padding: EdgeInsets.only(left: arrowLeft),
+            child: CustomPaint(
+              painter: _LeafTooltipArrowPainter(
+                color: cs.surfaceContainerHighest,
+                pointsUp: up,
+              ),
+              child: const SizedBox(width: 14, height: 7),
+            ),
+          ),
+        );
+
+        final bubble = Container(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+            border: Border.all(color: cs.outline.withValues(alpha: 0.16)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                softWrap: true,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: cs.onSurface,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                message,
+                softWrap: true,
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.3,
+                  fontWeight: FontWeight.w500,
+                  color: cs.onSurface.withValues(alpha: 0.82),
+                ),
+              ),
+            ],
+          ),
+        );
+
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: hide,
+                child: const SizedBox.expand(),
+              ),
+            ),
+            Positioned(
+              left: left,
+              top: top,
+              child: Material(
+                color: Colors.transparent,
+                child: SizedBox(
+                  width: bubbleWidth,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: showAbove
+                        ? [bubble, arrow(false)]
+                        : [arrow(true), bubble],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    overlay.insert(_entry!);
+  }
+}
+
+class _LeafTooltipArrowPainter extends CustomPainter {
+  const _LeafTooltipArrowPainter({required this.color, required this.pointsUp});
+  final Color color;
+  final bool pointsUp;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    final path = Path();
+    if (pointsUp) {
+      path
+        ..moveTo(size.width / 2, 0)
+        ..lineTo(0, size.height)
+        ..lineTo(size.width, size.height)
+        ..close();
+    } else {
+      path
+        ..moveTo(0, 0)
+        ..lineTo(size.width, 0)
+        ..lineTo(size.width / 2, size.height)
+        ..close();
+    }
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _LeafTooltipArrowPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.pointsUp != pointsUp;
 }
