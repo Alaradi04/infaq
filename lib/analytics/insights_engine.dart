@@ -117,13 +117,36 @@ List<CategorySpendSlice> buildCategorySlices(
   DateTime start,
   DateTime end,
 ) {
-  final map = expenseByCategory(transactions, start, end);
-  final entries = map.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-  final out = <CategorySpendSlice>[];
-  for (final e in entries) {
-    out.add(CategorySpendSlice(name: e.key, amount: e.value, color: categoryDisplayColor(e.key)));
+  final grouped = <String, ({String name, String? id, dynamic savedColor, double amount})>{};
+  for (final t in transactions) {
+    final d = parseTxLocalDate(t);
+    if (!_inInclusiveRange(d, start, end)) continue;
+    final amt = readAmount(t);
+    if (!txIsExpense(t, amt)) continue;
+    final cat = t['categories'];
+    final catNameRaw = cat is Map ? cat['name']?.toString() : null;
+    final name = (catNameRaw == null || catNameRaw.trim().isEmpty) ? 'Uncategorized' : catNameRaw.trim();
+    final id = (cat is Map ? cat['id'] : null)?.toString() ?? t['category_id']?.toString();
+    final savedColor = cat is Map ? (cat['color'] ?? cat['color_value'] ?? cat['hex_color']) : null;
+    final key = (id != null && id.isNotEmpty) ? 'id:$id' : 'name:${name.toLowerCase()}';
+    final prev = grouped[key];
+    grouped[key] = (
+      name: name,
+      id: id,
+      savedColor: savedColor ?? prev?.savedColor,
+      amount: (prev?.amount ?? 0) + amt.abs(),
+    );
   }
-  return out;
+
+  final entries = grouped.values.toList()..sort((a, b) => b.amount.compareTo(a.amount));
+  return [
+    for (final e in entries)
+      CategorySpendSlice(
+        name: e.name,
+        amount: e.amount,
+        color: categoryDisplayColorFor(e.name, categoryId: e.id, savedColor: e.savedColor),
+      ),
+  ];
 }
 
 List<TrendBarSlice> buildTrendBars(

@@ -264,6 +264,7 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
                       child: InfaqPillAmountStepper(
                         controller: _targetCtrl,
                         currencySuffix: suffix,
+                      showStepper: false,
                         onChanged: () => setState(() {}),
                       ),
                     ),
@@ -273,6 +274,7 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
                       child: InfaqPillAmountStepper(
                         controller: _savedCtrl,
                         currencySuffix: suffix,
+                      showStepper: false,
                         onChanged: () => setState(() {}),
                       ),
                     ),
@@ -290,6 +292,7 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
                       child: InfaqPillAmountStepper(
                         controller: _monthlyCtrl,
                         currencySuffix: suffix,
+                      showStepper: false,
                         onChanged: () => setState(() {}),
                       ),
                     ),

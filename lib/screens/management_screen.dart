@@ -67,9 +67,17 @@ class _ManagementScreenState extends State<ManagementScreen> {
   /// Spending budget shown in summary (persisted as `users.Balance` when edited).
   double _monthlyBudget = 0;
 
-  _PeriodMode _periodMode = _PeriodMode.month;
-  DateTime _focusedMonth = DateTime(DateTime.now().year, DateTime.now().month);
-  int _focusedYear = DateTime.now().year;
+  _PeriodMode _txPeriodMode = _PeriodMode.month;
+  DateTime _txFocusedMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  int _txFocusedYear = DateTime.now().year;
+
+  _PeriodMode _subPeriodMode = _PeriodMode.allTime;
+  DateTime _subFocusedMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  int _subFocusedYear = DateTime.now().year;
+
+  _PeriodMode _goalPeriodMode = _PeriodMode.allTime;
+  DateTime _goalFocusedMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  int _goalFocusedYear = DateTime.now().year;
 
   String _searchQuery = '';
   _TxTypeFilter _typeFilter = _TxTypeFilter.all;
@@ -134,12 +142,21 @@ class _ManagementScreenState extends State<ManagementScreen> {
     try {
       dynamic res;
       try {
-        res = await Supabase.instance.client
-            .from('transactions')
-            .select('id, amount, description, date, created_at, category_id, categories(name, type)')
-            .eq('user_id', user.id)
-            .order('date', ascending: false)
-            .limit(500);
+        try {
+          res = await Supabase.instance.client
+              .from('transactions')
+              .select('id, amount, description, date, created_at, category_id, categories(id, name, type, icon_key, color)')
+              .eq('user_id', user.id)
+              .order('date', ascending: false)
+              .limit(500);
+        } catch (_) {
+          res = await Supabase.instance.client
+              .from('transactions')
+              .select('id, amount, description, date, created_at, category_id, categories(id, name, type, icon_key)')
+              .eq('user_id', user.id)
+              .order('date', ascending: false)
+              .limit(500);
+        }
       } catch (_) {
         res = await Supabase.instance.client
             .from('transactions')
@@ -310,7 +327,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
     var hasUncategorized = false;
     for (final r in _transactions) {
       final d = _txDate(r);
-      if (!_inPeriod(d)) continue;
+      if (!_inPeriod(d, _txPeriodMode, _txFocusedMonth, _txFocusedYear)) continue;
       if (!_rowMatchesTypeFilter(r)) continue;
       final label = _categoryDisplayName(r);
       if (label.isEmpty) {
@@ -323,18 +340,18 @@ class _ManagementScreenState extends State<ManagementScreen> {
     return (named: list, hasUncategorized: hasUncategorized);
   }
 
-  bool _inPeriod(DateTime? d) {
+  bool _inPeriod(DateTime? d, _PeriodMode mode, DateTime focusedMonth, int focusedYear) {
     if (d == null) return false;
-    switch (_periodMode) {
+    switch (mode) {
       case _PeriodMode.today:
         final now = DateTime.now();
         return d.year == now.year && d.month == now.month && d.day == now.day;
       case _PeriodMode.allTime:
         return true;
       case _PeriodMode.month:
-        return d.year == _focusedMonth.year && d.month == _focusedMonth.month;
+        return d.year == focusedMonth.year && d.month == focusedMonth.month;
       case _PeriodMode.year:
-        return d.year == _focusedYear;
+        return d.year == focusedYear;
     }
   }
 
@@ -342,7 +359,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
     var list = List<Map<String, dynamic>>.from(_transactions);
     list = list.where((r) {
       final d = _txDate(r);
-      return _inPeriod(d);
+      return _inPeriod(d, _txPeriodMode, _txFocusedMonth, _txFocusedYear);
     }).toList();
 
     if (_typeFilter == _TxTypeFilter.income) {
@@ -387,7 +404,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
   }
 
   String _periodTitle() {
-    switch (_periodMode) {
+    switch (_txPeriodMode) {
       case _PeriodMode.today:
         return 'Today';
       case _PeriodMode.allTime:
@@ -407,9 +424,20 @@ class _ManagementScreenState extends State<ManagementScreen> {
           'November',
           'December'
         ];
-        return '${months[_focusedMonth.month - 1]} ${_focusedMonth.year}';
+        return '${months[_txFocusedMonth.month - 1]} ${_txFocusedMonth.year}';
       case _PeriodMode.year:
-        return '$_focusedYear';
+        return '$_txFocusedYear';
+    }
+  }
+
+  String _activeHistoryTitle() {
+    switch (_mainTab) {
+      case _MgmtMainTab.transactions:
+        return 'Show transactions';
+      case _MgmtMainTab.subscriptions:
+        return 'Show subscriptions';
+      case _MgmtMainTab.goals:
+        return 'Show goals';
     }
   }
 
@@ -423,18 +451,36 @@ class _ManagementScreenState extends State<ManagementScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const ListTile(title: Text('Show transactions', style: TextStyle(fontWeight: FontWeight.w800))),
+              ListTile(title: Text(_activeHistoryTitle(), style: const TextStyle(fontWeight: FontWeight.w800))),
               ListTile(
                 title: const Text('Today'),
                 onTap: () {
-                  setState(() => _periodMode = _PeriodMode.today);
+                  setState(() {
+                    switch (_mainTab) {
+                      case _MgmtMainTab.transactions:
+                        _txPeriodMode = _PeriodMode.today;
+                      case _MgmtMainTab.subscriptions:
+                        _subPeriodMode = _PeriodMode.today;
+                      case _MgmtMainTab.goals:
+                        _goalPeriodMode = _PeriodMode.today;
+                    }
+                  });
                   Navigator.pop(ctx);
                 },
               ),
               ListTile(
                 title: const Text('All time'),
                 onTap: () {
-                  setState(() => _periodMode = _PeriodMode.allTime);
+                  setState(() {
+                    switch (_mainTab) {
+                      case _MgmtMainTab.transactions:
+                        _txPeriodMode = _PeriodMode.allTime;
+                      case _MgmtMainTab.subscriptions:
+                        _subPeriodMode = _PeriodMode.allTime;
+                      case _MgmtMainTab.goals:
+                        _goalPeriodMode = _PeriodMode.allTime;
+                    }
+                  });
                   Navigator.pop(ctx);
                 },
               ),
@@ -442,9 +488,14 @@ class _ManagementScreenState extends State<ManagementScreen> {
                 title: const Text('Single month'),
                 onTap: () async {
                   Navigator.pop(ctx);
+                  final currentMonth = switch (_mainTab) {
+                    _MgmtMainTab.transactions => _txFocusedMonth,
+                    _MgmtMainTab.subscriptions => _subFocusedMonth,
+                    _MgmtMainTab.goals => _goalFocusedMonth,
+                  };
                   final picked = await showDatePicker(
                     context: context,
-                    initialDate: _focusedMonth,
+                    initialDate: currentMonth,
                     firstDate: DateTime(2000),
                     lastDate: DateTime(2100),
                     initialDatePickerMode: DatePickerMode.year,
@@ -452,8 +503,17 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   );
                   if (picked != null && mounted) {
                     setState(() {
-                      _periodMode = _PeriodMode.month;
-                      _focusedMonth = DateTime(picked.year, picked.month);
+                      switch (_mainTab) {
+                        case _MgmtMainTab.transactions:
+                          _txPeriodMode = _PeriodMode.month;
+                          _txFocusedMonth = DateTime(picked.year, picked.month);
+                        case _MgmtMainTab.subscriptions:
+                          _subPeriodMode = _PeriodMode.month;
+                          _subFocusedMonth = DateTime(picked.year, picked.month);
+                        case _MgmtMainTab.goals:
+                          _goalPeriodMode = _PeriodMode.month;
+                          _goalFocusedMonth = DateTime(picked.year, picked.month);
+                      }
                     });
                   }
                 },
@@ -462,10 +522,15 @@ class _ManagementScreenState extends State<ManagementScreen> {
                 title: const Text('Whole year'),
                 onTap: () async {
                   Navigator.pop(ctx);
+                  final currentYear = switch (_mainTab) {
+                    _MgmtMainTab.transactions => _txFocusedYear,
+                    _MgmtMainTab.subscriptions => _subFocusedYear,
+                    _MgmtMainTab.goals => _goalFocusedYear,
+                  };
                   final y = await showDialog<int>(
                     context: context,
                     builder: (c) {
-                      var year = _focusedYear;
+                      var year = currentYear;
                       return AlertDialog(
                         title: const Text('Year'),
                         content: StatefulBuilder(
@@ -498,8 +563,17 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   );
                   if (y != null && mounted) {
                     setState(() {
-                      _periodMode = _PeriodMode.year;
-                      _focusedYear = y;
+                      switch (_mainTab) {
+                        case _MgmtMainTab.transactions:
+                          _txPeriodMode = _PeriodMode.year;
+                          _txFocusedYear = y;
+                        case _MgmtMainTab.subscriptions:
+                          _subPeriodMode = _PeriodMode.year;
+                          _subFocusedYear = y;
+                        case _MgmtMainTab.goals:
+                          _goalPeriodMode = _PeriodMode.year;
+                          _goalFocusedYear = y;
+                      }
                     });
                   }
                 },
@@ -513,15 +587,15 @@ class _ManagementScreenState extends State<ManagementScreen> {
 
   void _shiftMonth(int delta) {
     setState(() {
-      _periodMode = _PeriodMode.month;
-      _focusedMonth = DateTime(_focusedMonth.year, _focusedMonth.month + delta);
+      _txPeriodMode = _PeriodMode.month;
+      _txFocusedMonth = DateTime(_txFocusedMonth.year, _txFocusedMonth.month + delta);
     });
   }
 
   void _shiftYear(int delta) {
     setState(() {
-      _periodMode = _PeriodMode.year;
-      _focusedYear += delta;
+      _txPeriodMode = _PeriodMode.year;
+      _txFocusedYear += delta;
     });
   }
 
@@ -697,14 +771,14 @@ class _ManagementScreenState extends State<ManagementScreen> {
       children: [
         _SummaryCard(
           periodTitle: _periodTitle(),
-          onPrev: _periodMode == _PeriodMode.month
+          onPrev: _txPeriodMode == _PeriodMode.month
               ? () => _shiftMonth(-1)
-              : _periodMode == _PeriodMode.year
+              : _txPeriodMode == _PeriodMode.year
                   ? () => _shiftYear(-1)
                   : null,
-          onNext: _periodMode == _PeriodMode.month
+          onNext: _txPeriodMode == _PeriodMode.month
               ? () => _shiftMonth(1)
-              : _periodMode == _PeriodMode.year
+              : _txPeriodMode == _PeriodMode.year
                   ? () => _shiftYear(1)
                   : null,
           onEditBudget: _editBudget,
@@ -908,6 +982,11 @@ class _ManagementScreenState extends State<ManagementScreen> {
 
   List<Map<String, dynamic>> get _filteredSubscriptionsList {
     var list = List<Map<String, dynamic>>.from(_subscriptions);
+    list = list.where((s) {
+      final raw = s['next_payment'] ?? s['next_payment_date'] ?? s['created_at'];
+      final d = raw != null ? DateTime.tryParse(raw.toString()) : null;
+      return _inPeriod(d, _subPeriodMode, _subFocusedMonth, _subFocusedYear);
+    }).toList();
     final q = _subSearchQuery.trim().toLowerCase();
     if (q.isNotEmpty) {
       list = list.where((s) => (s['name'] ?? '').toString().toLowerCase().contains(q)).toList();
@@ -1070,10 +1149,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
     final cs = Theme.of(context).colorScheme;
     final placeholderIconColor = Color.lerp(cs.onSurfaceVariant, cs.primary, 0.35)!;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
-        width: 54,
-        height: 54,
+        width: 44,
+        height: 44,
         color: Color.lerp(cs.primaryContainer, cs.surface, Theme.of(context).brightness == Brightness.dark ? 0.5 : 0.2)!,
         child: resolved != null && resolved.isNotEmpty
             ? Image.network(resolved, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Icon(Icons.subscriptions_outlined, color: placeholderIconColor))
@@ -1197,30 +1276,30 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   border: Border.all(color: cs.outline.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.35 : 0.12)),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   child: Row(
                     children: [
                       _subscriptionSquircleIcon(s),
-                      const SizedBox(width: 14),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         s['name']?.toString() ?? 'Subscription',
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: cs.onSurface),
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: cs.onSurface),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 3),
                       Text(
                         _subscriptionSubtitle(s),
-                        style: TextStyle(fontSize: 13, color: cs.onSurface.withValues(alpha: 0.55)),
+                        style: TextStyle(fontSize: 11, color: cs.onSurface.withValues(alpha: 0.55)),
                       ),
                     ],
                         ),
                       ),
                       Text(
                         _fmtMoney(_readAmount(s['amount'])),
-                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: cs.onSurface),
+                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5, color: cs.onSurface),
                       ),
                     ],
                   ),
@@ -1263,6 +1342,11 @@ class _ManagementScreenState extends State<ManagementScreen> {
 
   List<Map<String, dynamic>> get _filteredGoalsList {
     var list = List<Map<String, dynamic>>.from(_goals);
+    list = list.where((g) {
+      final raw = g['deadline'] ?? g['created_at'];
+      final d = raw != null ? DateTime.tryParse(raw.toString()) : null;
+      return _inPeriod(d, _goalPeriodMode, _goalFocusedMonth, _goalFocusedYear);
+    }).toList();
     final q = _goalSearchQuery.trim().toLowerCase();
     if (q.isNotEmpty) {
       list = list.where((g) => (g['title'] ?? '').toString().toLowerCase().contains(q)).toList();
@@ -2066,6 +2150,7 @@ class _MgmtTxTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final amountMaxWidth = (MediaQuery.sizeOf(context).width * 0.28).clamp(90.0, 132.0);
     final title = (data['description'] ?? data['title'] ?? 'Transaction').toString();
     var category = (data['category'] ?? '').toString();
@@ -2080,10 +2165,34 @@ class _MgmtTxTile extends StatelessWidget {
       if (category.isNotEmpty) category,
       if (d != null) _prettyDate(d),
     ].join(' - ');
-    final iconBg = categoryDisplayColor(category.isEmpty ? title : category);
-
+    final catId = (catMap is Map ? catMap['id'] : null)?.toString() ?? data['category_id']?.toString();
+    final savedCategoryColor = catMap is Map ? (catMap['color'] ?? catMap['color_value'] ?? catMap['hex_color']) : null;
+    final categoryLabel = category.isEmpty ? title : category;
     final amount = _parseAmount(data['amount']);
     final isExpense = _isExpense(data, amount);
+    final iconColor = categoryDisplayColor(
+      categoryLabel,
+      categoryId: catId,
+      savedColor: savedCategoryColor,
+    );
+    final iconBg = categoryDisplayTintFor(
+      categoryLabel,
+      categoryId: catId,
+      savedColor: savedCategoryColor,
+    );
+    final iconBgDark = categoryDisplayDarkContainerFor(
+      categoryLabel,
+      categoryId: catId,
+      savedColor: savedCategoryColor,
+      depth: 0.84,
+    );
+    final categoryType = catMap is Map ? (catMap['type']?.toString() ?? '') : '';
+    final categoryIcon = categoryIconForDisplay(
+      iconKey: catMap is Map ? catMap['icon_key']?.toString() : null,
+      name: categoryLabel,
+      type: categoryType.isEmpty ? (isExpense ? 'expense' : 'income') : categoryType,
+      categoryId: catId,
+    );
 
     IconData leafIcon;
     Color leafColor;
@@ -2121,13 +2230,19 @@ class _MgmtTxTile extends StatelessWidget {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: iconBg.withValues(alpha: 0.28),
+                    color: isDark ? iconBgDark : iconBg.withValues(alpha: 1),
                     borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isDark
+                          ? iconColor.withValues(alpha: 0.38)
+                          : iconColor.withValues(alpha: 0.12),
+                      width: 1,
+                    ),
                   ),
                   child: Icon(
-                    isExpense ? Icons.shopping_bag_outlined : Icons.payments_outlined,
+                    categoryIcon,
                     size: 22,
-                    color: isExpense ? Colors.deepOrange.shade700 : cs.primary,
+                    color: iconColor,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -2184,7 +2299,7 @@ class _MgmtTxTile extends StatelessWidget {
                             fontSize: 12.5,
                             height: 1.1,
                             letterSpacing: -0.15,
-                            color: isExpense ? Colors.red.shade700 : cs.onSurface,
+                            color: isExpense ? kInfaqExpenseRed : cs.onSurface,
                           ),
                         ),
                       ),

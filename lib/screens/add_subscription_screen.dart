@@ -407,6 +407,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                     child: InfaqPillAmountStepper(
                       controller: _amountCtrl,
                       currencySuffix: suffix,
+                      showStepper: false,
                       onChanged: () => setState(() {}),
                     ),
                   ),

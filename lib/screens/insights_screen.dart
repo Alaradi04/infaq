@@ -563,6 +563,7 @@ class _CategoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final slices = payload.categorySlices;
     final total = slices.fold<double>(0, (a, b) => a + b.amount);
     return Container(
@@ -571,7 +572,7 @@ class _CategoryCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF6B9BD1).withValues(alpha: 0.35)),
+        border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.22 : 0.12)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),

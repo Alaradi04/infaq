@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 /// Bundled wallet brand mark (`assets/`).
 const String kInfaqBrandIconAsset = 'assets/infaq_icon.jpeg';
+/// Softer red for negative/expense amount text across transaction cards.
+const Color kInfaqExpenseRed = Color(0xFFC56A73);
 
 class InfaqHeader extends StatelessWidget {
   const InfaqHeader({super.key, this.showBack = false, this.onBack});

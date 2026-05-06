@@ -1,15 +1,10 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/profile/avatar_storage.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
-
-const Color _kPrimary = Color(0xFF3F5F4A);
-const Color _kHeaderGreen = Color(0xFFE8F5E9);
-const Color _kLogoutGrey = Color(0xFF707070);
 
 const List<String> _kCurrencyCodes = ['BHD', 'USD', 'EUR', 'SAR', 'GBP'];
 
@@ -285,15 +280,29 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final headerBg = isDark ? const Color(0xFF1A2520) : const Color(0xFFE8F2EA);
+    final overlayStyle = SystemUiOverlayStyle(
+      statusBarColor: headerBg,
+      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+      systemNavigationBarColor: cs.surface,
+      systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+    );
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: overlayStyle,
+      child: Scaffold(
+      backgroundColor: cs.surface,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            decoration: const BoxDecoration(
-              color: _kHeaderGreen,
-              borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+            decoration: BoxDecoration(
+              color: headerBg,
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
             ),
             child: SafeArea(
               bottom: false,
@@ -306,11 +315,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       children: [
                         IconButton(
                           onPressed: () => Navigator.of(context).maybePop(false),
-                          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
+                          icon: Icon(Icons.arrow_back_ios_new_rounded, color: cs.onSurface),
                         ),
-                        const Text(
+                        Text(
                           'Edit Profile',
-                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.black87),
+                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: cs.onSurface),
                         ),
                       ],
                     ),
@@ -324,11 +333,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: cs.surfaceContainerLow,
                               borderRadius: BorderRadius.circular(999),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.08),
+                                  color: cs.shadow.withValues(alpha: isDark ? 0.28 : 0.08),
                                   blurRadius: 16,
                                   offset: const Offset(0, 6),
                                 ),
@@ -345,17 +354,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                       children: [
                                         CircleAvatar(
                                           radius: 32,
-                                          backgroundColor: const Color(0xFFE0E0E0),
+                                          backgroundColor: cs.surfaceContainerHighest,
                                           backgroundImage: img,
                                           child: img == null
-                                              ? const Icon(Icons.add_a_photo_outlined, color: Colors.white70)
+                                              ? Icon(Icons.add_a_photo_outlined, color: cs.onSurface.withValues(alpha: 0.65))
                                               : null,
                                         ),
                                         if (_uploadingPhoto)
-                                          const SizedBox(
+                                          SizedBox(
                                             width: 28,
                                             height: 28,
-                                            child: CircularProgressIndicator(strokeWidth: 2, color: _kPrimary),
+                                            child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
                                           ),
                                       ],
                                     );
@@ -368,7 +377,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                     _nameCtrl.text.trim().isNotEmpty ? _nameCtrl.text.trim() : 'Your name',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: cs.onSurface),
                                   ),
                                 ),
                               ],
@@ -386,7 +395,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),
               children: [
-                const Text('Email', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                Text('Email', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: cs.onSurface)),
                 const SizedBox(height: 8),
                 _pillField(
                   child: TextField(
@@ -394,35 +403,41 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     readOnly: true,
                     showCursor: false,
                     enableInteractiveSelection: true,
-                    decoration: const InputDecoration(
+                    style: TextStyle(color: cs.onSurface.withValues(alpha: 0.85)),
+                    decoration: InputDecoration(
                       border: InputBorder.none,
                       isDense: true,
+                      hintStyle: TextStyle(color: cs.onSurface.withValues(alpha: 0.55)),
                     ),
                   ),
                 ),
                 const SizedBox(height: 18),
-                const Text('Edit name', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                Text('Edit name', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: cs.onSurface)),
                 const SizedBox(height: 8),
                 _pillField(
                   child: TextField(
                     controller: _nameCtrl,
                     onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
+                    style: TextStyle(color: cs.onSurface),
+                    decoration: InputDecoration(
                       border: InputBorder.none,
                       hintText: 'Name',
                       isDense: true,
+                      hintStyle: TextStyle(color: cs.onSurface.withValues(alpha: 0.55)),
                     ),
                   ),
                 ),
                 const SizedBox(height: 18),
-                const Text('Edit currency', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                Text('Edit currency', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: cs.onSurface)),
                 const SizedBox(height: 8),
                 _pillField(
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       value: _kCurrencyCodes.contains(_currency) ? _currency : _kCurrencyCodes.first,
                       isExpanded: true,
-                      icon: const Icon(Icons.keyboard_arrow_down_rounded, color: _kPrimary),
+                      dropdownColor: cs.surfaceContainerHigh,
+                      icon: Icon(Icons.keyboard_arrow_down_rounded, color: cs.primary),
+                      style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600),
                       items: [
                         for (final c in _kCurrencyCodes)
                           DropdownMenuItem(value: c, child: Text(c)),
@@ -437,7 +452,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 FilledButton(
                   onPressed: _saving ? null : _saveProfile,
                   style: FilledButton.styleFrom(
-                    backgroundColor: _kPrimary,
+                    backgroundColor: cs.primary,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
                     elevation: 3,
@@ -454,7 +469,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 FilledButton(
                   onPressed: _changePassword,
                   style: FilledButton.styleFrom(
-                    backgroundColor: _kPrimary,
+                    backgroundColor: cs.primary,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
                     elevation: 3,
@@ -467,8 +482,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   icon: const Icon(Icons.logout_rounded, color: Colors.white),
                   label: const Text('Log out'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: _kLogoutGrey,
-                    foregroundColor: Colors.white,
+                    backgroundColor: isDark ? cs.surfaceContainerHighest : const Color(0xFF707070),
+                    foregroundColor: isDark ? cs.onSurface : Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
                   ),
@@ -489,22 +504,26 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ),
         ],
       ),
-    );
+    ));
   }
 
   Widget _pillField({required Widget child}) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.07),
+            color: cs.shadow.withValues(alpha: isDark ? 0.22 : 0.07),
             blurRadius: 14,
             offset: const Offset(0, 5),
           ),
         ],
+        border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.35 : 0.15)),
       ),
       child: child,
     );

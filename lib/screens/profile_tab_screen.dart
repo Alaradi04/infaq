@@ -49,9 +49,9 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
     final pillBorder = isDark ? cs.outline.withValues(alpha: 0.35) : _kNamePillBorderLight;
     final onSurface = cs.onSurface;
 
-    return ColoredBox(
-      color: cs.surface,
-      child: CustomScrollView(
+    return Scaffold(
+      backgroundColor: cs.surface,
+      body: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverToBoxAdapter(
@@ -212,7 +212,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'v0.1.0',
+                  'v6.7.2',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 13, color: onSurface.withValues(alpha: 0.35)),
                 ),

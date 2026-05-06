@@ -36,8 +36,8 @@ class _StartupShell extends StatefulWidget {
 }
 
 class _StartupShellState extends State<_StartupShell> {
-  static const Color _primary = Color(0xFF3F5F4A);
   static const Color _surface = Color(0xFFF4F6F4);
+  static const Color _surfaceDark = Color(0xFF000000);
 
   Object? _error;
   bool _ready = false;
@@ -77,11 +77,12 @@ class _StartupShellState extends State<_StartupShell> {
 
   @override
   Widget build(BuildContext context) {
+    final startupBg = _startupBackgroundColor();
     if (_error != null) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         home: Scaffold(
-          backgroundColor: _surface,
+          backgroundColor: startupBg,
           body: SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(24),
@@ -110,7 +111,7 @@ class _StartupShellState extends State<_StartupShell> {
                   const SizedBox(height: 28),
                   FilledButton(
                     onPressed: _prepare,
-                    style: FilledButton.styleFrom(backgroundColor: _primary),
+                    style: FilledButton.styleFrom(backgroundColor: const Color(0xFF3F5F4A)),
                     child: const Text('Retry'),
                   ),
                   const Spacer(),
@@ -126,28 +127,21 @@ class _StartupShellState extends State<_StartupShell> {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         home: Scaffold(
-          backgroundColor: _surface,
-          body: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(color: _primary),
-                const SizedBox(height: 20),
-                Text(
-                  'Starting…',
-                  style: TextStyle(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          backgroundColor: startupBg,
+          body: const Center(child: _InfaqPulseLoader()),
         ),
       );
     }
 
     return const MainApp();
+  }
+
+  Color _startupBackgroundColor() {
+    final mode = AppThemeMode.instance.themeMode;
+    if (mode == ThemeMode.dark) return _surfaceDark;
+    if (mode == ThemeMode.light) return _surface;
+    final platform = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    return platform == Brightness.dark ? _surfaceDark : _surface;
   }
 }
 
@@ -286,8 +280,9 @@ class _AuthGateState extends State<AuthGate> {
           builder: (context, snap) {
             if (snap.connectionState != ConnectionState.done) {
               return Scaffold(
+                backgroundColor: cs.surface,
                 body: Center(
-                  child: CircularProgressIndicator(color: cs.primary),
+                  child: const _InfaqPulseLoader(),
                 ),
               );
             }
@@ -303,6 +298,63 @@ class _AuthGateState extends State<AuthGate> {
           },
         );
       },
+    );
+  }
+}
+
+class _InfaqPulseLoader extends StatefulWidget {
+  const _InfaqPulseLoader();
+
+  @override
+  State<_InfaqPulseLoader> createState() => _InfaqPulseLoaderState();
+}
+
+class _InfaqPulseLoaderState extends State<_InfaqPulseLoader>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+    _scale = Tween<double>(
+      begin: 0.92,
+      end: 1.08,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _scale,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _scale.value,
+          child: child,
+        );
+      },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Image.asset(
+            'assets/infaq_icon.jpeg',
+            width: 92,
+            height: 92,
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.high,
+          ),
+        ],
+      ),
     );
   }
 }

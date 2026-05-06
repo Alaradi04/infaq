@@ -475,60 +475,42 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                       color: kServiceFormGreen,
                     ),
                   ),
-                  const SizedBox(height: 22),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
-                    decoration: BoxDecoration(
-                      color: cs.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(22),
-                      boxShadow: [
-                        BoxShadow(
-                          color: cs.shadow.withValues(
-                            alpha: isDark ? 0.25 : 0.08,
-                          ),
-                          blurRadius: 18,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
+                  const SizedBox(height: 18),
+                  InfaqLabeledPillField(
+                    label: 'Saved so far',
+                    child: InfaqPillAmountStepper(
+                      controller: _reachedCtrl,
+                      currencySuffix: suffix,
+                      showStepper: false,
+                      onChanged: () => setState(() {}),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        InfaqLabeledPillField(
-                          label: 'Saved so far',
-                          child: InfaqPillAmountStepper(
-                            controller: _reachedCtrl,
-                            currencySuffix: suffix,
-                            onChanged: () => setState(() {}),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        InfaqLabeledPillField(
-                          label: 'Target amount',
-                          child: InfaqPillAmountStepper(
-                            controller: _targetCtrl,
-                            currencySuffix: suffix,
-                            onChanged: () => setState(() {}),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        InfaqLabeledPillField(
-                          label: 'Date',
-                          child: InfaqPillDateRow(
-                            labelText: formatGoalDateLong(_deadline),
-                            onTap: _pickDate,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        InfaqLabeledPillField(
-                          label: 'Monthly amount',
-                          child: InfaqPillAmountStepper(
-                            controller: _monthlyCtrl,
-                            currencySuffix: suffix,
-                            onChanged: () => setState(() {}),
-                          ),
-                        ),
-                      ],
+                  ),
+                  const SizedBox(height: 18),
+                  InfaqLabeledPillField(
+                    label: 'Target amount',
+                    child: InfaqPillAmountStepper(
+                      controller: _targetCtrl,
+                      currencySuffix: suffix,
+                      showStepper: false,
+                      onChanged: () => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  InfaqLabeledPillField(
+                    label: 'Date',
+                    child: InfaqPillDateRow(
+                      labelText: formatGoalDateLong(_deadline),
+                      onTap: _pickDate,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  InfaqLabeledPillField(
+                    label: 'Monthly amount',
+                    child: InfaqPillAmountStepper(
+                      controller: _monthlyCtrl,
+                      currencySuffix: suffix,
+                      showStepper: false,
+                      onChanged: () => setState(() {}),
                     ),
                   ),
                   const SizedBox(height: 20),

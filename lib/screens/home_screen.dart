@@ -195,12 +195,21 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       dynamic res;
       try {
-        res = await Supabase.instance.client
-            .from('transactions')
-            .select('id, amount, description, date, created_at, category_id, categories(name, type)')
-            .eq('user_id', userId)
-            .order('created_at', ascending: false)
-            .limit(100);
+        try {
+          res = await Supabase.instance.client
+              .from('transactions')
+              .select('id, amount, description, date, created_at, category_id, categories(id, name, type, icon_key, color)')
+              .eq('user_id', userId)
+              .order('created_at', ascending: false)
+              .limit(100);
+        } catch (_) {
+          res = await Supabase.instance.client
+              .from('transactions')
+              .select('id, amount, description, date, created_at, category_id, categories(id, name, type, icon_key)')
+              .eq('user_id', userId)
+              .order('created_at', ascending: false)
+              .limit(100);
+        }
       } catch (_) {
         res = await Supabase.instance.client
             .from('transactions')
@@ -1456,6 +1465,7 @@ class _TxRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final amountMaxWidth = (MediaQuery.sizeOf(context).width * 0.28).clamp(90.0, 132.0);
     final title = (data['description'] ?? data['title'] ?? data['merchant'] ?? data['name'] ?? 'Transaction').toString();
     var category = (data['category'] ?? data['category_name'] ?? '').toString();
@@ -1469,10 +1479,34 @@ class _TxRow extends StatelessWidget {
       if (category.isNotEmpty) category,
       if (d != null) _prettyDate(d),
     ].join(' - ');
-    final iconBg = categoryDisplayColor(category.isEmpty ? title : category);
-
+    final catId = (catMap is Map ? catMap['id'] : null)?.toString() ?? data['category_id']?.toString();
+    final savedCategoryColor = catMap is Map ? (catMap['color'] ?? catMap['color_value'] ?? catMap['hex_color']) : null;
+    final categoryLabel = category.isEmpty ? title : category;
     final amount = _parseAmount(data['amount']);
     final isExpense = _isExpense(data, amount);
+    final iconColor = categoryDisplayColor(
+      categoryLabel,
+      categoryId: catId,
+      savedColor: savedCategoryColor,
+    );
+    final iconBg = categoryDisplayTintFor(
+      categoryLabel,
+      categoryId: catId,
+      savedColor: savedCategoryColor,
+    );
+    final iconBgDark = categoryDisplayDarkContainerFor(
+      categoryLabel,
+      categoryId: catId,
+      savedColor: savedCategoryColor,
+      depth: 0.84,
+    );
+    final categoryType = catMap is Map ? (catMap['type']?.toString() ?? '') : '';
+    final categoryIcon = categoryIconForDisplay(
+      iconKey: catMap is Map ? catMap['icon_key']?.toString() : null,
+      name: categoryLabel,
+      type: categoryType.isEmpty ? (isExpense ? 'expense' : 'income') : categoryType,
+      categoryId: catId,
+    );
 
     IconData leafIcon;
     Color leafColor;
@@ -1513,13 +1547,19 @@ class _TxRow extends StatelessWidget {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: iconBg.withValues(alpha: 0.28),
+                    color: isDark ? iconBgDark : iconBg.withValues(alpha: 1),
                     borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isDark
+                          ? iconColor.withValues(alpha: 0.38)
+                          : iconColor.withValues(alpha: 0.12),
+                      width: 1,
+                    ),
                   ),
                   child: Icon(
-                    isExpense ? Icons.shopping_bag_outlined : Icons.payments_outlined,
+                    categoryIcon,
                     size: 22,
-                    color: isExpense ? Colors.deepOrange.shade700 : cs.primary,
+                    color: iconColor,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -1576,7 +1616,7 @@ class _TxRow extends StatelessWidget {
                             fontSize: 12.5,
                             height: 1.1,
                             letterSpacing: -0.15,
-                            color: isExpense ? Colors.red.shade700 : cs.onSurface,
+                            color: isExpense ? kInfaqExpenseRed : cs.onSurface,
                           ),
                         ),
                       ),

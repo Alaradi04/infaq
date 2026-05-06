@@ -3,7 +3,6 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:infaq/profile/subscription_icon_storage.dart';
 import 'package:infaq/subscription/subscription_analytics.dart';
@@ -85,9 +84,6 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
     super.dispose();
   }
 
-  double get _totalAllTime =>
-      subscriptionAttributedExpenseAllTime(widget.subscription, widget.allTransactions);
-
   Future<void> _pickIcon(ImageSource source) async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
@@ -146,10 +142,64 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
                 _pickIcon(ImageSource.camera);
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.link_rounded),
+              title: const Text('Use image URL'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _enterImageUrl();
+              },
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _enterImageUrl() async {
+    final ctrl = TextEditingController(
+      text: _iconStoragePath != null && _iconStoragePath!.startsWith('http')
+          ? _iconStoragePath
+          : '',
+    );
+    final value = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Image URL'),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.url,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'https://example.com/icon.png',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Use URL'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || value == null) return;
+    final uri = Uri.tryParse(value);
+    final valid =
+        uri != null &&
+        (uri.scheme == 'http' || uri.scheme == 'https') &&
+        (uri.host.isNotEmpty);
+    if (!valid) {
+      showInfaqSnack(context, 'Please enter a valid http/https image URL.');
+      return;
+    }
+    setState(() {
+      _iconPreviewBytes = null;
+      _iconStoragePath = value;
+    });
   }
 
   Future<void> _pickDate() async {
@@ -247,13 +297,6 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
     }
   }
 
-  Future<void> _openServiceSite() async {
-    final name = _nameCtrl.text.trim();
-    final q = Uri.encodeComponent('$name official site');
-    final uri = Uri.parse('https://www.google.com/search?q=$q');
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
   ImageProvider<Object>? _iconProvider() {
     if (_iconPreviewBytes != null) return MemoryImage(_iconPreviewBytes!);
     final resolved = InfaqSubscriptionIconStorage.resolveDisplayUrl(
@@ -270,12 +313,6 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final headerBg = isDark ? const Color(0xFF1A2520) : const Color(0xFFE8F2EA);
     final suffix = _currencySuffix();
-    final subName = (widget.subscription['name'] ?? 'Subscription').toString();
-    final now = DateTime.now();
-    final foodThisMonth = foodLikeExpenseInMonth(widget.allTransactions, now);
-    final subSpendThisMonth = subscriptionAttributedExpenseInMonth(widget.subscription, widget.allTransactions, now);
-    final showOverspendBanner =
-        _isActive && foodThisMonth > 0 && subSpendThisMonth > foodThisMonth;
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -291,281 +328,163 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            decoration: BoxDecoration(
-              color: headerBg,
-              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
-              boxShadow: const [
-                BoxShadow(color: Color(0x12000000), blurRadius: 12, offset: Offset(0, 4)),
-              ],
-            ),
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(4, 4, 8, 20),
-                child: Row(
-                  children: [
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: Icon(Icons.arrow_back_ios_new_rounded, color: cs.primary),
-                    ),
-                    Expanded(
-                      child: Text(
-                        'Edit Subscription',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: cs.primary,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: _delete,
-                      icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade600, size: 26),
-                      tooltip: 'Delete',
-                    ),
-                  ],
-                ),
-              ),
+          InfaqServiceFormHeader(
+            backgroundColor: headerBg,
+            title: 'Edit Subscription',
+            onBack: () => Navigator.pop(context),
+            trailing: IconButton(
+              onPressed: _delete,
+              icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade600, size: 24),
+              tooltip: 'Delete',
             ),
           ),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(22, 20, 22, 120),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(18),
-                            child: Container(
-                              width: 72,
-                              height: 72,
-                              color: const Color(0xFFE8E8E8),
-                              child: _iconProvider() != null
-                                  ? Image(image: _iconProvider()!, fit: BoxFit.cover)
-                                  : Icon(Icons.subscriptions_outlined, size: 36, color: Colors.grey.shade600),
-                            ),
-                          ),
-                          Positioned(
-                            right: -4,
-                            bottom: -4,
-                            child: Material(
-                              color: Colors.white,
-                              shape: const CircleBorder(),
-                              elevation: 2,
-                              child: InkWell(
-                                onTap: _uploadingIcon ? null : _onEditIcon,
-                                customBorder: const CircleBorder(),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(6),
-                                  child: _uploadingIcon
-                                      ? const SizedBox(
-                                          width: 18,
-                                          height: 18,
-                                          child: CircularProgressIndicator(strokeWidth: 2, color: kServiceFormGreen),
-                                        )
-                                      : const Icon(Icons.edit_outlined, size: 18, color: kServiceFormGreen),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 16),
-                          child: ListenableBuilder(
-                            listenable: _nameCtrl,
-                            builder: (context, _) {
-                              final n = _nameCtrl.text.trim();
-                              return Text(
-                                n.isNotEmpty ? n : subName,
-                                style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: cs.onSurface),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
                   InfaqLabeledPillField(
                     label: 'Name',
                     child: InfaqPillTextField(
                       controller: _nameCtrl,
-                      hintText: 'Service name',
-                      onChanged: (_) => setState(() {}),
+                      hintText: 'Netflix, gym, iCloud…',
+                      textInputAction: TextInputAction.next,
                     ),
                   ),
                   const SizedBox(height: 18),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: infaqServicePillDecoration(context),
-                    child: Column(
-                      children: [
-                        _detailRow(
-                          'Billing cycle',
-                          InkWell(
-                            onTap: () {
-                              showModalBottomSheet<void>(
-                                context: context,
-                                builder: (ctx) => SafeArea(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      for (final (v, l) in _cycles)
-                                        ListTile(
-                                          title: Text(l),
-                                          trailing: _cycle == v ? const Icon(Icons.check, color: kServiceFormGreen) : null,
-                                          onTap: () {
-                                            setState(() => _cycle = v);
-                                            Navigator.pop(ctx);
-                                          },
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  _cycles.firstWhere((c) => c.$1 == _cycle, orElse: () => _cycles.first).$2,
-                                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: cs.onSurface),
-                                ),
-                                const Icon(Icons.keyboard_arrow_down_rounded, color: kServiceFormGreen),
-                              ],
+                  InfaqLabeledPillField(
+                    label: 'Icon',
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: _uploadingIcon ? null : _onEditIcon,
+                        borderRadius: BorderRadius.circular(22),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark ? cs.surfaceContainerHigh : const Color(0xFFF7F8F7),
+                            borderRadius: BorderRadius.circular(22),
+                            border: Border.all(
+                              color: kServiceFormGreen.withValues(alpha: 0.2),
                             ),
                           ),
-                        ),
-                        const Divider(height: 24),
-                        _detailRow(
-                          'amount',
-                          InfaqPillAmountStepper(
-                            controller: _amountCtrl,
-                            currencySuffix: suffix,
-                            onChanged: () => setState(() {}),
-                          ),
-                        ),
-                        const Divider(height: 24),
-                        _detailRow(
-                          'Date',
-                          InfaqPillDateRow(
-                            labelText: formatGoalDateLong(_nextDate),
-                            onTap: _pickDate,
-                          ),
-                        ),
-                        const Divider(height: 24),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Total amount',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: cs.onSurface.withValues(alpha: 0.45),
-                                        ),
+                          child: Row(
+                            children: [
+                              Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 28,
+                                    backgroundColor: isDark ? cs.surfaceContainerHighest : Colors.white,
+                                    backgroundImage: _iconProvider(),
+                                    child:
+                                        _iconProvider() == null
+                                        ? Icon(
+                                            Icons.add_photo_alternate_outlined,
+                                            color: cs.onSurface.withValues(alpha: 0.5),
+                                            size: 28,
+                                          )
+                                        : null,
+                                  ),
+                                  if (_uploadingIcon)
+                                    const SizedBox(
+                                      width: 26,
+                                      height: 26,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: kServiceFormGreen,
                                       ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'All time (from your transactions)',
-                                        style: TextStyle(fontSize: 11, color: cs.onSurface.withValues(alpha: 0.35)),
-                                      ),
-                                    ],
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Text(
+                                  _iconStoragePath != null &&
+                                          _iconStoragePath!.isNotEmpty
+                                      ? 'Tap to change picture'
+                                      : 'Tap to add subscription icon',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: cs.onSurface.withValues(alpha: 0.65),
+                                    fontSize: 14,
                                   ),
                                 ),
-                                Text(
-                                  '${suffix ?? ''}${_totalAllTime.toStringAsFixed(_totalAllTime % 1 == 0 ? 0 : 2)}',
-                                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: cs.onSurface),
-                                ),
-                              ],
-                            ),
-                          ],
+                              ),
+                              Icon(
+                                Icons.chevron_right_rounded,
+                                color: cs.onSurface.withValues(alpha: 0.35),
+                              ),
+                            ],
+                          ),
                         ),
-                        const Divider(height: 24),
-                        InfaqPillSwitchRow(
-                          title: 'Active subscription',
-                          value: _isActive,
-                          onChanged: (v) => setState(() => _isActive = v),
-                          leading: Icon(Icons.power_settings_new_rounded, color: kServiceFormGreen.withValues(alpha: 0.85)),
-                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  InfaqLabeledPillField(
+                    label: 'Billing cycle',
+                    child: InfaqPillDropdown<String>(
+                      value: _cycle,
+                      hint: null,
+                      items: [
+                        for (final (v, l) in _cycles)
+                          DropdownMenuItem<String>(value: v, child: Text(l)),
                       ],
+                      onChanged: (v) => setState(() => _cycle = v ?? 'monthly'),
                     ),
                   ),
-                  if (showOverspendBanner) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE8EEE9),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFFC5D4C8)),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(color: Colors.red.shade50, shape: BoxShape.circle),
-                            child: Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 22),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Overspending alert',
-                                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Colors.red.shade900),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Your tracked spending on $subName this month is higher than your food and grocery expenses this month.',
-                                  style: TextStyle(fontSize: 13, height: 1.35, color: Colors.black.withValues(alpha: 0.55)),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _openServiceSite,
-                      icon: const Icon(Icons.open_in_new_rounded, color: Colors.white),
-                      label: Text('Open ${_nameCtrl.text.trim().isNotEmpty ? _nameCtrl.text.trim() : 'service'} online'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF5C5C5C),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-                      ),
+                  const SizedBox(height: 18),
+                  InfaqLabeledPillField(
+                    label: 'Amount',
+                    child: InfaqPillAmountStepper(
+                      controller: _amountCtrl,
+                      currencySuffix: suffix,
+                      showStepper: false,
+                      onChanged: () => setState(() {}),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 18),
+                  InfaqLabeledPillField(
+                    label: 'Date',
+                    child: InfaqPillDateRow(
+                      labelText: formatGoalDateLong(_nextDate),
+                      onTap: _pickDate,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
                   InfaqPrimaryButton(
                     label: 'Save changes',
                     isLoading: _saving,
                     onPressed: _saving ? null : _save,
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: OutlinedButton(
+                      onPressed: _saving ? null : () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: kServiceFormGreen,
+                        side: BorderSide(
+                          color: kServiceFormGreen.withValues(alpha: 0.45),
+                          width: 1.4,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                        backgroundColor: cs.surface,
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -576,24 +495,4 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
     );
   }
 
-  Widget _detailRow(String label, Widget right, {String? subtitle}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.45)),
-        ),
-        if (subtitle != null) ...[
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.35)),
-          ),
-        ],
-        const SizedBox(height: 10),
-        right,
-      ],
-    );
-  }
 }

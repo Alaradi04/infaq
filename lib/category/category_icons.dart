@@ -182,15 +182,135 @@ IconData _iconFromStableCategorySeed({
   return choices[h.abs() % choices.length].icon;
 }
 
-Color categoryDisplayColor(String rawName) {
-  final name = rawName.trim().toLowerCase();
-  if (name.isEmpty) return kCategoryColorPalette.first;
+Color categoryDisplayColor(
+  String rawName, {
+  String? categoryId,
+  dynamic savedColor,
+}) {
+  return categoryDisplayColorFor(
+    rawName,
+    categoryId: categoryId,
+    savedColor: savedColor,
+  );
+}
+
+Color categoryDisplayColorFor(
+  String rawName, {
+  String? categoryId,
+  dynamic savedColor,
+}) {
+  final explicit = _parseStoredColor(savedColor);
+  if (explicit != null) return explicit;
+
+  final normalized = rawName.trim().toLowerCase();
+  if (normalized.isEmpty) {
+    return const Color(0xFF7A7A7A);
+  }
+
+  // Built-in/common categories keep fixed colors app-wide.
+  if (normalized.contains('food') ||
+      normalized.contains('restaurant') ||
+      normalized.contains('grocery') ||
+      normalized.contains('grocer')) {
+    return const Color(0xFF2E7D32);
+  }
+  if (normalized.contains('shopping') || normalized.contains('shop')) {
+    return const Color(0xFF7E57C2);
+  }
+  if (normalized.contains('transport') ||
+      normalized.contains('car') ||
+      normalized.contains('fuel') ||
+      normalized.contains('gas') ||
+      normalized.contains('taxi') ||
+      normalized.contains('uber')) {
+    return const Color(0xFF1E88E5);
+  }
+  if (normalized.contains('travel') || normalized.contains('flight') || normalized.contains('hotel')) {
+    return const Color(0xFF00897B);
+  }
+  if (normalized.contains('subscription') || normalized.contains('streaming')) {
+    return const Color(0xFFFB8C00);
+  }
+  if (normalized.contains('entertain') || normalized.contains('movie') || normalized.contains('game')) {
+    return const Color(0xFFEC407A);
+  }
+  if (normalized.contains('health') || normalized.contains('medical') || normalized.contains('pharmacy')) {
+    return const Color(0xFF8E24AA);
+  }
+  if (normalized.contains('salary')) {
+    return const Color(0xFF1B5E20);
+  }
+  if (normalized.contains('other income') || normalized.contains('income')) {
+    return const Color(0xFF66BB6A);
+  }
+  if (normalized.contains('other expense') || normalized == 'other' || normalized.contains('uncategorized')) {
+    return const Color(0xFF757575);
+  }
+
+  // Custom categories: stable by id when available, else by name.
+  final seed = (categoryId != null && categoryId.trim().isNotEmpty)
+      ? categoryId.trim().toLowerCase()
+      : normalized;
   var h = 5381;
-  for (final unit in name.codeUnits) {
+  for (final unit in seed.codeUnits) {
     h = ((h << 5) + h + unit) & 0x7fffffff;
   }
   final hue = (h % 360).toDouble();
-  return HSVColor.fromAHSV(1, hue, 0.5, 0.88).toColor();
+  return HSVColor.fromAHSV(1, hue, 0.55, 0.84).toColor();
+}
+
+Color categoryDisplayTintFor(
+  String rawName, {
+  String? categoryId,
+  dynamic savedColor,
+  double strength = 0.82,
+}) {
+  final base = categoryDisplayColorFor(
+    rawName,
+    categoryId: categoryId,
+    savedColor: savedColor,
+  );
+  final s = strength.clamp(0.0, 1.0);
+  return Color.lerp(base, Colors.white, s) ?? base.withValues(alpha: 0.2);
+}
+
+Color categoryDisplayDarkContainerFor(
+  String rawName, {
+  String? categoryId,
+  dynamic savedColor,
+  double depth = 0.82,
+}) {
+  final base = categoryDisplayColorFor(
+    rawName,
+    categoryId: categoryId,
+    savedColor: savedColor,
+  );
+  final d = depth.clamp(0.0, 1.0);
+  final mixed = Color.lerp(base, Colors.black, d) ?? base;
+  return mixed.withValues(alpha: 1);
+}
+
+Color? _parseStoredColor(dynamic raw) {
+  if (raw == null) return null;
+
+  if (raw is Color) return raw;
+  if (raw is int) return Color(raw);
+  if (raw is num) return Color(raw.toInt());
+
+  final text = raw.toString().trim();
+  if (text.isEmpty) return null;
+  if (text.toLowerCase() == 'null') return null;
+
+  final direct = int.tryParse(text);
+  if (direct != null) return Color(direct);
+
+  var hex = text.toLowerCase();
+  if (hex.startsWith('#')) hex = hex.substring(1);
+  if (hex.startsWith('0x')) hex = hex.substring(2);
+  if (hex.length == 6) hex = 'ff$hex';
+  final value = int.tryParse(hex, radix: 16);
+  if (value == null) return null;
+  return Color(value);
 }
 
 /// Compact grid of icon choices for dialogs.

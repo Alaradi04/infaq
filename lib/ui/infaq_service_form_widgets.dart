@@ -169,11 +169,13 @@ class InfaqPillAmountStepper extends StatelessWidget {
     required this.controller,
     required this.onChanged,
     this.currencySuffix,
+    this.showStepper = true,
   });
 
   final TextEditingController controller;
   final VoidCallback onChanged;
   final String? currencySuffix;
+  final bool showStepper;
 
   void _nudge(double delta) {
     final raw = controller.text.replaceAll(',', '').replaceAll(r'$', '').trim();
@@ -193,7 +195,7 @@ class InfaqPillAmountStepper extends StatelessWidget {
     final primary = Theme.of(context).colorScheme.primary;
     return Container(
       decoration: infaqServicePillDecoration(context),
-      padding: const EdgeInsets.only(left: 18, right: 4),
+      padding: EdgeInsets.only(left: 18, right: showStepper ? 4 : 14),
       child: Row(
         children: [
           Expanded(
@@ -210,23 +212,24 @@ class InfaqPillAmountStepper extends StatelessWidget {
               ),
             ),
           ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 28),
-                onPressed: () => _nudge(1),
-                icon: Icon(Icons.keyboard_arrow_up_rounded, color: onSurface.withValues(alpha: 0.55)),
-              ),
-              IconButton(
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 28),
-                onPressed: () => _nudge(-1),
-                icon: Icon(Icons.keyboard_arrow_down_rounded, color: onSurface.withValues(alpha: 0.55)),
-              ),
-            ],
-          ),
+          if (showStepper)
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 36, minHeight: 28),
+                  onPressed: () => _nudge(1),
+                  icon: Icon(Icons.keyboard_arrow_up_rounded, color: onSurface.withValues(alpha: 0.55)),
+                ),
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 36, minHeight: 28),
+                  onPressed: () => _nudge(-1),
+                  icon: Icon(Icons.keyboard_arrow_down_rounded, color: onSurface.withValues(alpha: 0.55)),
+                ),
+              ],
+            ),
         ],
       ),
     );

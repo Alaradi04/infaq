@@ -42,11 +42,20 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
     try {
       dynamic res;
       try {
-        res = await supabase
-            .from('categories')
-            .select('id,name,type,user_id,icon_key')
-            .or('user_id.is.null,user_id.eq.${user.id}')
-            .order('name');
+        try {
+          res = await supabase
+              .from('categories')
+              .select('id,name,type,user_id,icon_key,color')
+              .or('user_id.is.null,user_id.eq.${user.id}')
+              .order('name');
+        } on PostgrestException catch (e) {
+          if (e.code != '42703') rethrow;
+          res = await supabase
+              .from('categories')
+              .select('id,name,type,user_id,icon_key')
+              .or('user_id.is.null,user_id.eq.${user.id}')
+              .order('name');
+        }
         _supportsCategoryIconKey = true;
       } on PostgrestException catch (e) {
         // Older DB schema: categories.icon_key column does not exist yet.
@@ -80,6 +89,10 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
     final uid = row['user_id'];
     return uid == null;
   }
+
+  List<Map<String, dynamic>> get _customRows => _rows.where((r) => !_isDefault(r)).toList();
+
+  List<Map<String, dynamic>> get _builtInRows => _rows.where(_isDefault).toList();
 
   Future<void> _addCategory() async {
     final nameCtrl = TextEditingController();
@@ -329,60 +342,101 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
           : RefreshIndicator(
               color: _primary,
               onRefresh: _load,
-              child: ListView.builder(
+              child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
-                itemCount: _rows.length,
-                itemBuilder: (context, i) {
-                  final row = _rows[i];
-                  final def = _isDefault(row);
-                  final type = (row['type']?.toString() ?? '').toUpperCase();
-                  final name = row['name']?.toString() ?? '';
-                  final iconData = categoryIconForDisplay(
-                    iconKey: row['icon_key']?.toString(),
-                    name: name,
-                    type: row['type']?.toString() ?? 'expense',
-                    categoryId: row['id']?.toString(),
-                  );
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    decoration: BoxDecoration(
-                      color: cs.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.34 : 0.14)),
-                    ),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: isDark ? cs.surfaceContainerHighest : const Color(0xFFE8F2EA),
-                        foregroundColor: _primary,
-                        child: Icon(iconData, size: 22),
+                children: [
+                  _sectionTitle(context, 'Your Categories'),
+                  const SizedBox(height: 8),
+                  if (_customRows.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(2, 0, 2, 14),
+                      child: Text(
+                        'No custom categories yet.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: cs.onSurface.withValues(alpha: 0.55),
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                      title: Text(name, style: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurface)),
-                      subtitle: Text(
-                        '$type · ${def ? 'Default' : 'Yours'}',
-                        style: TextStyle(color: cs.onSurface.withValues(alpha: 0.58)),
-                      ),
-                      trailing: def
-                          ? Text('Built-in', style: TextStyle(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.45)))
-                          : Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  tooltip: 'Edit',
-                                  onPressed: () => _editCustom(row),
-                                  icon: const Icon(Icons.edit_outlined, color: _primary, size: 22),
-                                ),
-                                IconButton(
-                                  tooltip: 'Delete',
-                                  onPressed: () => _deleteCustom(row),
-                                  icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade700, size: 22),
-                                ),
-                              ],
-                            ),
-                    ),
-                  );
-                },
+                    )
+                  else
+                    ..._customRows.map((row) => _categoryCard(context, row, isBuiltIn: false)),
+                  const SizedBox(height: 8),
+                  _sectionTitle(context, 'Built-in Categories'),
+                  const SizedBox(height: 8),
+                  ..._builtInRows.map((row) => _categoryCard(context, row, isBuiltIn: true)),
+                ],
               ),
             ),
+    );
+  }
+
+  Widget _sectionTitle(BuildContext context, String title) {
+    final cs = Theme.of(context).colorScheme;
+    return Text(
+      title,
+      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: cs.onSurface),
+    );
+  }
+
+  Widget _categoryCard(BuildContext context, Map<String, dynamic> row, {required bool isBuiltIn}) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final type = (row['type']?.toString() ?? '').toUpperCase();
+    final name = row['name']?.toString() ?? '';
+    final iconData = categoryIconForDisplay(
+      iconKey: row['icon_key']?.toString(),
+      name: name,
+      type: row['type']?.toString() ?? 'expense',
+      categoryId: row['id']?.toString(),
+    );
+    final categoryColor = categoryDisplayColorFor(
+      name,
+      categoryId: row['id']?.toString(),
+      savedColor: row['color'] ?? row['color_value'] ?? row['hex_color'],
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.34 : 0.14)),
+      ),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: categoryDisplayTintFor(
+            name,
+            categoryId: row['id']?.toString(),
+            savedColor: row['color'] ?? row['color_value'] ?? row['hex_color'],
+            strength: isDark ? 0.78 : 0.84,
+          ),
+          foregroundColor: categoryColor,
+          child: Icon(iconData, size: 22),
+        ),
+        title: Text(name, style: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurface)),
+        subtitle: Text(
+          '$type · ${isBuiltIn ? 'Default' : 'Yours'}',
+          style: TextStyle(color: cs.onSurface.withValues(alpha: 0.58)),
+        ),
+        trailing: isBuiltIn
+            ? Text('Built-in', style: TextStyle(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.45)))
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Edit',
+                    onPressed: () => _editCustom(row),
+                    icon: const Icon(Icons.edit_outlined, color: _primary, size: 22),
+                  ),
+                  IconButton(
+                    tooltip: 'Delete',
+                    onPressed: () => _deleteCustom(row),
+                    icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade700, size: 22),
+                  ),
+                ],
+              ),
+      ),
     );
   }
 }
