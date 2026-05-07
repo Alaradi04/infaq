@@ -16,7 +16,9 @@ import 'package:infaq/screens/management_screen.dart';
 import 'package:infaq/screens/profile_tab_screen.dart';
 import 'package:infaq/category/category_icons.dart';
 import 'package:infaq/profile/avatar_storage.dart';
+import 'package:infaq/services/ai_background_tasks.dart';
 import 'package:infaq/services/ai_service.dart';
+import 'package:infaq/services/bank_notification_sync_service.dart';
 import 'package:infaq/services/home_services_layout_store.dart';
 import 'package:infaq/ui/ai_insight_card.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
@@ -78,15 +80,17 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _bootstrap();
-    _loadAiHomeInsights();
-    unawaited(_migrateMissingLeafImpacts());
+    unawaited(_loadAiHomeInsights());
   }
 
-  Future<void> _loadAiHomeInsights() async {
+  Future<void> _loadAiHomeInsights({bool forceRefresh = false}) async {
     if (!mounted) return;
     setState(() => _loadingAiInsights = true);
     try {
-      final cards = await _aiService.generateHomeInsights();
+      final cards = await _aiService.generateHomeInsights(
+        forceRefresh: forceRefresh,
+        reason: forceRefresh ? 'home_pull_refresh' : 'home_open',
+      );
       if (!mounted) return;
       setState(() => _aiInsightCards = cards);
     } catch (e, st) {
@@ -99,6 +103,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _bootstrap() async {
+    unawaited(
+      BankNotificationSyncService.instance.syncPendingBankTransactions(
+        trigger: 'home_bootstrap',
+      ),
+    );
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
 
@@ -205,7 +214,9 @@ class _HomeScreenState extends State<HomeScreen> {
       _loading = false;
       _error = null;
     });
-    unawaited(_migrateMissingLeafImpacts());
+    unawaited(
+      AiBackgroundTasks.runLeafMigrationThrottled(_migrateMissingLeafImpacts),
+    );
   }
 
   double _readBalance(dynamic raw) {
@@ -227,7 +238,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 'id, amount, description, date, created_at, category_id, leaf_color, leaf_title, leaf_message, categories(id, name, type, icon_key, color)',
               )
               .eq('user_id', userId)
-              .order('created_at', ascending: false)
+              .order('date', ascending: false)
               .limit(100);
         } catch (_) {
           res = await Supabase.instance.client
@@ -236,7 +247,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 'id, amount, description, date, created_at, category_id, leaf_color, leaf_title, leaf_message, categories(id, name, type, icon_key)',
               )
               .eq('user_id', userId)
-              .order('created_at', ascending: false)
+              .order('date', ascending: false)
               .limit(100);
         }
       } catch (_) {
@@ -248,7 +259,24 @@ class _HomeScreenState extends State<HomeScreen> {
             .limit(100);
       }
       final list = res as List<dynamic>;
-      return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final rows = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      rows.sort((a, b) {
+        final ad = DateTime.tryParse((a['date'] ?? a['created_at'] ?? '').toString());
+        final bd = DateTime.tryParse((b['date'] ?? b['created_at'] ?? '').toString());
+        if (ad != null && bd != null) {
+          final cmp = bd.compareTo(ad);
+          if (cmp != 0) return cmp;
+        } else if (bd != null) {
+          return 1;
+        } else if (ad != null) {
+          return -1;
+        }
+        final ac = DateTime.tryParse((a['created_at'] ?? '').toString());
+        final bc = DateTime.tryParse((b['created_at'] ?? '').toString());
+        if (ac != null && bc != null) return bc.compareTo(ac);
+        return 0;
+      });
+      return rows;
     } catch (_) {
       return [];
     }
@@ -343,11 +371,20 @@ class _HomeScreenState extends State<HomeScreen> {
         final txName = (tx['description'] ?? '').toString().trim();
         final categoryName = (cat?['name'] ?? '').toString().trim();
         if (txName.isEmpty || categoryName.isEmpty) continue;
+        if (!AiService.shouldClassifyLeafImpact(
+          transactionName: txName,
+          category: categoryName,
+          transactionType: 'expense',
+        )) {
+          continue;
+        }
         try {
           final impact = await _aiService.classifyLeafImpact(
             transactionName: txName,
             category: categoryName,
             transactionType: 'expense',
+            reason: 'home_leaf_migration',
+            propagateLeafQuota: true,
           );
           await Supabase.instance.client
               .from('transactions')
@@ -359,6 +396,9 @@ class _HomeScreenState extends State<HomeScreen> {
               .eq('id', txId)
               .eq('user_id', user.id);
           debugPrint('Leaf migration updated transaction id=$txId');
+        } on AiQuotaExceededException {
+          debugPrint('Leaf migration stopped: daily leaf AI quota reached');
+          break;
         } catch (e, st) {
           debugPrint('Leaf migration error tx=$txId: $e\n$st');
         }
@@ -380,6 +420,8 @@ class _HomeScreenState extends State<HomeScreen> {
         return 'SAR ';
       case 'BHD':
         return 'BHD ';
+      case 'JPY':
+        return '¥';
       default:
         return '${_currency ?? ''} '.trim().isEmpty ? '' : '${_currency!} ';
     }

@@ -9,6 +9,7 @@ import 'package:infaq/app_theme_mode.dart';
 import 'package:infaq/screens/home_screen.dart';
 import 'package:infaq/screens/oauth_profile_setup_screen.dart';
 import 'package:infaq/screens/welcome_screen.dart';
+import 'package:infaq/services/bank_notification_sync_service.dart';
 
 const String _kSupabaseUrl = String.fromEnvironment(
   'SUPABASE_URL',
@@ -72,6 +73,11 @@ class _StartupShellState extends State<_StartupShell> {
       setState(() => _error = e);
       return;
     }
+    unawaited(
+      BankNotificationSyncService.instance.syncPendingBankTransactions(
+        trigger: 'app_start_after_supabase_init',
+      ),
+    );
     if (mounted) setState(() => _ready = true);
   }
 
@@ -111,7 +117,9 @@ class _StartupShellState extends State<_StartupShell> {
                   const SizedBox(height: 28),
                   FilledButton(
                     onPressed: _prepare,
-                    style: FilledButton.styleFrom(backgroundColor: const Color(0xFF3F5F4A)),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF3F5F4A),
+                    ),
                     child: const Text('Retry'),
                   ),
                   const Spacer(),
@@ -140,7 +148,8 @@ class _StartupShellState extends State<_StartupShell> {
     final mode = AppThemeMode.instance.themeMode;
     if (mode == ThemeMode.dark) return _surfaceDark;
     if (mode == ThemeMode.light) return _surface;
-    final platform = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    final platform =
+        WidgetsBinding.instance.platformDispatcher.platformBrightness;
     return platform == Brightness.dark ? _surfaceDark : _surface;
   }
 }
@@ -281,9 +290,7 @@ class _AuthGateState extends State<AuthGate> {
             if (snap.connectionState != ConnectionState.done) {
               return Scaffold(
                 backgroundColor: cs.surface,
-                body: Center(
-                  child: const _InfaqPulseLoader(),
-                ),
+                body: Center(child: const _InfaqPulseLoader()),
               );
             }
             final exists = snap.data ?? false;
@@ -338,10 +345,7 @@ class _InfaqPulseLoaderState extends State<_InfaqPulseLoader>
     return AnimatedBuilder(
       animation: _scale,
       builder: (context, child) {
-        return Transform.scale(
-          scale: _scale.value,
-          child: child,
-        );
+        return Transform.scale(scale: _scale.value, child: child);
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,

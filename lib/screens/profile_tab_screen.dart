@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/app_theme_mode.dart';
+import 'package:infaq/screens/ai_usage_debug_screen.dart';
 import 'package:infaq/screens/notification_settings_screen.dart';
+import 'package:infaq/screens/profile_info_screens.dart';
 import 'package:infaq/services/notification_preferences_service.dart';
 
 const Color _kPrimary = Color(0xFF4D6658);
@@ -184,6 +186,57 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                       _navTile(context, title: 'Help and support', onTap: widget.onHelpAndSupport ?? () {}),
                       Divider(height: 1, color: cs.outline.withValues(alpha: 0.2)),
                       _navTile(context, title: 'Data and privacy', onTap: widget.onDataAndPrivacy ?? () {}),
+                      Divider(height: 1, color: cs.outline.withValues(alpha: 0.2)),
+                      _navTile(
+                        context,
+                        title: 'AI usage (debug)',
+                        onTap: () {
+                          Navigator.of(context).push<void>(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const AiUsageDebugScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      Divider(height: 1, color: cs.outline.withValues(alpha: 0.2)),
+                      _iconNavTile(
+                        context,
+                        icon: Icons.shield_outlined,
+                        title: 'Privacy Policy',
+                        onTap: () {
+                          Navigator.of(context).push<void>(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const PrivacyPolicyScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      Divider(height: 1, color: cs.outline.withValues(alpha: 0.2)),
+                      _iconNavTile(
+                        context,
+                        icon: Icons.info_outline_rounded,
+                        title: 'About INFAQ',
+                        onTap: () {
+                          Navigator.of(context).push<void>(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const AboutInfaqScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      Divider(height: 1, color: cs.outline.withValues(alpha: 0.2)),
+                      _iconNavTile(
+                        context,
+                        icon: Icons.help_outline_rounded,
+                        title: 'FAQ',
+                        onTap: () {
+                          Navigator.of(context).push<void>(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const FaqScreen(),
+                            ),
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -229,7 +282,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'v6.7.2',
+                  'v$kInfaqAppVersionLabel',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 13, color: onSurface.withValues(alpha: 0.35)),
                 ),
@@ -328,6 +381,23 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
   Widget _navTile(BuildContext context, {required String title, required VoidCallback onTap}) {
     final cs = Theme.of(context).colorScheme;
     return ListTile(
+      title: Text(title, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: cs.onSurface)),
+      trailing: Icon(Icons.chevron_right_rounded, color: cs.onSurface.withValues(alpha: 0.35)),
+      onTap: onTap,
+    );
+  }
+
+  Widget _iconNavTile(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final iconColor = isDark ? cs.primary : _kPrimary;
+    return ListTile(
+      leading: Icon(icon, size: 24, color: iconColor),
       title: Text(title, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: cs.onSurface)),
       trailing: Icon(Icons.chevron_right_rounded, color: cs.onSurface.withValues(alpha: 0.35)),
       onTap: onTap,

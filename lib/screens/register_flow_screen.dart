@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/oauth_redirect.dart';
 import 'package:infaq/screens/login_screen.dart';
+import 'package:infaq/ui/infaq_currency_meta.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
 /// Strong password: at least this many characters (12–16+ recommended in UI copy).
@@ -460,11 +461,16 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
             initialSelection: _currency,
             expandedInsets: EdgeInsets.zero,
             onSelected: (v) => setState(() => _currency = v),
-            dropdownMenuEntries: const [
-              DropdownMenuEntry(value: 'BHD', label: 'BHD'),
-              DropdownMenuEntry(value: 'USD', label: 'USD'),
-              DropdownMenuEntry(value: 'EUR', label: 'EUR'),
-              DropdownMenuEntry(value: 'SAR', label: 'SAR'),
+            dropdownMenuEntries: [
+              for (final c in InfaqCurrencyMeta.orderedCodes)
+                DropdownMenuEntry<String>(
+                  value: c,
+                  label: InfaqCurrencyMeta.menuLabel(c),
+                  leadingIcon: Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: InfaqCurrencyMeta.flagOrFallback(context, c, size: 20),
+                  ),
+                ),
             ],
             inputDecorationTheme: InputDecorationTheme(
               filled: true,

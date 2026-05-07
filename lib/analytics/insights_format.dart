@@ -10,6 +10,8 @@ String currencyPrefixForCode(String? code) {
       return 'SAR ';
     case 'BHD':
       return 'BHD ';
+    case 'JPY':
+      return '¥';
     default:
       final c = code?.trim();
       return (c == null || c.isEmpty) ? '' : '$c ';

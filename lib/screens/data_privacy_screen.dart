@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:infaq/screens/profile_info_screens.dart';
+
 class DataPrivacyScreen extends StatelessWidget {
   const DataPrivacyScreen({super.key});
 
@@ -15,7 +17,7 @@ class DataPrivacyScreen extends StatelessWidget {
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-          children: const [
+          children: [
             _PolicyTitle('Privacy Policy'),
             SizedBox(height: 6),
             _PolicyBody('Last Updated: 6/5/2026'),
@@ -104,7 +106,7 @@ class DataPrivacyScreen extends StatelessWidget {
                   'Correct inaccurate information\n'
                   'Request deletion of your data\n'
                   'Withdraw consent where applicable\n\n'
-                  'To request any of these, please contact us at: infaq.bh@gmail.com',
+                  'To request any of these, please contact us at: $kInfaqContactEmail',
             ),
             _PolicySection(
               title: 'Data Retention',
@@ -129,7 +131,7 @@ class DataPrivacyScreen extends StatelessWidget {
               body:
                   'If you have any questions about this Privacy Policy, please contact us at:\n\n'
                   'App Name: Infaq\n'
-                  'Email: infaq.bh@gmail.com',
+                  'Email: $kInfaqContactEmail',
             ),
           ],
         ),

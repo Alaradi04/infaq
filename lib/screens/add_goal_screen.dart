@@ -44,6 +44,8 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
         return '€';
       case 'GBP':
         return '£';
+      case 'JPY':
+        return '¥';
       default:
         return null;
     }

@@ -49,6 +49,8 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
         return '€';
       case 'GBP':
         return '£';
+      case 'JPY':
+        return '¥';
       default:
         return null;
     }

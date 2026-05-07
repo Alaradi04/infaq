@@ -8,6 +8,7 @@ import 'package:infaq/analytics/insights_export.dart';
 import 'package:infaq/analytics/insights_format.dart';
 import 'package:infaq/analytics/insights_models.dart';
 import 'package:infaq/analytics/insights_service.dart';
+import 'package:infaq/services/ai_background_tasks.dart';
 import 'package:infaq/services/ai_service.dart';
 import 'package:infaq/ui/ai_insight_card.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
@@ -82,7 +83,9 @@ class _InsightsScreenState extends State<InsightsScreen> {
     _load();
     _loadDetailedInsights();
     _loadEnvironmentalImpact();
-    unawaited(_migrateMissingLeafImpacts());
+    unawaited(
+      AiBackgroundTasks.runLeafMigrationThrottled(_migrateMissingLeafImpacts),
+    );
   }
 
   @override
@@ -91,9 +94,11 @@ class _InsightsScreenState extends State<InsightsScreen> {
     if (oldWidget.refreshToken != widget.refreshToken) {
       _load();
       _cachedDetailedInsights.clear();
-      _loadDetailedInsights(forceRefresh: true);
+      _loadDetailedInsights(forceRefresh: false);
       _loadEnvironmentalImpact(forceReload: true);
-      unawaited(_migrateMissingLeafImpacts());
+      unawaited(
+        AiBackgroundTasks.runLeafMigrationThrottled(_migrateMissingLeafImpacts),
+      );
     }
   }
 
@@ -144,7 +149,13 @@ class _InsightsScreenState extends State<InsightsScreen> {
       _detailedInsightsUnavailable = false;
     });
     try {
-      final cards = await _aiService.generateDetailedInsights(period: period);
+      final cards = await _aiService.generateDetailedInsights(
+        period: period,
+        forceRefresh: forceRefresh,
+        reason: forceRefresh
+            ? 'insights_pull_refresh'
+            : 'insights_tab_$period',
+      );
       if (!mounted) return;
       _cachedDetailedInsights[period] = cards;
       setState(() {
@@ -462,11 +473,20 @@ class _InsightsScreenState extends State<InsightsScreen> {
         final categoryName = (cat['name'] ?? '').toString().trim();
         final txName = (row['description'] ?? '').toString().trim();
         if (categoryName.isEmpty || txName.isEmpty) continue;
+        if (!AiService.shouldClassifyLeafImpact(
+          transactionName: txName,
+          category: categoryName,
+          transactionType: 'expense',
+        )) {
+          continue;
+        }
         try {
           final impact = await _aiService.classifyLeafImpact(
             transactionName: txName,
             category: categoryName,
             transactionType: 'expense',
+            reason: 'insights_leaf_migration',
+            propagateLeafQuota: true,
           );
           await Supabase.instance.client
               .from('transactions')
@@ -478,6 +498,9 @@ class _InsightsScreenState extends State<InsightsScreen> {
               .eq('id', txId)
               .eq('user_id', user.id);
           debugPrint('leaf migration updated transaction id=$txId');
+        } on AiQuotaExceededException {
+          debugPrint('leaf migration stopped: daily leaf AI quota reached');
+          break;
         } catch (e, st) {
           debugPrint('leaf migration error tx=$txId: $e\n$st');
         }
@@ -766,7 +789,11 @@ class _InsightsScreenState extends State<InsightsScreen> {
                 await _loadEnvironmentalImpact();
                 _cachedDetailedInsights.clear();
                 await _loadDetailedInsights(forceRefresh: true);
-                unawaited(_migrateMissingLeafImpacts());
+                unawaited(
+                  AiBackgroundTasks.runLeafMigrationThrottled(
+                    _migrateMissingLeafImpacts,
+                  ),
+                );
               },
               child: _error != null
                   ? ListView(

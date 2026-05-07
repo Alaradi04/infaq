@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -7,10 +8,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:infaq/goal_local_storage.dart';
 import 'package:infaq/profile/subscription_icon_storage.dart';
 import 'package:infaq/category/category_icons.dart';
+import 'package:infaq/screens/add_transaction_screen.dart';
 import 'package:infaq/screens/add_goal_screen.dart';
 import 'package:infaq/screens/add_subscription_screen.dart';
 import 'package:infaq/screens/edit_goal_screen.dart';
 import 'package:infaq/screens/edit_subscription_screen.dart';
+import 'package:infaq/subscription_renewal.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
@@ -62,6 +65,8 @@ class ManagementScreen extends StatefulWidget {
 }
 
 class _ManagementScreenState extends State<ManagementScreen> {
+  static const Color _kSubRenewalWarning = Color(0xFFE65100);
+
   _MgmtMainTab _mainTab = _MgmtMainTab.transactions;
 
   /// Spending budget shown in summary (persisted as `users.Balance` when edited).
@@ -113,6 +118,23 @@ class _ManagementScreenState extends State<ManagementScreen> {
   bool _loadingTx = true;
   bool _loadingSub = false;
   bool _loadingGoals = false;
+  final Set<String> _deletingTxIds = <String>{};
+  final Set<String> _updatingTxIds = <String>{};
+  final Set<String> _deletingSubIds = <String>{};
+  final Set<String> _updatingSubIds = <String>{};
+  final Set<String> _deletingGoalIds = <String>{};
+  final Set<String> _updatingGoalIds = <String>{};
+
+  bool _txSelectMode = false;
+  final Set<String> _selectedTxIds = <String>{};
+  bool _subSelectMode = false;
+  final Set<String> _selectedSubIds = <String>{};
+  bool _goalSelectMode = false;
+  final Set<String> _selectedGoalIds = <String>{};
+  bool _bulkDeleting = false;
+  final Set<String> _removingTxIds = <String>{};
+  final Set<String> _removingSubIds = <String>{};
+  final Set<String> _removingGoalIds = <String>{};
 
   @override
   void initState() {
@@ -182,6 +204,22 @@ class _ManagementScreenState extends State<ManagementScreen> {
       final list = (res as List<dynamic>)
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
+      list.sort((a, b) {
+        final ad = _txDate(a);
+        final bd = _txDate(b);
+        if (ad != null && bd != null) {
+          final cmp = bd.compareTo(ad);
+          if (cmp != 0) return cmp;
+        } else if (bd != null) {
+          return 1;
+        } else if (ad != null) {
+          return -1;
+        }
+        final ac = DateTime.tryParse((a['created_at'] ?? '').toString());
+        final bc = DateTime.tryParse((b['created_at'] ?? '').toString());
+        if (ac != null && bc != null) return bc.compareTo(ac);
+        return (b['id'] ?? '').toString().compareTo((a['id'] ?? '').toString());
+      });
       if (!mounted) return;
       setState(() {
         _transactions = list;
@@ -210,9 +248,55 @@ class _ManagementScreenState extends State<ManagementScreen> {
         _subscriptions = list;
         _loadingSub = false;
       });
+      for (final s in list) {
+        SubscriptionRenewal.debugLogRenewal(s);
+      }
+      unawaited(_syncStaleSubscriptionNextPayments());
     } catch (_) {
       if (mounted) setState(() => _loadingSub = false);
     }
+  }
+
+  /// Rolls stale `next_payment` forward on the server for active recurring subs.
+  Future<void> _syncStaleSubscriptionNextPayments() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null || !mounted) return;
+    final client = Supabase.instance.client;
+    final updates = <String, String>{};
+    for (final s in List<Map<String, dynamic>>.from(_subscriptions)) {
+      final id = s['id']?.toString();
+      if (id == null || id.isEmpty) continue;
+      final anchor = SubscriptionRenewal.anchorDate(s);
+      if (anchor == null) continue;
+      final rolled = SubscriptionRenewal.displayNextRenewal(s);
+      if (rolled == null) continue;
+      if (!SubscriptionRenewal.shouldPersistRolledDate(s, anchor, rolled)) {
+        continue;
+      }
+      updates[id] = SubscriptionRenewal.toIsoDate(rolled);
+    }
+    for (final e in updates.entries) {
+      try {
+        await client
+            .from('subscriptions')
+            .update({'next_payment': e.value})
+            .eq('id', e.key)
+            .eq('user_id', user.id);
+      } catch (err) {
+        debugPrint('sync subscription ${e.key} next_payment: $err');
+      }
+    }
+    if (!mounted || updates.isEmpty) return;
+    setState(() {
+      for (final e in updates.entries) {
+        final idx = _subscriptions.indexWhere((x) => x['id']?.toString() == e.key);
+        if (idx >= 0) {
+          final m = Map<String, dynamic>.from(_subscriptions[idx]);
+          m['next_payment'] = e.value;
+          _subscriptions[idx] = m;
+        }
+      }
+    });
   }
 
   Future<void> _loadGoals() async {
@@ -265,8 +349,670 @@ class _ManagementScreenState extends State<ManagementScreen> {
     }
   }
 
+  void _exitBulkSelectionInternal() {
+    _txSelectMode = false;
+    _selectedTxIds.clear();
+    _subSelectMode = false;
+    _selectedSubIds.clear();
+    _goalSelectMode = false;
+    _selectedGoalIds.clear();
+  }
+
+  void _exitBulkSelection() {
+    setState(_exitBulkSelectionInternal);
+  }
+
+  bool get _bulkSelectionActive => switch (_mainTab) {
+        _MgmtMainTab.transactions => _txSelectMode,
+        _MgmtMainTab.subscriptions => _subSelectMode,
+        _MgmtMainTab.goals => _goalSelectMode,
+      };
+
+  Widget _wrapListCardExit({required bool exiting, required Widget child}) {
+    return AnimatedSlide(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeInCubic,
+      offset: exiting ? const Offset(0, -0.05) : Offset.zero,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeInCubic,
+        opacity: exiting ? 0.0 : 1.0,
+        child: AnimatedScale(
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeInCubic,
+          scale: exiting ? 0.92 : 1.0,
+          alignment: Alignment.centerLeft,
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  void _onTransactionLongPress(String id) {
+    if (id.isEmpty) return;
+    setState(() {
+      _txSelectMode = true;
+      _selectedTxIds.add(id);
+    });
+  }
+
+  void _toggleTransactionSelect(String id) {
+    if (id.isEmpty) return;
+    setState(() {
+      if (_selectedTxIds.contains(id)) {
+        _selectedTxIds.remove(id);
+        if (_selectedTxIds.isEmpty) _txSelectMode = false;
+      } else {
+        _selectedTxIds.add(id);
+      }
+    });
+  }
+
+  void _selectAllFilteredTransactions() {
+    setState(() {
+      _txSelectMode = true;
+      for (final t in _filteredTransactions) {
+        final id = t['id']?.toString();
+        if (id != null && id.isNotEmpty) _selectedTxIds.add(id);
+      }
+    });
+  }
+
+  void _clearTransactionSelection() {
+    setState(() {
+      _selectedTxIds.clear();
+      _txSelectMode = false;
+    });
+  }
+
+  void _onSubscriptionLongPress(String id) {
+    if (id.isEmpty) return;
+    setState(() {
+      _subSelectMode = true;
+      _selectedSubIds.add(id);
+    });
+  }
+
+  void _toggleSubscriptionSelect(String id) {
+    if (id.isEmpty) return;
+    setState(() {
+      if (_selectedSubIds.contains(id)) {
+        _selectedSubIds.remove(id);
+        if (_selectedSubIds.isEmpty) _subSelectMode = false;
+      } else {
+        _selectedSubIds.add(id);
+      }
+    });
+  }
+
+  void _selectAllFilteredSubscriptions() {
+    setState(() {
+      _subSelectMode = true;
+      for (final s in _filteredSubscriptionsList) {
+        final id = s['id']?.toString();
+        if (id != null && id.isNotEmpty) _selectedSubIds.add(id);
+      }
+    });
+  }
+
+  void _clearSubscriptionSelection() {
+    setState(() {
+      _selectedSubIds.clear();
+      _subSelectMode = false;
+    });
+  }
+
+  void _onGoalLongPress(String id) {
+    if (id.isEmpty) return;
+    setState(() {
+      _goalSelectMode = true;
+      _selectedGoalIds.add(id);
+    });
+  }
+
+  void _toggleGoalSelect(String id) {
+    if (id.isEmpty) return;
+    setState(() {
+      if (_selectedGoalIds.contains(id)) {
+        _selectedGoalIds.remove(id);
+        if (_selectedGoalIds.isEmpty) _goalSelectMode = false;
+      } else {
+        _selectedGoalIds.add(id);
+      }
+    });
+  }
+
+  void _selectAllFilteredGoals() {
+    setState(() {
+      _goalSelectMode = true;
+      for (final g in _filteredGoalsList) {
+        final id = g['id']?.toString();
+        if (id != null && id.isNotEmpty) _selectedGoalIds.add(id);
+      }
+    });
+  }
+
+  void _clearGoalSelection() {
+    setState(() {
+      _selectedGoalIds.clear();
+      _goalSelectMode = false;
+    });
+  }
+
+  Future<Set<String>> _deleteTransactionIdsBatched(List<String> ids) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null || ids.isEmpty) return ids.toSet();
+    try {
+      await Supabase.instance.client
+          .from('transactions')
+          .delete()
+          .inFilter('id', ids)
+          .eq('user_id', user.id);
+      return <String>{};
+    } catch (e, st) {
+      debugPrint('Batch delete transactions failed: $e\n$st');
+      final failed = <String>{};
+      for (final id in ids) {
+        try {
+          await Supabase.instance.client
+              .from('transactions')
+              .delete()
+              .eq('id', id)
+              .eq('user_id', user.id);
+        } catch (e2, st2) {
+          debugPrint('Delete transaction $id failed: $e2\n$st2');
+          failed.add(id);
+        }
+      }
+      return failed;
+    }
+  }
+
+  Future<Set<String>> _deleteSubscriptionIdsBatched(List<String> ids) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null || ids.isEmpty) return ids.toSet();
+    try {
+      await Supabase.instance.client
+          .from('subscriptions')
+          .delete()
+          .inFilter('id', ids)
+          .eq('user_id', user.id);
+      return <String>{};
+    } catch (e, st) {
+      debugPrint('Batch delete subscriptions failed: $e\n$st');
+      final failed = <String>{};
+      for (final id in ids) {
+        try {
+          await Supabase.instance.client
+              .from('subscriptions')
+              .delete()
+              .eq('id', id)
+              .eq('user_id', user.id);
+        } catch (e2, st2) {
+          debugPrint('Delete subscription $id failed: $e2\n$st2');
+          failed.add(id);
+        }
+      }
+      return failed;
+    }
+  }
+
+  Future<Set<String>> _deleteGoalIdsBatched(List<String> ids) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null || ids.isEmpty) return ids.toSet();
+    try {
+      await Supabase.instance.client
+          .from('goals')
+          .delete()
+          .inFilter('id', ids)
+          .eq('created_by', user.id);
+      return <String>{};
+    } catch (e, st) {
+      debugPrint('Batch delete goals failed: $e\n$st');
+      final failed = <String>{};
+      for (final id in ids) {
+        try {
+          await Supabase.instance.client
+              .from('goals')
+              .delete()
+              .eq('id', id)
+              .eq('created_by', user.id);
+        } catch (e2, st2) {
+          debugPrint('Delete goal $id failed: $e2\n$st2');
+          failed.add(id);
+        }
+      }
+      return failed;
+    }
+  }
+
+  Future<void> _onBulkDeleteTransactionsPressed() async {
+    final ids = _selectedTxIds.toList();
+    if (ids.isEmpty) return;
+    final n = ids.length;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete $n ${n == 1 ? 'transaction' : 'transactions'}?'),
+        content: Text(
+          'This action cannot be undone.',
+          style: TextStyle(
+            color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.72),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _bulkDeleting = true);
+    final failed = await _deleteTransactionIdsBatched(ids);
+    final success = ids.where((id) => !failed.contains(id)).toList();
+    if (!mounted) return;
+    if (success.isEmpty) {
+      setState(() => _bulkDeleting = false);
+      if (failed.isNotEmpty) {
+        showInfaqSnack(
+          context,
+          'Could not delete selected items. They stay selected.',
+        );
+      }
+      return;
+    }
+    setState(() {
+      _bulkDeleting = false;
+      _removingTxIds.addAll(success);
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+    setState(() {
+      _transactions.removeWhere((t) => success.contains(t['id']?.toString()));
+      _removingTxIds.removeAll(success);
+      _selectedTxIds.removeAll(success);
+      if (_selectedTxIds.isEmpty) _txSelectMode = false;
+    });
+    unawaited(_refreshBalanceOnly());
+    if (failed.isNotEmpty) {
+      showInfaqSnack(
+        context,
+        'Deleted ${success.length} of $n. ${failed.length} could not be removed — still selected.',
+      );
+    } else {
+      showInfaqSnack(
+        context,
+        'Deleted ${success.length} ${success.length == 1 ? 'transaction' : 'transactions'}.',
+      );
+    }
+  }
+
+  Future<void> _onBulkDeleteSubscriptionsPressed() async {
+    final ids = _selectedSubIds.toList();
+    if (ids.isEmpty) return;
+    final n = ids.length;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          'Delete $n ${n == 1 ? 'subscription' : 'subscriptions'}?',
+        ),
+        content: Text(
+          'This action cannot be undone.',
+          style: TextStyle(
+            color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.72),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _bulkDeleting = true);
+    final failed = await _deleteSubscriptionIdsBatched(ids);
+    final success = ids.where((id) => !failed.contains(id)).toList();
+    if (!mounted) return;
+    if (success.isEmpty) {
+      setState(() => _bulkDeleting = false);
+      if (failed.isNotEmpty) {
+        showInfaqSnack(
+          context,
+          'Could not delete selected items. They stay selected.',
+        );
+      }
+      return;
+    }
+    setState(() {
+      _bulkDeleting = false;
+      _removingSubIds.addAll(success);
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+    setState(() {
+      _subscriptions.removeWhere((e) => success.contains(e['id']?.toString()));
+      _removingSubIds.removeAll(success);
+      _selectedSubIds.removeAll(success);
+      if (_selectedSubIds.isEmpty) _subSelectMode = false;
+    });
+    if (failed.isNotEmpty) {
+      showInfaqSnack(
+        context,
+        'Deleted ${success.length} of $n. ${failed.length} could not be removed — still selected.',
+      );
+    } else {
+      showInfaqSnack(
+        context,
+        'Deleted ${success.length} ${success.length == 1 ? 'subscription' : 'subscriptions'}.',
+      );
+    }
+  }
+
+  Future<void> _onBulkDeleteGoalsPressed() async {
+    final ids = _selectedGoalIds.toList();
+    if (ids.isEmpty) return;
+    final n = ids.length;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete $n ${n == 1 ? 'goal' : 'goals'}?'),
+        content: Text(
+          'This action cannot be undone.',
+          style: TextStyle(
+            color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.72),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _bulkDeleting = true);
+    final failed = await _deleteGoalIdsBatched(ids);
+    final success = ids.where((id) => !failed.contains(id)).toList();
+    if (!mounted) return;
+    if (success.isEmpty) {
+      setState(() => _bulkDeleting = false);
+      if (failed.isNotEmpty) {
+        showInfaqSnack(
+          context,
+          'Could not delete selected items. They stay selected.',
+        );
+      }
+      return;
+    }
+    setState(() {
+      _bulkDeleting = false;
+      _removingGoalIds.addAll(success);
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+    setState(() {
+      for (final id in success) {
+        _goals.removeWhere((e) => e['id']?.toString() == id);
+        _goalIconCodePoints.remove(id);
+        _goalIconColors.remove(id);
+      }
+      _removingGoalIds.removeAll(success);
+      _selectedGoalIds.removeAll(success);
+      if (_selectedGoalIds.isEmpty) _goalSelectMode = false;
+    });
+    if (failed.isNotEmpty) {
+      showInfaqSnack(
+        context,
+        'Deleted ${success.length} of $n. ${failed.length} could not be removed — still selected.',
+      );
+    } else {
+      showInfaqSnack(
+        context,
+        'Deleted ${success.length} ${success.length == 1 ? 'goal' : 'goals'}.',
+      );
+    }
+  }
+
+  Widget _buildManagementHeaderTopRow(ColorScheme cs) {
+    if (_mainTab == _MgmtMainTab.transactions && _txSelectMode) {
+      return Row(
+        children: [
+          IconButton(
+            tooltip: 'Exit selection',
+            onPressed: _exitBulkSelection,
+            icon: Icon(Icons.close_rounded, color: cs.primary),
+          ),
+          Expanded(
+            child: Text(
+              '${_selectedTxIds.length} selected',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.2,
+                color: cs.primary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: _selectAllFilteredTransactions,
+            child: Text(
+              'All',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: cs.primary,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: _clearTransactionSelection,
+            child: Text(
+              'Clear',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: cs.primary,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          _bulkDeleting
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: cs.primary,
+                    ),
+                  ),
+                )
+              : IconButton(
+                  tooltip: 'Delete selected',
+                  onPressed: _selectedTxIds.isEmpty
+                      ? null
+                      : _onBulkDeleteTransactionsPressed,
+                  icon: Icon(Icons.delete_outline_rounded, color: cs.primary),
+                ),
+        ],
+      );
+    }
+    if (_mainTab == _MgmtMainTab.subscriptions && _subSelectMode) {
+      return Row(
+        children: [
+          IconButton(
+            tooltip: 'Exit selection',
+            onPressed: _exitBulkSelection,
+            icon: Icon(Icons.close_rounded, color: cs.primary),
+          ),
+          Expanded(
+            child: Text(
+              '${_selectedSubIds.length} selected',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.2,
+                color: cs.primary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: _selectAllFilteredSubscriptions,
+            child: Text(
+              'All',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: cs.primary,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: _clearSubscriptionSelection,
+            child: Text(
+              'Clear',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: cs.primary,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          _bulkDeleting
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: cs.primary,
+                    ),
+                  ),
+                )
+              : IconButton(
+                  tooltip: 'Delete selected',
+                  onPressed: _selectedSubIds.isEmpty
+                      ? null
+                      : _onBulkDeleteSubscriptionsPressed,
+                  icon: Icon(Icons.delete_outline_rounded, color: cs.primary),
+                ),
+        ],
+      );
+    }
+    if (_mainTab == _MgmtMainTab.goals && _goalSelectMode) {
+      return Row(
+        children: [
+          IconButton(
+            tooltip: 'Exit selection',
+            onPressed: _exitBulkSelection,
+            icon: Icon(Icons.close_rounded, color: cs.primary),
+          ),
+          Expanded(
+            child: Text(
+              '${_selectedGoalIds.length} selected',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.2,
+                color: cs.primary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: _selectAllFilteredGoals,
+            child: Text(
+              'All',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: cs.primary,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: _clearGoalSelection,
+            child: Text(
+              'Clear',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: cs.primary,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          _bulkDeleting
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: cs.primary,
+                    ),
+                  ),
+                )
+              : IconButton(
+                  tooltip: 'Delete selected',
+                  onPressed: _selectedGoalIds.isEmpty
+                      ? null
+                      : _onBulkDeleteGoalsPressed,
+                  icon: Icon(Icons.delete_outline_rounded, color: cs.primary),
+                ),
+        ],
+      );
+    }
+    return Row(
+      children: [
+        Text(
+          'Management',
+          style: TextStyle(
+            fontSize: 23,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.25,
+            height: 1.15,
+            color: cs.primary,
+          ),
+        ),
+        const Spacer(),
+        if (!_bulkSelectionActive)
+          IconButton(
+            onPressed: _pickPeriodMode,
+            iconSize: 25,
+            icon: Icon(Icons.schedule_rounded, color: cs.primary),
+            tooltip: 'Date range',
+          ),
+      ],
+    );
+  }
+
   void _onMainTabChanged(_MgmtMainTab t) {
-    setState(() => _mainTab = t);
+    setState(() {
+      _mainTab = t;
+      _exitBulkSelectionInternal();
+    });
     widget.onMainTabIndexChanged?.call(t.index);
     if (t == _MgmtMainTab.subscriptions &&
         _subscriptions.isEmpty &&
@@ -288,6 +1034,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
         return 'SAR ';
       case 'BHD':
         return 'BHD ';
+      case 'JPY':
+        return '¥';
       default:
         final c = widget.currencyCode?.trim();
         return c == null || c.isEmpty ? '' : '$c ';
@@ -762,6 +1510,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
     if (ok != true || !mounted) return false;
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return false;
+    setState(() => _deletingTxIds.add(id));
     try {
       await Supabase.instance.client
           .from('transactions')
@@ -769,14 +1518,98 @@ class _ManagementScreenState extends State<ManagementScreen> {
           .eq('id', id)
           .eq('user_id', user.id);
       if (!mounted) return false;
-      await _loadTransactions();
-      widget.onDataChanged();
+      setState(() {
+        _deletingTxIds.remove(id);
+        _transactions.removeWhere((t) => t['id']?.toString() == id);
+      });
+      unawaited(_refreshBalanceOnly());
       if (mounted) showInfaqSnack(context, 'Transaction deleted');
-      return false;
+      return true;
     } catch (e) {
+      if (mounted) setState(() => _deletingTxIds.remove(id));
       if (mounted) showInfaqSnack(context, 'Could not delete: $e');
       return false;
     }
+  }
+
+  Future<void> _openEditTransactionLocal(Map<String, dynamic> row) async {
+    final id = row['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => AddTransactionScreen(
+          currencyCode: widget.currencyCode,
+          existingTransaction: Map<String, dynamic>.from(row),
+        ),
+      ),
+    );
+    if (changed != true || !mounted) return;
+    setState(() => _updatingTxIds.add(id));
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+      dynamic fetched;
+      try {
+        fetched = await Supabase.instance.client
+            .from('transactions')
+            .select(
+              'id, amount, description, date, created_at, category_id, leaf_color, leaf_title, leaf_message, categories(id, name, type, icon_key, color)',
+            )
+            .eq('id', id)
+            .eq('user_id', user.id)
+            .maybeSingle();
+      } catch (_) {
+        fetched = await Supabase.instance.client
+            .from('transactions')
+            .select(
+              'id, amount, description, date, created_at, category_id, leaf_color, leaf_title, leaf_message, categories(id, name, type, icon_key)',
+            )
+            .eq('id', id)
+            .eq('user_id', user.id)
+            .maybeSingle();
+      }
+      if (fetched != null && mounted) {
+        final fresh = Map<String, dynamic>.from(fetched as Map);
+        setState(() {
+          final idx = _transactions.indexWhere((t) => t['id']?.toString() == id);
+          if (idx >= 0) _transactions[idx] = fresh;
+        });
+      }
+      unawaited(_refreshBalanceOnly());
+      if (mounted) showInfaqSnack(context, 'Transaction updated');
+    } catch (e) {
+      if (mounted) showInfaqSnack(context, 'Could not refresh edited row: $e');
+    } finally {
+      if (mounted) setState(() => _updatingTxIds.remove(id));
+    }
+  }
+
+  Future<void> _refreshBalanceOnly() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    try {
+      final row = await Supabase.instance.client
+          .from('users')
+          .select('Balance')
+          .eq('id', user.id)
+          .maybeSingle();
+      if (!mounted || row == null) return;
+      setState(() => _monthlyBudget = _readAmount(row['Balance']));
+    } catch (_) {}
+  }
+
+  Widget _animatedListItem({required String keyId, required Widget child}) {
+    return TweenAnimationBuilder<double>(
+      key: ValueKey(keyId),
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      builder: (context, t, c) => Opacity(
+        opacity: t,
+        child: Transform.translate(offset: Offset((1 - t) * 10, 0), child: c),
+      ),
+      child: child,
+    );
   }
 
   @override
@@ -788,54 +1621,45 @@ class _ManagementScreenState extends State<ManagementScreen> {
     final progress = budget > 0 ? (spent / budget).clamp(0.0, 1.0) : 0.0;
 
     final headerTint = isDark ? _kHeaderGreenDark : _kHeaderGreenLight;
+    final headerTintActive = _bulkSelectionActive
+        ? Color.lerp(headerTint, cs.primary, isDark ? 0.22 : 0.14) ??
+            headerTint
+        : headerTint;
 
-    return ColoredBox(
-      color: cs.surface,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: headerTint,
-              borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(24),
+    return PopScope(
+      canPop: !_bulkSelectionActive,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (didPop) return;
+        if (!mounted) return;
+        _exitBulkSelection();
+      },
+      child: ColoredBox(
+        color: cs.surface,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: headerTintActive,
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(24),
+                ),
               ),
-            ),
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          'Management',
-                          style: TextStyle(
-                            fontSize: 23,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.25,
-                            height: 1.15,
-                            color: cs.primary,
-                          ),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          onPressed: _pickPeriodMode,
-                          iconSize: 25,
-                          icon: Icon(Icons.schedule_rounded, color: cs.primary),
-                          tooltip: 'Date range',
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _MgmtPillTabs(
-                      selected: _mainTab,
-                      onChanged: _onMainTabChanged,
-                    ),
-                  ],
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildManagementHeaderTopRow(cs),
+                      const SizedBox(height: 12),
+                      _MgmtPillTabs(
+                        selected: _mainTab,
+                        onChanged: _onMainTabChanged,
+                      ),
+                    ],
                 ),
               ),
             ),
@@ -844,19 +1668,38 @@ class _ManagementScreenState extends State<ManagementScreen> {
             child: RefreshIndicator(
               color: cs.primary,
               onRefresh: _refreshAll,
-              child: _mainTab == _MgmtMainTab.transactions
-                  ? _buildTransactionsTab(
-                      spent: spent,
-                      budget: budget,
-                      progress: progress,
-                    )
-                  : _mainTab == _MgmtMainTab.subscriptions
-                  ? _buildSubscriptionsTab()
-                  : _buildGoalsTab(),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 210),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  final offset = Tween<Offset>(
+                    begin: const Offset(0.06, 0),
+                    end: Offset.zero,
+                  ).animate(animation);
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(position: offset, child: child),
+                  );
+                },
+                child: KeyedSubtree(
+                  key: ValueKey(_mainTab.index),
+                  child: _mainTab == _MgmtMainTab.transactions
+                      ? _buildTransactionsTab(
+                          spent: spent,
+                          budget: budget,
+                          progress: progress,
+                        )
+                      : _mainTab == _MgmtMainTab.subscriptions
+                      ? _buildSubscriptionsTab()
+                      : _buildGoalsTab(),
+                ),
+              ),
             ),
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -927,11 +1770,25 @@ class _ManagementScreenState extends State<ManagementScreen> {
           )
         else
           for (final t in list)
-            _MgmtTxTile(
-              data: t,
-              format: _fmtMoney,
-              onTap: () => widget.onEditTransaction(t),
-              confirmDismissDelete: () => _deleteTransaction(t),
+            _animatedListItem(
+              keyId: 'tx-${t['id']}-${t.hashCode}',
+              child: _wrapListCardExit(
+                exiting: _removingTxIds.contains(t['id']?.toString()),
+                child: _MgmtTxTile(
+                  data: t,
+                  format: _fmtMoney,
+                  onTap: () => _openEditTransactionLocal(t),
+                  confirmDismissDelete: () => _deleteTransaction(t),
+                  isBusy: _deletingTxIds.contains(t['id']?.toString()) ||
+                      _updatingTxIds.contains(t['id']?.toString()),
+                  selectionMode: _txSelectMode,
+                  selected: _selectedTxIds.contains(t['id']?.toString()),
+                  onLongPress: () =>
+                      _onTransactionLongPress(t['id']?.toString() ?? ''),
+                  onToggleSelect: () =>
+                      _toggleTransactionSelect(t['id']?.toString() ?? ''),
+                ),
+              ),
             ),
       ],
     );
@@ -1173,17 +2030,61 @@ class _ManagementScreenState extends State<ManagementScreen> {
     return list;
   }
 
+  /// Relative renewal label under subscription price (calendar days).
+  ({String? text, Color color}) _subscriptionRenewalLine(Map<String, dynamic> s) {
+    final cs = Theme.of(context).colorScheme;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final anchor = SubscriptionRenewal.anchorDate(s);
+    if (anchor == null) return (text: null, color: cs.onSurface);
+
+    final active = SubscriptionRenewal.isActive(s);
+    if (!active) {
+      if (anchor.isBefore(today)) {
+        return (text: 'Overdue', color: Colors.red.shade700);
+      }
+    } else if (SubscriptionRenewal.isInvalidOrNonRollingCycle(s) &&
+        anchor.isBefore(today)) {
+      return (text: 'Overdue', color: Colors.red.shade700);
+    }
+
+    final display = SubscriptionRenewal.displayNextRenewal(s);
+    if (display == null) return (text: null, color: cs.onSurface);
+    final diff = DateTime(display.year, display.month, display.day)
+        .difference(today)
+        .inDays;
+    if (diff < 0) {
+      return (text: 'Overdue', color: Colors.red.shade700);
+    }
+    if (diff == 0) {
+      return (text: 'Today', color: _kSubRenewalWarning);
+    }
+    if (diff == 1) {
+      return (text: 'Tomorrow', color: _kSubRenewalWarning);
+    }
+    return (
+      text: '${diff}d left',
+      color: cs.onSurface.withValues(alpha: 0.5),
+    );
+  }
+
   String _subscriptionSubtitle(Map<String, dynamic> s) {
     final cycle = (s['billing_cycle'] ?? 'monthly').toString().toLowerCase();
-    final cycleLabel = cycle == 'yearly' ? 'Yearly' : 'Monthly';
-    final raw = s['next_payment'] ?? s['next_payment_date'];
-    final d = raw != null ? DateTime.tryParse(raw.toString()) : null;
-    final datePart = d != null ? formatGoalDateLong(d) : '—';
+    final cycleLabel = switch (cycle) {
+      'yearly' => 'Yearly',
+      'weekly' => 'Weekly',
+      'daily' => 'Daily',
+      'custom' => 'Custom',
+      _ => 'Monthly',
+    };
+    final display = SubscriptionRenewal.displayNextRenewal(s);
+    final datePart = display != null ? formatGoalDateLong(display) : '—';
     return '$cycleLabel - $datePart';
   }
 
   Future<void> _openEditSubscription(Map<String, dynamic> s) async {
-    if (_loadingTx) await _loadTransactions();
+    final id = s['id']?.toString();
+    if (id == null || id.isEmpty) return;
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (_) => EditSubscriptionScreen(
@@ -1194,8 +2095,26 @@ class _ManagementScreenState extends State<ManagementScreen> {
       ),
     );
     if (changed == true && mounted) {
-      await _loadSubscriptions();
-      widget.onDataChanged();
+      setState(() => _updatingSubIds.add(id));
+      try {
+        final user = Supabase.instance.client.auth.currentUser;
+        if (user == null) return;
+        final fetched = await Supabase.instance.client
+            .from('subscriptions')
+            .select()
+            .eq('id', id)
+            .eq('user_id', user.id)
+            .maybeSingle();
+        if (fetched != null && mounted) {
+          final fresh = Map<String, dynamic>.from(fetched as Map);
+          setState(() {
+            final idx = _subscriptions.indexWhere((e) => e['id']?.toString() == id);
+            if (idx >= 0) _subscriptions[idx] = fresh;
+          });
+        }
+      } finally {
+        if (mounted) setState(() => _updatingSubIds.remove(id));
+      }
     }
   }
 
@@ -1432,21 +2351,48 @@ class _ManagementScreenState extends State<ManagementScreen> {
               ),
             )
           else
-            for (final s in list) _buildSubscriptionDismissibleCard(s),
+            for (final s in list)
+              _animatedListItem(
+                keyId: 'sub-${s['id']}-${s.hashCode}',
+                child: _wrapListCardExit(
+                  exiting: _removingSubIds.contains(s['id']?.toString()),
+                  child: _buildSubscriptionDismissibleCard(
+                    s,
+                    isBusy: _deletingSubIds.contains(s['id']?.toString()) ||
+                        _updatingSubIds.contains(s['id']?.toString()),
+                    selectionMode: _subSelectMode,
+                    selected: _selectedSubIds.contains(s['id']?.toString()),
+                    onLongPress: () =>
+                        _onSubscriptionLongPress(s['id']?.toString() ?? ''),
+                    onToggleSelect: () =>
+                        _toggleSubscriptionSelect(s['id']?.toString() ?? ''),
+                  ),
+                ),
+              ),
         ],
       ),
     );
   }
 
-  Widget _buildSubscriptionDismissibleCard(Map<String, dynamic> s) {
+  Widget _buildSubscriptionDismissibleCard(
+    Map<String, dynamic> s, {
+    required bool isBusy,
+    bool selectionMode = false,
+    bool selected = false,
+    VoidCallback? onLongPress,
+    VoidCallback? onToggleSelect,
+  }) {
     final cs = Theme.of(context).colorScheme;
     final sid = s['id']?.toString() ?? s.hashCode.toString();
     final dimInactive = s['is_active'] == false;
+    final renewal = _subscriptionRenewalLine(s);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Dismissible(
         key: ValueKey('sub-$sid'),
-        direction: DismissDirection.endToStart,
+        direction: isBusy || selectionMode
+            ? DismissDirection.none
+            : DismissDirection.endToStart,
         background: Container(
           alignment: Alignment.centerRight,
           padding: const EdgeInsets.only(right: 20),
@@ -1461,80 +2407,158 @@ class _ManagementScreenState extends State<ManagementScreen> {
           ),
         ),
         confirmDismiss: (_) => _confirmDeleteSubscription(s),
-        child: Opacity(
-          opacity: dimInactive ? 0.55 : 1,
-          child: Material(
-            color: cs.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(20),
-            elevation: 0,
-            shadowColor: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: () => _openEditSubscription(s),
-              child: Ink(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  color: cs.surfaceContainerLow,
-                  boxShadow: [
-                    BoxShadow(
-                      color: cs.shadow.withValues(
-                        alpha: Theme.of(context).brightness == Brightness.dark
-                            ? 0.35
-                            : 0.07,
-                      ),
-                      blurRadius: 14,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
-                  border: Border.all(
-                    color: cs.outline.withValues(
-                      alpha: Theme.of(context).brightness == Brightness.dark
-                          ? 0.35
-                          : 0.12,
-                    ),
-                  ),
+        child: IgnorePointer(
+          ignoring: isBusy,
+          child: Opacity(
+            opacity: dimInactive ? 0.55 : 1,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: selectionMode && selected
+                      ? cs.primary
+                      : Colors.transparent,
+                  width: selectionMode && selected ? 2.5 : 0,
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  child: Row(
-                    children: [
-                      _subscriptionSquircleIcon(s),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              s['name']?.toString() ?? 'Subscription',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                                color: cs.onSurface,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              _subscriptionSubtitle(s),
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: cs.onSurface.withValues(alpha: 0.55),
-                              ),
-                            ),
-                          ],
+              ),
+              child: Material(
+                color: cs.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(20),
+                elevation: 0,
+                shadowColor: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: selectionMode
+                      ? () => onToggleSelect?.call()
+                      : () => _openEditSubscription(s),
+                  onLongPress: selectionMode || onLongPress == null
+                      ? null
+                      : onLongPress,
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      color: cs.surfaceContainerLow,
+                      boxShadow: [
+                        BoxShadow(
+                          color: cs.shadow.withValues(
+                            alpha:
+                                Theme.of(context).brightness == Brightness.dark
+                                ? 0.35
+                                : 0.07,
+                          ),
+                          blurRadius: 14,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                      border: Border.all(
+                        color: cs.outline.withValues(
+                          alpha:
+                              Theme.of(context).brightness == Brightness.dark
+                              ? 0.35
+                              : 0.12,
                         ),
                       ),
-                      Text(
-                        _fmtMoney(_readAmount(s['amount'])),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12.5,
-                          color: cs.onSurface,
-                        ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
                       ),
-                    ],
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Row(
+                            children: [
+                              _subscriptionSquircleIcon(s),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      s['name']?.toString() ?? 'Subscription',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                        color: cs.onSurface,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      _subscriptionSubtitle(s),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: cs.onSurface.withValues(
+                                          alpha: 0.55,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (isBusy)
+                                SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: cs.primary,
+                                  ),
+                                )
+                              else
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 4),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        _fmtMoney(_readAmount(s['amount'])),
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 12.5,
+                                          color: cs.onSurface,
+                                        ),
+                                      ),
+                                      if (renewal.text != null) ...[
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          renewal.text!,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 10.5,
+                                            height: 1.1,
+                                            color: renewal.color,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                          if (selectionMode)
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              child: AnimatedScale(
+                                duration: const Duration(milliseconds: 200),
+                                curve: Curves.easeOutCubic,
+                                scale: selected ? 1.0 : 0.88,
+                                child: Icon(
+                                  selected
+                                      ? Icons.check_circle_rounded
+                                      : Icons.circle_outlined,
+                                  size: 22,
+                                  color: selected ? cs.primary : cs.outline,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1566,6 +2590,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
       ),
     );
     if (ok != true || !mounted) return false;
+    setState(() => _deletingSubIds.add(id));
     try {
       await Supabase.instance.client
           .from('subscriptions')
@@ -1573,11 +2598,14 @@ class _ManagementScreenState extends State<ManagementScreen> {
           .eq('id', id)
           .eq('user_id', user.id);
       if (mounted) {
-        await _loadSubscriptions();
-        widget.onDataChanged();
+        setState(() {
+          _deletingSubIds.remove(id);
+          _subscriptions.removeWhere((e) => e['id']?.toString() == id);
+        });
       }
-      return false;
+      return true;
     } catch (e) {
+      if (mounted) setState(() => _deletingSubIds.remove(id));
       if (mounted) showInfaqSnack(context, 'Could not delete: $e');
       return false;
     }
@@ -1722,7 +2750,14 @@ class _ManagementScreenState extends State<ManagementScreen> {
     );
   }
 
-  Widget _buildGoalDismissibleCard(Map<String, dynamic> g) {
+  Widget _buildGoalDismissibleCard(
+    Map<String, dynamic> g, {
+    required bool isBusy,
+    bool selectionMode = false,
+    bool selected = false,
+    VoidCallback? onLongPress,
+    VoidCallback? onToggleSelect,
+  }) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final idStr = g['id']?.toString();
@@ -1744,7 +2779,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
       padding: const EdgeInsets.only(bottom: 12),
       child: Dismissible(
         key: ValueKey('goal-$gid'),
-        direction: DismissDirection.endToStart,
+        direction: isBusy || selectionMode
+            ? DismissDirection.none
+            : DismissDirection.endToStart,
         background: Container(
           alignment: Alignment.centerRight,
           padding: const EdgeInsets.only(right: 20),
@@ -1759,108 +2796,194 @@ class _ManagementScreenState extends State<ManagementScreen> {
           ),
         ),
         confirmDismiss: (_) => _confirmDeleteGoal(g),
-        child: Material(
-          color: cs.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(20),
-          elevation: 0,
-          shadowColor: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: () async {
-              final changed = await Navigator.of(context).push<bool>(
-                MaterialPageRoute<bool>(
-                  builder: (_) => EditGoalScreen(
-                    goal: Map<String, dynamic>.from(g),
-                    currencyCode: widget.currencyCode,
-                  ),
-                ),
-              );
-              if (changed == true && mounted) await _loadGoals();
-            },
-            child: Ink(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                color: cs.surfaceContainerLow,
-                boxShadow: [
-                  BoxShadow(
-                    color: cs.shadow.withValues(alpha: isDark ? 0.25 : 0.07),
-                    blurRadius: 14,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-                border: Border.all(
-                  color: cs.outline.withValues(alpha: isDark ? 0.35 : 0.12),
-                ),
+        child: IgnorePointer(
+          ignoring: isBusy,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: selectionMode && selected
+                    ? cs.primary
+                    : Colors.transparent,
+                width: selectionMode && selected ? 2.5 : 0,
               ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 14, 14, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: goalColor.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: goalColor.withValues(alpha: 0.38),
-                              width: 1,
-                            ),
-                          ),
-                          child: Icon(goalIcon, color: goalColor, size: 26),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                title,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 16,
-                                  color: cs.onSurface,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${_fmtMoney(current)} · $deadline',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: cs.onSurface.withValues(alpha: 0.55),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          _fmtMoney(target),
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 16,
-                            color: cs.onSurface,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: LinearProgressIndicator(
-                        value: progress.clamp(0.0, 1.0),
-                        minHeight: 8,
-                        backgroundColor: cs.surfaceContainerHighest,
-                        color: goalColor,
+            ),
+            child: Material(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(20),
+              elevation: 0,
+              shadowColor: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onLongPress: selectionMode || onLongPress == null
+                    ? null
+                    : onLongPress,
+                onTap: () async {
+                  if (selectionMode) {
+                    onToggleSelect?.call();
+                    return;
+                  }
+                  if (idStr == null || idStr.isEmpty) return;
+                  final changed = await Navigator.of(context).push<bool>(
+                    MaterialPageRoute<bool>(
+                      builder: (_) => EditGoalScreen(
+                        goal: Map<String, dynamic>.from(g),
+                        currencyCode: widget.currencyCode,
                       ),
                     ),
-                  ],
+                  );
+                  if (changed == true && mounted) {
+                    setState(() => _updatingGoalIds.add(idStr));
+                    try {
+                      final user = Supabase.instance.client.auth.currentUser;
+                      if (user == null) return;
+                      final fetched = await Supabase.instance.client
+                          .from('goals')
+                          .select()
+                          .eq('id', idStr)
+                          .eq('created_by', user.id)
+                          .maybeSingle();
+                      if (fetched != null && mounted) {
+                        final fresh = Map<String, dynamic>.from(fetched as Map);
+                        setState(() {
+                          final idx = _goals.indexWhere(
+                            (e) => e['id']?.toString() == idStr,
+                          );
+                          if (idx >= 0) _goals[idx] = fresh;
+                        });
+                        unawaited(_syncGoalIconsFromPrefs());
+                      }
+                    } finally {
+                      if (mounted) {
+                        setState(() => _updatingGoalIds.remove(idStr));
+                      }
+                    }
+                  }
+                },
+                child: Ink(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    color: cs.surfaceContainerLow,
+                    boxShadow: [
+                      BoxShadow(
+                        color: cs.shadow.withValues(
+                          alpha: isDark ? 0.25 : 0.07,
+                        ),
+                        blurRadius: 14,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                    border: Border.all(
+                      color: cs.outline.withValues(
+                        alpha: isDark ? 0.35 : 0.12,
+                      ),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 14, 14, 12),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  width: 52,
+                                  height: 52,
+                                  decoration: BoxDecoration(
+                                    color: goalColor.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: goalColor.withValues(alpha: 0.38),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    goalIcon,
+                                    color: goalColor,
+                                    size: 26,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        title,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 16,
+                                          color: cs.onSurface,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${_fmtMoney(current)} · $deadline',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: cs.onSurface.withValues(
+                                            alpha: 0.55,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 4),
+                                  child: Text(
+                                    _fmtMoney(target),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 16,
+                                      color: cs.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: LinearProgressIndicator(
+                                value: progress.clamp(0.0, 1.0),
+                                minHeight: 8,
+                                backgroundColor: cs.surfaceContainerHighest,
+                                color: goalColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (selectionMode)
+                          Positioned(
+                            right: 0,
+                            top: 0,
+                            child: AnimatedScale(
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOutCubic,
+                              scale: selected ? 1.0 : 0.88,
+                              child: Icon(
+                                selected
+                                    ? Icons.check_circle_rounded
+                                    : Icons.circle_outlined,
+                                size: 24,
+                                color: selected ? cs.primary : cs.outline,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1900,7 +3023,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
                             AddGoalScreen(currencyCode: widget.currencyCode),
                       ),
                     );
-                    if (ok == true && mounted) await _loadGoals();
+                    if (ok == true && mounted) {
+                      await _loadGoals();
+                    }
                   },
                   style: FilledButton.styleFrom(backgroundColor: cs.primary),
                   child: const Text('Add goal'),
@@ -1953,7 +3078,24 @@ class _ManagementScreenState extends State<ManagementScreen> {
             ),
           )
         else
-          for (final g in list) _buildGoalDismissibleCard(g),
+          for (final g in list)
+            _animatedListItem(
+              keyId: 'goal-${g['id']}-${g.hashCode}',
+              child: _wrapListCardExit(
+                exiting: _removingGoalIds.contains(g['id']?.toString()),
+                child: _buildGoalDismissibleCard(
+                  g,
+                  isBusy: _deletingGoalIds.contains(g['id']?.toString()) ||
+                      _updatingGoalIds.contains(g['id']?.toString()),
+                  selectionMode: _goalSelectMode,
+                  selected: _selectedGoalIds.contains(g['id']?.toString()),
+                  onLongPress: () =>
+                      _onGoalLongPress(g['id']?.toString() ?? ''),
+                  onToggleSelect: () =>
+                      _toggleGoalSelect(g['id']?.toString() ?? ''),
+                ),
+              ),
+            ),
       ],
     );
   }
@@ -1979,6 +3121,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
       ),
     );
     if (ok != true || !mounted) return false;
+    setState(() => _deletingGoalIds.add(id));
     try {
       await Supabase.instance.client
           .from('goals')
@@ -1986,11 +3129,16 @@ class _ManagementScreenState extends State<ManagementScreen> {
           .eq('id', id)
           .eq('created_by', user.id);
       if (mounted) {
-        await _loadGoals();
-        widget.onDataChanged();
+        setState(() {
+          _deletingGoalIds.remove(id);
+          _goals.removeWhere((e) => e['id']?.toString() == id);
+          _goalIconCodePoints.remove(id);
+          _goalIconColors.remove(id);
+        });
       }
-      return false;
+      return true;
     } catch (e) {
+      if (mounted) setState(() => _deletingGoalIds.remove(id));
       if (mounted) showInfaqSnack(context, 'Could not delete: $e');
       return false;
     }
@@ -2508,12 +3656,22 @@ class _MgmtTxTile extends StatefulWidget {
     required this.format,
     required this.onTap,
     required this.confirmDismissDelete,
+    required this.isBusy,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onLongPress,
+    this.onToggleSelect,
   });
 
   final Map<String, dynamic> data;
   final String Function(double) format;
   final VoidCallback onTap;
   final Future<bool> Function() confirmDismissDelete;
+  final bool isBusy;
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback? onLongPress;
+  final VoidCallback? onToggleSelect;
 
   @override
   State<_MgmtTxTile> createState() => _MgmtTxTileState();
@@ -2662,9 +3820,17 @@ class _MgmtTxTileState extends State<_MgmtTxTile> {
       );
     }
 
-    final tile = Container(
+    final tile = AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: widget.selectionMode && widget.selected
+              ? cs.primary
+              : Colors.transparent,
+          width: widget.selectionMode && widget.selected ? 2.5 : 0,
+        ),
         boxShadow: [
           BoxShadow(
             color: cs.shadow.withValues(
@@ -2683,8 +3849,18 @@ class _MgmtTxTileState extends State<_MgmtTxTile> {
         child: InkWell(
           onTap: () {
             _MgmtLeafTooltipOverlay.hide();
-            widget.onTap();
+            if (widget.selectionMode) {
+              widget.onToggleSelect?.call();
+            } else {
+              widget.onTap();
+            }
           },
+          onLongPress: widget.selectionMode || widget.onLongPress == null
+              ? null
+              : () {
+                  _MgmtLeafTooltipOverlay.hide();
+                  widget.onLongPress!();
+                },
           borderRadius: BorderRadius.circular(20),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -2746,7 +3922,7 @@ class _MgmtTxTileState extends State<_MgmtTxTile> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      if (showLeaf) ...[
+                      if (showLeaf && !widget.selectionMode) ...[
                         GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTapDown: (details) =>
@@ -2794,11 +3970,41 @@ class _MgmtTxTileState extends State<_MgmtTxTile> {
     );
 
     final id = widget.data['id']?.toString() ?? '';
+    final stacked = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        tile,
+        if (widget.selectionMode)
+          Positioned(
+            top: 6,
+            right: 8,
+            child: AnimatedScale(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              scale: widget.selected ? 1.0 : 0.88,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: 1,
+                child: Icon(
+                  widget.selected
+                      ? Icons.check_circle_rounded
+                      : Icons.circle_outlined,
+                  size: 24,
+                  color: widget.selected ? cs.primary : cs.outline,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Dismissible(
         key: Key('tx-$id-${title.hashCode}'),
-        direction: DismissDirection.endToStart,
+        direction: widget.isBusy || widget.selectionMode
+            ? DismissDirection.none
+            : DismissDirection.endToStart,
         background: Container(
           alignment: Alignment.centerRight,
           padding: const EdgeInsets.only(right: 20),
@@ -2816,7 +4022,7 @@ class _MgmtTxTileState extends State<_MgmtTxTile> {
           _MgmtLeafTooltipOverlay.hide();
           return widget.confirmDismissDelete();
         },
-        child: tile,
+        child: IgnorePointer(ignoring: widget.isBusy, child: stacked),
       ),
     );
   }

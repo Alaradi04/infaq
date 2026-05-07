@@ -5,7 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/category/category_icons.dart';
-import 'package:infaq/services/ai_service.dart';
+import 'package:infaq/services/ai_service.dart'
+    show AiCategorizeCallKind, AiService;
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
@@ -73,8 +74,18 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   bool _supportsCategoryIconKey = true;
   Timer? _aiDebounce;
   bool _aiCategorizing = false;
+  bool _recategorizing = false;
+  DateTime? _lastRecategorizeTap;
   String? _aiConfidence;
   String? _aiLeafColor;
+  bool _categoryLockedByUser = false;
+  bool _didRemoteUpdate = false;
+
+  /// Prevents [_loadCategories] from re-running [_applyExistingTransaction] and wiping user changes.
+  bool _hasSeededEditFormFromExisting = false;
+
+  /// Copy of the row being edited; updated after Recategorize so logs/UI stay consistent.
+  Map<String, dynamic>? _transactionEditSnapshot;
 
   static const _primary = kInfaqPrimaryGreen;
 
@@ -94,6 +105,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   void _applyExistingTransaction() {
     final ex = widget.existingTransaction;
     if (ex == null) return;
+
+    _transactionEditSnapshot = Map<String, dynamic>.from(ex);
 
     var incomeFromEmbed = false;
     final cat = ex['categories'];
@@ -119,6 +132,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final cid = ex['category_id']?.toString();
     if (cid != null && cid.isNotEmpty) {
       _categoryId = cid;
+      _categoryLockedByUser = true;
       if (!incomeFromEmbed) {
         try {
           final row = _categories.firstWhere((c) => c.id == cid);
@@ -200,8 +214,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       setState(() {
         _categories = rows;
         _loadingCategories = false;
-        if (widget.existingTransaction != null) {
+        // Only seed once. Re-applying on every category reload overwrites Recategorize / manual picks.
+        if (widget.existingTransaction != null &&
+            !_hasSeededEditFormFromExisting) {
           _applyExistingTransaction();
+          _hasSeededEditFormFromExisting = true;
         }
         _clearCategoryIfInvalid();
       });
@@ -239,10 +256,146 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     });
   }
 
+  String _normalizeCategoryKey(String s) =>
+      s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+  _CategoryRow? _findCategoryByNormalizedName(String name) {
+    final target = _normalizeCategoryKey(name);
+    if (target.isEmpty) return null;
+    for (final c in _filteredCategories) {
+      if (_normalizeCategoryKey(c.name) == target) return c;
+    }
+    return null;
+  }
+
+  /// Maps AI (or partial) category text to a row — exact match, substring, then token overlap.
+  _CategoryRow? _matchAiSuggestionToCategory(String suggested) {
+    final raw = suggested.trim();
+    if (raw.isEmpty) return null;
+    final byExact = _findCategoryByNormalizedName(raw);
+    if (byExact != null) return byExact;
+
+    final s = raw.toLowerCase();
+    final list = _filteredCategories;
+    _CategoryRow? best;
+    var bestScore = 0;
+    for (final c in list) {
+      final cn = c.name.toLowerCase();
+      if (cn == s) return c;
+      if (cn.contains(s) || s.contains(cn)) {
+        final sc = cn.contains(s) ? 1000 + cn.length : 500 + cn.length;
+        if (sc > bestScore) {
+          bestScore = sc;
+          best = c;
+        }
+      }
+    }
+    if (best != null) return best;
+
+    final sTokens = s
+        .split(RegExp(r'[\s/&,\-]+'))
+        .where((t) => t.length > 1)
+        .toSet();
+    best = null;
+    bestScore = 0;
+    for (final c in list) {
+      final cn = c.name.toLowerCase();
+      final cTokens = cn
+          .split(RegExp(r'[\s/&,\-]+'))
+          .where((t) => t.length > 1)
+          .toSet();
+      final overlap = sTokens.intersection(cTokens).length;
+      if (overlap > bestScore) {
+        bestScore = overlap;
+        best = c;
+      }
+    }
+    if (best != null && bestScore > 0) return best;
+    return null;
+  }
+
+  _CategoryRow? _localCategoryFromDescription(String desc) {
+    final d = desc.toLowerCase().trim();
+    if (d.isEmpty) return null;
+    final list = _filteredCategories;
+    if (_isIncome) {
+      if (d.contains('salary')) {
+        for (final c in list) {
+          if (c.name.toLowerCase().contains('salary')) return c;
+        }
+      }
+      if (d.contains('fawri') ||
+          d.contains('benefit') ||
+          d.contains('transfer')) {
+        for (final c in list) {
+          final n = c.name.toLowerCase();
+          if (n == 'other income' ||
+              (n.contains('other') && n.contains('income'))) {
+            return c;
+          }
+        }
+      }
+      return null;
+    }
+    if (d.contains('talabat') ||
+        d.contains('jahez') ||
+        d.contains('restaurant') ||
+        d.contains('cafe') ||
+        d.contains('food')) {
+      for (final c in list) {
+        if (c.name.toLowerCase().contains('food')) return c;
+      }
+    }
+    if (d.contains('uber') || d.contains('careem') || d.contains('taxi')) {
+      for (final c in list) {
+        if (c.name.toLowerCase().contains('transport')) return c;
+      }
+    }
+    if (d.contains('netflix') || d.contains('spotify')) {
+      for (final c in list) {
+        if (c.name.toLowerCase().contains('entertainment')) return c;
+      }
+    }
+    if (d.contains('fawri') ||
+        d.contains('benefit') ||
+        d.contains('transfer')) {
+      for (final c in list) {
+        final n = c.name.toLowerCase();
+        if (n == 'other expense' ||
+            (n.contains('other') && n.contains('expense'))) {
+          return c;
+        }
+      }
+    }
+    return null;
+  }
+
+  _CategoryRow? _fallbackOtherCategory() {
+    for (final c in _filteredCategories) {
+      final n = c.name.toLowerCase();
+      if (_isIncome) {
+        if (n == 'other income' ||
+            (n.contains('other') && n.contains('income'))) {
+          return c;
+        }
+      } else {
+        if (n == 'other expense' ||
+            (n.contains('other') && n.contains('expense'))) {
+          return c;
+        }
+      }
+    }
+    for (final c in _filteredCategories) {
+      if (c.name.toLowerCase().contains('other')) return c;
+    }
+    return null;
+  }
+
   Future<void> _suggestCategoryWithAi(String value) async {
     final desc = value.trim();
     if (desc.length < 3) return;
     if (_filteredCategories.isEmpty) return;
+    if (_categoryLockedByUser) return;
 
     setState(() => _aiCategorizing = true);
     try {
@@ -254,6 +407,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         transactionType: _isIncome ? 'income' : 'expense',
         description: null,
         availableCategories: _filteredCategories.map((c) => c.name).toList(),
+        callKind: AiCategorizeCallKind.debouncedSuggestion,
+        reason: 'add_tx_description_suggest',
       );
 
       final suggested = (result['suggested_category'] ?? '').toString().trim();
@@ -293,6 +448,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         return 'SAR ';
       case 'BHD':
         return 'BHD ';
+      case 'JPY':
+        return '¥';
       default:
         final c = widget.currencyCode?.trim();
         return c == null || c.isEmpty ? '' : '$c ';
@@ -379,7 +536,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         );
       },
     );
-    if (chosen != null) setState(() => _categoryId = chosen);
+    if (chosen != null) {
+      setState(() {
+        _categoryId = chosen;
+        _categoryLockedByUser = true;
+      });
+    }
   }
 
   Future<void> _save() async {
@@ -414,21 +576,25 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       final dateStr =
           '${_date.year.toString().padLeft(4, '0')}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}';
       Map<String, dynamic>? leafData;
-      if (!_isIncome) {
-        final categoryName = _selectedCategory?.name.trim() ?? '';
-        if (categoryName.isNotEmpty) {
-          try {
-            leafData = await AiService().classifyLeafImpact(
-              transactionName: desc,
-              category: categoryName,
-              transactionType: 'expense',
-            );
-            debugPrint(
-              'leaf classified from edge function: color=${leafData['leaf_color']}',
-            );
-          } catch (e, st) {
-            debugPrint('leaf classify failed during save: $e\n$st');
-          }
+      final categoryName = _selectedCategory?.name.trim() ?? '';
+      final shouldClassifyLeaf = AiService.shouldClassifyLeafImpact(
+        transactionName: desc,
+        category: categoryName,
+        transactionType: _isIncome ? 'income' : 'expense',
+      );
+      if (shouldClassifyLeaf && categoryName.isNotEmpty) {
+        try {
+          leafData = await AiService().classifyLeafImpact(
+            transactionName: desc,
+            category: categoryName,
+            transactionType: 'expense',
+            reason: 'add_tx_save',
+          );
+          debugPrint(
+            'leaf classified from edge function: color=${leafData['leaf_color']}',
+          );
+        } catch (e, st) {
+          debugPrint('leaf classify failed during save: $e\n$st');
         }
       }
 
@@ -437,9 +603,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         'category_id': _categoryId,
         'description': desc,
         'date': dateStr,
-        'leaf_color': _isIncome ? null : leafData?['leaf_color'],
-        'leaf_title': _isIncome ? null : leafData?['title'],
-        'leaf_message': _isIncome ? null : leafData?['message'],
+        'leaf_color': shouldClassifyLeaf && leafData != null
+            ? leafData['leaf_color']
+            : null,
+        'leaf_title': shouldClassifyLeaf && leafData != null
+            ? leafData['title']
+            : null,
+        'leaf_message': shouldClassifyLeaf && leafData != null
+            ? leafData['message']
+            : null,
       };
 
       final client = Supabase.instance.client;
@@ -457,6 +629,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       }
 
       if (!mounted) return;
+      _didRemoteUpdate = true;
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
@@ -465,7 +638,232 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     }
   }
 
-  void _cancel() => Navigator.pop(context);
+  Future<void> _recategorizeCurrentTransaction() async {
+    if (!_isEditing) return;
+    if (_recategorizing || _saving) return;
+    final nowTap = DateTime.now();
+    if (_lastRecategorizeTap != null &&
+        nowTap.difference(_lastRecategorizeTap!) < const Duration(seconds: 2)) {
+      return;
+    }
+    _lastRecategorizeTap = nowTap;
+    if (_filteredCategories.isEmpty) {
+      showInfaqSnack(context, 'Categories are still loading.');
+      return;
+    }
+    final id = _existingId!;
+    final desc = _descCtrl.text.trim();
+    if (desc.length < 3) {
+      showInfaqSnack(
+        context,
+        'Add a short description before recategorizing.',
+      );
+      return;
+    }
+    final amountValue =
+        double.tryParse(_amountCtrl.text.trim().replaceAll(',', '')) ?? 0;
+    final snap = _transactionEditSnapshot;
+    final oldCategoryId = _categoryId ?? snap?['category_id']?.toString();
+    final oldCategoryName = _selectedCategory?.name ??
+        (snap?['categories'] is Map
+            ? (snap!['categories']['name'] ?? '').toString()
+            : '');
+    final oldLeafColor = snap?['leaf_color'];
+    final oldLeafTitle = snap?['leaf_title'];
+    final oldLeafMessage = snap?['leaf_message'];
+
+    debugPrint('[Recategorize] clicked');
+    debugPrint('[Recategorize] transaction id=$id');
+    debugPrint('[Recategorize] transaction description="$desc"');
+    debugPrint(
+      '[Recategorize] old category id=$oldCategoryId name="$oldCategoryName"',
+    );
+    debugPrint(
+      '[Recategorize] old leaf={color:$oldLeafColor,title:$oldLeafTitle,message:$oldLeafMessage}',
+    );
+
+    setState(() => _recategorizing = true);
+    try {
+      String categorySource = 'local';
+      _CategoryRow? picked = _localCategoryFromDescription(desc);
+      var aiSuggested = '';
+
+      if (picked == null) {
+        categorySource = 'ai';
+        final result = await AiService().categorizeTransaction(
+          transactionName: desc,
+          amount: amountValue,
+          transactionType: _isIncome ? 'income' : 'expense',
+          description: null,
+          availableCategories: _filteredCategories.map((c) => c.name).toList(),
+          callKind: AiCategorizeCallKind.manualRecategorize,
+          reason: 'add_tx_recategorize',
+        );
+        aiSuggested = (result['suggested_category'] ?? '').toString().trim();
+        debugPrint('[Recategorize] category result (ai)="$aiSuggested"');
+        picked = _matchAiSuggestionToCategory(aiSuggested);
+        if (picked == null) {
+          picked = _fallbackOtherCategory();
+          if (picked != null) {
+            categorySource = 'ai+fallback';
+            debugPrint(
+              '[Recategorize] could not map "$aiSuggested" to a category; using "${picked.name}"',
+            );
+          }
+        }
+      } else {
+        debugPrint('[Recategorize] category result (local)="${picked.name}"');
+      }
+
+      if (picked == null) {
+        throw Exception(
+          'Could not resolve a category. AI suggested: "$aiSuggested".',
+        );
+      }
+      var resolvedCategory = picked;
+      final expectedType = _isIncome ? 'income' : 'expense';
+      if (resolvedCategory.type != expectedType) {
+        debugPrint(
+          '[Recategorize] type mismatch resolved=${resolvedCategory.type} '
+          'expected=$expectedType; using fallback',
+        );
+        final fb = _fallbackOtherCategory();
+        if (fb == null) {
+          throw Exception('No valid $expectedType category available.');
+        }
+        resolvedCategory = fb;
+        categorySource = '$categorySource+type_fix';
+      }
+
+      final newCategoryId = resolvedCategory.id.trim();
+      debugPrint(
+        '[Recategorize] category source=$categorySource '
+        'resolved name="${resolvedCategory.name}" category_id=$newCategoryId',
+      );
+
+      Map<String, dynamic>? leafData;
+      final shouldClassifyLeaf = AiService.shouldClassifyLeafImpact(
+        transactionName: desc,
+        category: resolvedCategory.name,
+        transactionType: _isIncome ? 'income' : 'expense',
+      );
+      if (shouldClassifyLeaf && resolvedCategory.name.trim().isNotEmpty) {
+        leafData = await AiService().classifyLeafImpact(
+          transactionName: desc,
+          category: resolvedCategory.name,
+          transactionType: 'expense',
+          reason: 'add_tx_recategorize',
+        );
+      }
+      debugPrint('[Recategorize] classify leaf result=$leafData');
+
+      final payload = <String, dynamic>{
+        'category_id': newCategoryId,
+        'leaf_color': shouldClassifyLeaf && leafData != null
+            ? leafData['leaf_color']
+            : null,
+        'leaf_title': shouldClassifyLeaf && leafData != null
+            ? leafData['title']
+            : null,
+        'leaf_message': shouldClassifyLeaf && leafData != null
+            ? leafData['message']
+            : null,
+      };
+      debugPrint(
+        '[Recategorize] old category_id=$oldCategoryId new category_id=$newCategoryId',
+      );
+      debugPrint('[Recategorize] supabase update payload=$payload');
+
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) throw Exception('Not signed in.');
+
+      final updateRes = await Supabase.instance.client
+          .from('transactions')
+          .update(payload)
+          .eq('id', id)
+          .eq('user_id', user.id)
+          .select('id, category_id, leaf_color, leaf_title, leaf_message');
+
+      debugPrint('[Recategorize] supabase update response=$updateRes');
+
+      final updateRows = updateRes as List<dynamic>;
+      if (updateRows.isEmpty) {
+        throw Exception(
+          'Recategorize failed: update affected 0 rows (check transaction id, '
+          'RLS policies, or user_id). id=$id',
+        );
+      }
+
+      dynamic verified;
+      try {
+        verified = await Supabase.instance.client
+            .from('transactions')
+            .select(
+              'id, category_id, leaf_color, leaf_title, leaf_message, '
+              'categories(id, name, type, icon_key, color)',
+            )
+            .eq('id', id)
+            .eq('user_id', user.id)
+            .maybeSingle();
+      } catch (_) {
+        verified = await Supabase.instance.client
+            .from('transactions')
+            .select(
+              'id, category_id, leaf_color, leaf_title, leaf_message, '
+              'categories(id, name, type, icon_key)',
+            )
+            .eq('id', id)
+            .eq('user_id', user.id)
+            .maybeSingle();
+      }
+
+      if (verified == null) {
+        throw Exception(
+          'Recategorize verification failed: could not re-read transaction $id',
+        );
+      }
+
+      final vMap = Map<String, dynamic>.from(verified as Map);
+      final savedCatId = vMap['category_id']?.toString().trim();
+      debugPrint(
+        '[Recategorize] verification read category_id=$savedCatId '
+        'leaf_color=${vMap['leaf_color']} leaf_title=${vMap['leaf_title']} '
+        'leaf_message=${vMap['leaf_message']}',
+      );
+
+      if (savedCatId != newCategoryId) {
+        throw Exception(
+          'Recategorize verification failed: expected category_id=$newCategoryId '
+          'but database has $savedCatId',
+        );
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _categoryId = savedCatId;
+        _categoryLockedByUser = true;
+        _transactionEditSnapshot = Map<String, dynamic>.from(vMap);
+        final catMap = vMap['categories'];
+        if (catMap is Map) {
+          final t = catMap['type']?.toString().toLowerCase();
+          if (t == 'income' || t == 'expense') {
+            _isIncome = t == 'income';
+          }
+        }
+      });
+      _didRemoteUpdate = true;
+      debugPrint('[Recategorize] success; UI state category_id=$_categoryId');
+      showInfaqSnack(context, 'Category updated');
+    } catch (e, st) {
+      debugPrint('[Recategorize] error: $e\n$st');
+      if (!mounted) return;
+      showInfaqSnack(context, 'Recategorize failed: $e');
+    } finally {
+      if (mounted) setState(() => _recategorizing = false);
+    }
+  }
+
+  void _cancel() => Navigator.pop(context, _didRemoteUpdate);
 
   @override
   Widget build(BuildContext context) {
@@ -479,18 +877,25 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         ? 'e.g. salary, bonus, freelance'
         : 'e.g. meal, new phone, vegetables';
 
-    return Scaffold(
-      backgroundColor: cs.surface,
-      extendBody: true,
-      bottomNavigationBar: InfaqBottomNavBar(
-        tabIndex: -1,
-        onHome: _cancel,
-        onCurrency: () => Navigator.pop(context, 1),
-        onAdd: () {},
-        onAnalytics: () => Navigator.pop(context, 2),
-        onProfile: () => Navigator.pop(context, 3),
-      ),
-      body: Column(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (didPop) return;
+        if (!context.mounted) return;
+        Navigator.of(context).pop(_didRemoteUpdate);
+      },
+      child: Scaffold(
+        backgroundColor: cs.surface,
+        extendBody: true,
+        bottomNavigationBar: InfaqBottomNavBar(
+          tabIndex: -1,
+          onHome: _cancel,
+          onCurrency: () => Navigator.pop(context, 1),
+          onAdd: () {},
+          onAnalytics: () => Navigator.pop(context, 2),
+          onProfile: () => Navigator.pop(context, 3),
+        ),
+        body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
@@ -706,6 +1111,21 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       ),
                     ),
                   ],
+                  if (_isEditing) ...[
+                    const SizedBox(height: 6),
+                    TextButton(
+                      onPressed: _recategorizing || _saving
+                          ? null
+                          : _recategorizeCurrentTransaction,
+                      child: _recategorizing
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Recategorize'),
+                    ),
+                  ],
                   if (_categoryError != null) ...[
                     const SizedBox(height: 8),
                     Text(
@@ -765,6 +1185,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 }

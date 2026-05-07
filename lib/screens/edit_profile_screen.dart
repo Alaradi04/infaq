@@ -4,9 +4,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/profile/avatar_storage.dart';
+import 'package:infaq/ui/infaq_currency_meta.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
-
-const List<String> _kCurrencyCodes = ['BHD', 'USD', 'EUR', 'SAR', 'GBP'];
 
 /// Full-screen **Edit Profile**: avatar, name, currency, save, password, logout, delete.
 class EditProfileScreen extends StatefulWidget {
@@ -30,6 +29,7 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _emailCtrl;
+  late final List<String> _currencyPickerCodes;
   late String _currency;
   final ImagePicker _picker = ImagePicker();
 
@@ -46,9 +46,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _emailCtrl = TextEditingController(
       text: Supabase.instance.client.auth.currentUser?.email ?? '',
     );
-    _currency = (widget.initialCurrency != null && widget.initialCurrency!.trim().isNotEmpty)
+    final initialCur = widget.initialCurrency != null && widget.initialCurrency!.trim().isNotEmpty
         ? widget.initialCurrency!.trim().toUpperCase()
         : 'BHD';
+    _currencyPickerCodes = InfaqCurrencyMeta.orderedCodesForUser(widget.initialCurrency);
+    _currency = _currencyPickerCodes.contains(initialCur)
+        ? initialCur
+        : _currencyPickerCodes.first;
     _photoPathInStorage = widget.initialProfilePhotoPath?.trim().isNotEmpty == true
         ? widget.initialProfilePhotoPath!.trim()
         : null;
@@ -433,14 +437,51 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 _pillField(
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
-                      value: _kCurrencyCodes.contains(_currency) ? _currency : _kCurrencyCodes.first,
+                      value: _currencyPickerCodes.contains(_currency)
+                          ? _currency
+                          : _currencyPickerCodes.first,
                       isExpanded: true,
                       dropdownColor: cs.surfaceContainerHigh,
                       icon: Icon(Icons.keyboard_arrow_down_rounded, color: cs.primary),
                       style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600),
                       items: [
-                        for (final c in _kCurrencyCodes)
-                          DropdownMenuItem(value: c, child: Text(c)),
+                        for (final c in _currencyPickerCodes)
+                          DropdownMenuItem<String>(
+                            value: c,
+                            child: Row(
+                              children: [
+                                InfaqCurrencyMeta.flagOrFallback(context, c, size: 22),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    InfaqCurrencyMeta.menuLabel(c),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                      selectedItemBuilder: (ctx) => [
+                        for (final c in _currencyPickerCodes)
+                          Row(
+                            children: [
+                              InfaqCurrencyMeta.flagOrFallback(ctx, c, size: 20),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  InfaqCurrencyMeta.menuLabel(c),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: cs.onSurface,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                       ],
                       onChanged: (v) {
                         if (v != null) setState(() => _currency = v);

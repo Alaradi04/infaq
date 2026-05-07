@@ -133,6 +133,8 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
         return '€';
       case 'GBP':
         return '£';
+      case 'JPY':
+        return '¥';
       default:
         return null;
     }
@@ -577,6 +579,8 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
         return 'SAR $body';
       case 'BHD':
         return 'BHD $body';
+      case 'JPY':
+        return '¥$body';
       default:
         final c = widget.currencyCode?.trim();
         final prefix = c == null || c.isEmpty ? '' : '$c ';

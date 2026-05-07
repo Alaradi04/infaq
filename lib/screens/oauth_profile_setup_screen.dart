@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:infaq/ui/infaq_currency_meta.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
 /// After Google (or other OAuth) sign-in, collect profile fields that match the `users` table
@@ -169,12 +170,16 @@ class _OAuthProfileSetupScreenState extends State<OAuthProfileSetupScreen> {
                         initialSelection: _currency,
                         expandedInsets: EdgeInsets.zero,
                         onSelected: (v) => setState(() => _currency = v),
-                        dropdownMenuEntries: const [
-                          DropdownMenuEntry(value: 'BHD', label: 'BHD'),
-                          DropdownMenuEntry(value: 'USD', label: 'USD'),
-                          DropdownMenuEntry(value: 'EUR', label: 'EUR'),
-                          DropdownMenuEntry(value: 'GBP', label: 'GBP'),
-                          DropdownMenuEntry(value: 'SAR', label: 'SAR'),
+                        dropdownMenuEntries: [
+                          for (final c in InfaqCurrencyMeta.orderedCodes)
+                            DropdownMenuEntry<String>(
+                              value: c,
+                              label: InfaqCurrencyMeta.menuLabel(c),
+                              leadingIcon: Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: InfaqCurrencyMeta.flagOrFallback(context, c, size: 20),
+                              ),
+                            ),
                         ],
                         inputDecorationTheme: InputDecorationTheme(
                           filled: true,

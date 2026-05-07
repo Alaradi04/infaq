@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import 'package:infaq/screens/data_privacy_screen.dart';
 import 'package:infaq/screens/login_screen.dart';
+import 'package:infaq/screens/profile_info_screens.dart';
 import 'package:infaq/screens/register_flow_screen.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
@@ -204,7 +205,10 @@ class _LegalFooterState extends State<_LegalFooter> {
     super.initState();
     _termsTap = TapGestureRecognizer()
       ..onTap = () {
-        showInfaqSnack(context, 'Terms of Service: contact support or visit our site for the full document.');
+        showInfaqSnack(
+          context,
+          'Terms of Service: contact $kInfaqContactEmail or visit $kInfaqWebsiteLabel for the full document.',
+        );
       };
     _privacyTap = TapGestureRecognizer()
       ..onTap = () {

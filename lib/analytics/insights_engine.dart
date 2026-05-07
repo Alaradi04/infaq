@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:infaq/analytics/insights_models.dart';
 import 'package:infaq/category/category_icons.dart';
 import 'package:infaq/subscription/subscription_analytics.dart';
+import 'package:infaq/subscription_renewal.dart';
 
 DateTime? parseTxLocalDate(Map<String, dynamic> t) {
   final raw = t['date'] ?? t['created_at'];
@@ -372,11 +373,9 @@ SubscriptionAnalytics buildSubscriptionBlock(
       }
     }
 
-    final raw = s['next_payment'] ?? s['next_payment_date'];
-    final d = raw != null ? DateTime.tryParse(raw.toString()) : null;
-    if (d != null && activeFlag) {
-      final local = d.toLocal();
-      final day = DateTime(local.year, local.month, local.day);
+    final display = SubscriptionRenewal.displayNextRenewal(s);
+    if (display != null && activeFlag) {
+      final day = DateTime(display.year, display.month, display.day);
       final todayD = DateTime(
         DateTime.now().year,
         DateTime.now().month,

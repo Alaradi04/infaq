@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:infaq/screens/notification_debug_screen.dart';
+import 'package:infaq/services/bank_notification_sync_service.dart';
 import 'package:infaq/services/notification_preferences_service.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
@@ -16,18 +18,35 @@ class NotificationSettingsScreen extends StatefulWidget {
   State<NotificationSettingsScreen> createState() => _NotificationSettingsScreenState();
 }
 
-class _NotificationSettingsScreenState extends State<NotificationSettingsScreen> {
+class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
+    with WidgetsBindingObserver {
   bool _loading = true;
   String? _error;
   bool _allowNotifications = true;
   bool _smsAutoRecording = false;
   bool _savingNotifications = false;
   bool _savingSms = false;
+  bool _listenerEnabled = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _bootstrap();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshListenerStatus();
+      BankNotificationSyncService.instance.syncPendingBankTransactions(trigger: 'settings_resumed');
+    }
   }
 
   Future<void> _bootstrap() async {
@@ -37,10 +56,12 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     });
     try {
       final p = await NotificationPreferencesService.instance.loadOrCreateForSettings();
+      final enabled = await BankNotificationSyncService.instance.isNotificationListenerEnabled();
       if (!mounted) return;
       setState(() {
         _allowNotifications = p.notificationsEnabled;
         _smsAutoRecording = p.smsAutoRecordingEnabled;
+        _listenerEnabled = enabled;
         _loading = false;
       });
     } catch (e) {
@@ -76,6 +97,11 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     });
     try {
       await NotificationPreferencesService.instance.updateSmsAutoRecordingEnabled(v);
+      if (v) {
+        await BankNotificationSyncService.instance.syncPendingBankTransactions(
+          trigger: 'auto_recording_enabled',
+        );
+      }
     } catch (e) {
       if (mounted) {
         showInfaqSnack(context, 'Could not save: $e');
@@ -84,6 +110,12 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     } finally {
       if (mounted) setState(() => _savingSms = false);
     }
+  }
+
+  Future<void> _refreshListenerStatus() async {
+    final enabled = await BankNotificationSyncService.instance.isNotificationListenerEnabled();
+    if (!mounted) return;
+    setState(() => _listenerEnabled = enabled);
   }
 
   @override
@@ -152,7 +184,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                         SwitchListTile.adaptive(
                           contentPadding: EdgeInsets.zero,
                           title: Text(
-                            'SMS auto recording',
+                            'Automatic transaction recording',
                             style: TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 15,
@@ -162,7 +194,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                           subtitle: Padding(
                             padding: const EdgeInsets.only(top: 6, right: 8),
                             child: Text(
-                              'Allow INFAQ to detect bank SMS messages and record transactions automatically.',
+                              'Allow INFAQ to detect bank transaction notifications and record expenses automatically.',
                               style: TextStyle(fontSize: 13, height: 1.35, color: muted),
                             ),
                           ),
@@ -172,6 +204,22 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                           activeThumbColor: Colors.white,
                           inactiveTrackColor: Colors.grey.shade300,
                           inactiveThumbColor: Colors.grey.shade400,
+                        ),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            _listenerEnabled
+                                ? 'Notification access enabled'
+                                : 'Notification access not enabled',
+                            style: TextStyle(
+                              color: _listenerEnabled ? cs.primary : cs.onSurface,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          trailing: Icon(
+                            _listenerEnabled ? Icons.check_circle : Icons.error_outline,
+                            color: _listenerEnabled ? cs.primary : Colors.orange,
+                          ),
                         ),
                         const SizedBox(height: 14),
                         Container(
@@ -188,12 +236,46 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
-                                  'To use SMS auto recording, allow SMS permission and background access in your phone settings.',
+                                  'To enable automatic recording:\n'
+                                  '1. Turn on Automatic transaction recording.\n'
+                                  '2. Tap Open Android settings.\n'
+                                  '3. Choose INFAQ.\n'
+                                  '4. Enable notification access.\n'
+                                  '5. Keep bank app notifications enabled.',
                                   style: TextStyle(fontSize: 12.5, height: 1.35, color: muted),
                                 ),
                               ),
                             ],
                           ),
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton(
+                          onPressed: () async {
+                            await BankNotificationSyncService.instance.openNotificationListenerSettings();
+                          },
+                          child: const Text('Open Android settings'),
+                        ),
+                        const SizedBox(height: 8),
+                        OutlinedButton(
+                          onPressed: () async {
+                            await BankNotificationSyncService.instance.syncPendingBankTransactions(
+                              trigger: 'manual_settings',
+                            );
+                            await _refreshListenerStatus();
+                            if (mounted) showInfaqSnack(context, 'Sync requested');
+                          },
+                          child: const Text('Sync Pending Transactions'),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.of(context).push<void>(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const NotificationDebugScreen(),
+                              ),
+                            );
+                          },
+                          child: const Text('Open Notification Debug'),
                         ),
                       ],
                     ),

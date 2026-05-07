@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:infaq/screens/profile_info_screens.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
 /// Contact targets — adjust to your real handles and numbers.
@@ -10,8 +11,6 @@ const String _kInstagramHandle = 'INFAQ.BH';
 const String _kInstagramUrl = 'https://www.instagram.com/infaq.bh/';
 const String _kWebsiteDisplay = 'www.infaqbh.com';
 const String _kWebsiteUrl = 'https://www.infaqbh.com';
-const String _kEmailDisplay = 'INFAQ.BH@Gmail.com';
-const String _kEmailLaunch = 'mailto:Infaq.bh@gmail.com?subject=INFAQ%20support';
 
 class HelpSupportScreen extends StatelessWidget {
   const HelpSupportScreen({super.key});
@@ -123,8 +122,8 @@ class HelpSupportScreen extends StatelessWidget {
                           Divider(height: 1, indent: 16, endIndent: 16, color: cs.outline.withValues(alpha: 0.2)),
                           _ContactInkRow(
                             label: 'Email',
-                            detail: _kEmailDisplay,
-                            onTap: () => _launch(_kEmailLaunch),
+                            detail: kInfaqContactEmail,
+                            onTap: () => _launch(kInfaqSupportMailto),
                             trailing: Icon(
                               Icons.mail_outline_rounded,
                               color: cs.primary,
@@ -150,7 +149,7 @@ class HelpSupportScreen extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'v6.7.2',
+                          'v$kInfaqAppVersionLabel',
                           style: TextStyle(fontSize: 14, color: cs.onSurface.withValues(alpha: 0.45)),
                         ),
                         const SizedBox(height: 20),
