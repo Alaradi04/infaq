@@ -24,6 +24,7 @@ class CategoryIconChoice {
 const List<CategoryIconChoice> kCategoryIconChoices = [
   CategoryIconChoice(key: 'category', icon: Icons.category_outlined, label: 'General'),
   CategoryIconChoice(key: 'shopping_cart', icon: Icons.shopping_cart_outlined, label: 'Shopping'),
+  CategoryIconChoice(key: 'shopping_bag', icon: Icons.shopping_bag_outlined, label: 'Shopping bag'),
   CategoryIconChoice(key: 'restaurant', icon: Icons.restaurant_outlined, label: 'Food'),
   CategoryIconChoice(key: 'local_cafe', icon: Icons.local_cafe_outlined, label: 'Cafe'),
   CategoryIconChoice(key: 'directions_car', icon: Icons.directions_car_outlined, label: 'Transport'),
@@ -41,7 +42,13 @@ const List<CategoryIconChoice> kCategoryIconChoices = [
   CategoryIconChoice(key: 'devices', icon: Icons.devices_outlined, label: 'Tech'),
   CategoryIconChoice(key: 'receipt_long', icon: Icons.receipt_long_outlined, label: 'Bills'),
   CategoryIconChoice(key: 'trending_up', icon: Icons.trending_up_rounded, label: 'Income'),
+  CategoryIconChoice(key: 'attach_money', icon: Icons.attach_money_outlined, label: 'Money'),
   CategoryIconChoice(key: 'payments', icon: Icons.payments_outlined, label: 'Payments'),
+  CategoryIconChoice(
+    key: 'account_balance_wallet',
+    icon: Icons.account_balance_wallet_outlined,
+    label: 'Wallet',
+  ),
   CategoryIconChoice(key: 'more', icon: Icons.more_horiz_rounded, label: 'Other'),
   CategoryIconChoice(key: 'subscriptions', icon: Icons.subscriptions_outlined, label: 'Subscriptions'),
   CategoryIconChoice(key: 'local_grocery_store', icon: Icons.local_grocery_store_outlined, label: 'Groceries'),
@@ -65,7 +72,14 @@ final Map<String, IconData> _categoryIconByKey = {
   for (final e in kCategoryIconChoices) e.key: e.icon,
 };
 
-bool isKnownCategoryIconKey(String key) => _categoryIconByKey.containsKey(key);
+/// Names used in Supabase `icon_key` (or Material catalogs) that map to a [kCategoryIconChoices] entry.
+const Map<String, String> _categoryIconKeySynonyms = {
+  // Default rows often use Material’s `more_horiz`; picker stores `more`.
+  'more_horiz': 'more',
+};
+
+bool isKnownCategoryIconKey(String key) =>
+    _categoryIconByKey.containsKey(key) || _categoryIconKeySynonyms.containsKey(key);
 
 String validatedCategoryIconKey(String? raw) {
   if (raw != null && raw.isNotEmpty && isKnownCategoryIconKey(raw)) return raw;
@@ -74,7 +88,11 @@ String validatedCategoryIconKey(String? raw) {
 
 IconData? _iconFromStoredKey(String? key) {
   if (key == null || key.isEmpty) return null;
-  return _categoryIconByKey[key];
+  final direct = _categoryIconByKey[key];
+  if (direct != null) return direct;
+  final synonymTarget = _categoryIconKeySynonyms[key];
+  if (synonymTarget != null) return _categoryIconByKey[synonymTarget];
+  return null;
 }
 
 /// Icon for list UI: uses DB [iconKey] when set, otherwise guesses from [name] / [type],
@@ -121,11 +139,15 @@ IconData _categoryIconFallback(String name, String type, String? categoryId) {
     if (n.contains('gift')) return Icons.card_giftcard_outlined;
     return Icons.account_balance_wallet_outlined;
   }
-  if (n.contains('food') || n.contains('grocer') || n.contains('dining') || n.contains('restaurant')) {
-    return Icons.restaurant_outlined;
-  }
-  if (n.contains('grocery') || n.contains('supermarket')) {
+  // "groceries" contains "grocer", so test grocery/supermarket before generic food/dining.
+  if (n.contains('grocery') || n.contains('groceries') || n.contains('supermarket')) {
     return Icons.local_grocery_store_outlined;
+  }
+  if (n.contains('shopping')) {
+    return Icons.shopping_bag_outlined;
+  }
+  if (n.contains('food') || n.contains('dining') || n.contains('restaurant')) {
+    return Icons.restaurant_outlined;
   }
   if (n.contains('gas') || n.contains('fuel') || n.contains('petrol')) {
     return Icons.local_gas_station_outlined;
