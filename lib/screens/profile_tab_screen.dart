@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/app_theme_mode.dart';
+import 'package:infaq/screens/notification_settings_screen.dart';
+import 'package:infaq/services/notification_preferences_service.dart';
 
 const Color _kPrimary = Color(0xFF4D6658);
 const Color _kProfileHeaderGreen = Color(0xFFE8F5E9);
@@ -33,7 +35,27 @@ class ProfileTabScreen extends StatefulWidget {
 }
 
 class _ProfileTabScreenState extends State<ProfileTabScreen> {
-  bool _notificationsOn = true;
+  bool? _profileNotificationsOn;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshNotificationSummary();
+  }
+
+  Future<void> _refreshNotificationSummary() async {
+    final on = await NotificationPreferencesService.instance.profileNotificationsEnabled();
+    if (mounted) setState(() => _profileNotificationsOn = on);
+  }
+
+  Future<void> _openNotificationSettings() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const NotificationSettingsScreen(),
+      ),
+    );
+    await _refreshNotificationSummary();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -136,12 +158,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                   context,
                   child: Column(
                     children: [
-                      _toggleTile(
-                        context,
-                        title: 'Notifications',
-                        value: _notificationsOn,
-                        onChanged: (v) => setState(() => _notificationsOn = v),
-                      ),
+                      _notificationsRow(context),
                       Divider(height: 1, color: cs.outline.withValues(alpha: 0.2)),
                       _toggleTile(
                         context,
@@ -284,6 +301,29 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
   }
 
   bool isDark(BuildContext context) => Theme.of(context).brightness == Brightness.dark;
+
+  Widget _notificationsRow(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final sub = _profileNotificationsOn == null
+        ? '…'
+        : (_profileNotificationsOn! ? 'On' : 'Off');
+    return ListTile(
+      title: Text(
+        'Notifications',
+        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: cs.onSurface),
+      ),
+      subtitle: Text(
+        sub,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          color: cs.onSurface.withValues(alpha: 0.5),
+        ),
+      ),
+      trailing: Icon(Icons.chevron_right_rounded, color: cs.onSurface.withValues(alpha: 0.35)),
+      onTap: _openNotificationSettings,
+    );
+  }
 
   Widget _navTile(BuildContext context, {required String title, required VoidCallback onTap}) {
     final cs = Theme.of(context).colorScheme;
