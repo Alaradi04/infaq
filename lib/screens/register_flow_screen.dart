@@ -267,21 +267,26 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final muted = scheme.onSurface.withValues(alpha: 0.65);
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         _onRegistrationBack();
       },
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        body: AnnotatedRegion<SystemUiOverlayStyle>(
-          value: const SystemUiOverlayStyle(
-            statusBarColor: Colors.white,
-            statusBarIconBrightness: Brightness.dark,
-            statusBarBrightness: Brightness.light,
-          ),
-          child: ListView(
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle(
+          statusBarColor: theme.scaffoldBackgroundColor,
+          statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+          statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+        ),
+        child: Scaffold(
+        backgroundColor: theme.scaffoldBackgroundColor,
+        body: ListView(
             padding: const EdgeInsets.only(bottom: 24),
             children: [
               InfaqHeader(showBack: true, onBack: _onRegistrationBack),
@@ -293,12 +298,16 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
                 children: [
                   Text(
                     'Create account',
-                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: scheme.onSurface,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     _step == 1 ? 'Start your journey to better financial health' : 'Just a little more',
-                    style: TextStyle(color: Colors.black.withValues(alpha: 0.55)),
+                    style: TextStyle(color: muted),
                   ),
                   const SizedBox(height: 20),
                   if (_step == 1) ..._buildStep1(context) else ..._buildStep2(context),
@@ -322,7 +331,7 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('Already have an account? ', style: TextStyle(color: Colors.black.withValues(alpha: 0.55))),
+                      Text('Already have an account? ', style: TextStyle(color: muted)),
                       InfaqTextButton(
                         label: 'Sign in',
                         onTap: () {
@@ -338,8 +347,8 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
             ),
           ],
         ),
-        ),
       ),
+    ),
     );
   }
 
@@ -371,7 +380,10 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
         autofillHints: const [AutofillHints.newPassword],
         suffix: IconButton(
           onPressed: () => setState(() => _obscure = !_obscure),
-          icon: Icon(_obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+          icon: Icon(
+            _obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       ),
       const SizedBox(height: 8),
@@ -396,15 +408,22 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
         alignment: Alignment.centerLeft,
         child: TextButton.icon(
           onPressed: () => _showPasswordHelpDialog(context),
-          icon: const Icon(Icons.info_outline_rounded, size: 18),
-          label: const Text(
+          icon: Icon(
+            Icons.info_outline_rounded,
+            size: 18,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          label: Text(
             'How to write a strong password',
-            style: TextStyle(fontWeight: FontWeight.w700),
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
         ),
       ),
       const SizedBox(height: 22),
-      _OrDividerLine(color: Colors.black.withValues(alpha: 0.12)),
+      const _OrDividerLine(),
       const SizedBox(height: 16),
       LayoutBuilder(
         builder: (context, constraints) {
@@ -441,16 +460,19 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
   }
 
   List<Widget> _buildStep2(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return [
       const _FieldLabel('currency'),
       Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(28),
-          boxShadow: const [
+          boxShadow: [
             BoxShadow(
-              color: Color(0x223F5F4A),
+              color: Color(isDark ? 0x59000000 : 0x223F5F4A),
               blurRadius: 14,
-              offset: Offset(0, 6),
+              offset: const Offset(0, 6),
             ),
           ],
         ),
@@ -474,7 +496,7 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
             ],
             inputDecorationTheme: InputDecorationTheme(
               filled: true,
-              fillColor: const Color(0xFFF7F8F7),
+              fillColor: cs.surfaceContainerHighest,
               contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(28),
@@ -502,12 +524,13 @@ class _FieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Text(
         text,
         style: TextStyle(
-          color: Colors.black.withValues(alpha: 0.7),
+          color: cs.onSurface.withValues(alpha: 0.72),
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -517,27 +540,28 @@ class _FieldLabel extends StatelessWidget {
 
 /// Matches [LoginScreen] divider + social control styling without editing the sign-in file.
 class _OrDividerLine extends StatelessWidget {
-  const _OrDividerLine({required this.color});
-
-  final Color color;
+  const _OrDividerLine();
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final line = cs.outline.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.45 : 0.22);
+
     return Row(
       children: [
-        Expanded(child: Divider(height: 1, thickness: 1, color: color)),
+        Expanded(child: Divider(height: 1, thickness: 1, color: line)),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Text(
             'or',
             style: TextStyle(
-              color: Colors.black.withValues(alpha: 0.45),
+              color: cs.onSurface.withValues(alpha: 0.55),
               fontWeight: FontWeight.w600,
               fontSize: 13,
             ),
           ),
         ),
-        Expanded(child: Divider(height: 1, thickness: 1, color: color)),
+        Expanded(child: Divider(height: 1, thickness: 1, color: line)),
       ],
     );
   }
@@ -556,6 +580,8 @@ class _SocialIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return InkResponse(
       onTap: loading || onTap == null ? null : onTap,
       radius: 26,
@@ -564,19 +590,23 @@ class _SocialIcon extends StatelessWidget {
         height: 44,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: cs.surfaceContainerHigh,
           borderRadius: BorderRadius.circular(22),
-          boxShadow: const [
-            BoxShadow(color: Color(0x11000000), blurRadius: 12, offset: Offset(0, 6)),
+          boxShadow: [
+            BoxShadow(
+              color: Color(isDark ? 0x59000000 : 0x11000000),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
           ],
         ),
         child: loading
-            ? const SizedBox(
+            ? SizedBox(
                 width: 22,
                 height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF3F5F4A)),
+                child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
               )
-            : FaIcon(icon, size: 20, color: Colors.black87),
+            : FaIcon(icon, size: 20, color: cs.onSurface.withValues(alpha: 0.9)),
       ),
     );
   }

@@ -99,14 +99,16 @@ class InfaqPillField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x223F5F4A),
+            color: Color(isDark ? 0x59000000 : 0x223F5F4A),
             blurRadius: 14,
-            offset: Offset(0, 6),
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -117,12 +119,15 @@ class InfaqPillField extends StatelessWidget {
         textInputAction: textInputAction,
         onSubmitted: onSubmitted,
         autofillHints: autofillHints,
+        style: TextStyle(color: cs.onSurface),
         decoration: InputDecoration(
           hintText: hintText,
+          hintStyle: TextStyle(color: cs.onSurfaceVariant),
           filled: true,
-          fillColor: const Color(0xFFF7F8F7),
+          fillColor: cs.surfaceContainerHighest,
           contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           suffixIcon: suffix,
+          suffixIconColor: cs.onSurfaceVariant,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(28),
             borderSide: BorderSide.none,
@@ -180,6 +185,7 @@ class InfaqTextButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -187,8 +193,8 @@ class InfaqTextButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         child: Text(
           label,
-          style: const TextStyle(
-            color: Color(0xFF4D6658),
+          style: TextStyle(
+            color: primary,
             fontWeight: FontWeight.w700,
           ),
         ),

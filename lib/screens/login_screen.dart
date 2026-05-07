@@ -126,14 +126,20 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final muted = scheme.onSurface.withValues(alpha: 0.65);
+    final linkColor = scheme.primary;
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        statusBarColor: Colors.white,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
+      value: SystemUiOverlayStyle(
+        statusBarColor: theme.scaffoldBackgroundColor,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
       ),
       child: Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: ListView(
         padding: const EdgeInsets.only(bottom: 24),
         children: [
@@ -144,11 +150,18 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Welcome back', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+                Text(
+                  'Welcome back',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    color: scheme.onSurface,
+                  ),
+                ),
                 const SizedBox(height: 6),
                 Text(
                   'Sign in to continue managing your finances',
-                  style: TextStyle(color: Colors.black.withValues(alpha: 0.55)),
+                  style: TextStyle(color: muted),
                 ),
                 const SizedBox(height: 26),
                 InfaqPillField(
@@ -168,14 +181,17 @@ class _LoginScreenState extends State<LoginScreen> {
                   autofillHints: const [AutofillHints.password],
                   suffix: IconButton(
                     onPressed: () => setState(() => _obscure = !_obscure),
-                    icon: Icon(_obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                    icon: Icon(
+                      _obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 22),
                 Center(
                   child: Text(
                     'Sign in with',
-                    style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
+                    style: TextStyle(color: muted),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -206,10 +222,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Text(
                       'Forgot password?',
                       style: TextStyle(
-                        color: const Color(0xFF3F5F4A),
+                        color: linkColor,
                         fontWeight: FontWeight.w700,
                         decoration: TextDecoration.underline,
-                        decorationColor: const Color(0xFF3F5F4A),
+                        decorationColor: linkColor,
                       ),
                     ),
                   ),
@@ -224,7 +240,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('Don’t have an account? ', style: TextStyle(color: Colors.black.withValues(alpha: 0.55))),
+                    Text('Don’t have an account? ', style: TextStyle(color: muted)),
                     InfaqTextButton(
                       label: 'Sign up',
                       onTap: () => Navigator.of(context).push(
@@ -256,6 +272,7 @@ class _SocialIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return InkResponse(
       onTap: loading || onTap == null ? null : onTap,
       radius: 26,
@@ -264,19 +281,23 @@ class _SocialIcon extends StatelessWidget {
         height: 44,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: cs.surfaceContainerHigh,
           borderRadius: BorderRadius.circular(22),
-          boxShadow: const [
-            BoxShadow(color: Color(0x11000000), blurRadius: 12, offset: Offset(0, 6)),
+          boxShadow: [
+            BoxShadow(
+              color: Color(Theme.of(context).brightness == Brightness.dark ? 0x59000000 : 0x11000000),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
           ],
         ),
         child: loading
-            ? const SizedBox(
+            ? SizedBox(
                 width: 22,
                 height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF3F5F4A)),
+                child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
               )
-            : FaIcon(icon, size: 20, color: Colors.black87),
+            : FaIcon(icon, size: 20, color: cs.onSurface.withValues(alpha: 0.9)),
       ),
     );
   }
