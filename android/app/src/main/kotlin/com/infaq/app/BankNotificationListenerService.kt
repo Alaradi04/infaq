@@ -107,8 +107,12 @@ class BankNotificationListenerService : NotificationListenerService() {
             val payload = JSONObject()
                 .put("id", id)
                 .put("amountValue", parsed.amountValue)
+                .put("amountCurrency", parsed.amountCurrency)
                 .put("balanceValue", parsed.balanceValue)
+                .put("balanceCurrency", parsed.balanceCurrency)
                 .put("merchant", parsed.merchant)
+                .put("referenceNumber", parsed.referenceNumber)
+                .put("detectedBank", parsed.detectedBank)
                 .put("timestampMillis", parsed.timestampMillis)
                 .put("transactionType", parsed.transactionType)
                 .put("rawTitle", title)
@@ -232,7 +236,7 @@ class BankNotificationListenerService : NotificationListenerService() {
         val financialKeywords = listOf(
             "bisb", "bahrain islamic bank", "bbk", "bank of bahrain and kuwait", "nbb",
             "national bank of bahrain", "ila", "ila bank", "bank abc", "al salam bank",
-            "benefitpay", "benefit", "khaleeji bank", "kuwait finance house", "kfh",
+            "fawri+", "benefitpay", "benefit", "khaleeji bank", "kuwait finance house", "kfh",
             "ahli united bank", "aub", "hsbc bahrain", "standard chartered", "citibank bahrain"
         )
         val hasKeyword = financialKeywords.any { hay.contains(it) }

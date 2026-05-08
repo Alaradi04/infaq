@@ -101,7 +101,7 @@ class _OAuthProfileSetupScreenState extends State<OAuthProfileSetupScreen> {
       showInfaqSnack(context, e.message);
     } catch (e) {
       if (!mounted) return;
-      showInfaqSnack(context, 'Could not save profile: $e');
+      showInfaqSnack(context, 'Could not save profile right now. Please try again.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }

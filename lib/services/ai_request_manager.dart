@@ -148,9 +148,7 @@ class AiRequestManager {
       if (DateTime.now().difference(at) > insightsTtl) return null;
       final cards = m['cards'];
       if (cards is! List) return null;
-      return cards
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
+      return cards.map((e) => Map<String, dynamic>.from(e as Map)).toList();
     } catch (_) {
       return null;
     }
@@ -181,9 +179,7 @@ class AiRequestManager {
   ) async {
     try {
       final p = await SharedPreferences.getInstance();
-      final raw = p.getString(
-        'infaq_ai_insight_det_v1_${userId}_$period',
-      );
+      final raw = p.getString('infaq_ai_insight_det_v1_${userId}_$period');
       if (raw == null) return null;
       final m = jsonDecode(raw) as Map<String, dynamic>;
       if (m['fp']?.toString() != fingerprint) return null;
@@ -192,9 +188,7 @@ class AiRequestManager {
       if (DateTime.now().difference(at) > insightsTtl) return null;
       final insights = m['insights'];
       if (insights is! List) return null;
-      return insights
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
+      return insights.map((e) => Map<String, dynamic>.from(e as Map)).toList();
     } catch (_) {
       return null;
     }
@@ -294,7 +288,11 @@ class AiRequestManager {
       }
       final disk = await _readHomeInsightsDisk(userId, fp);
       if (disk != null) {
-        _memory[memKey] = _MemCacheEntry(at: DateTime.now(), fingerprint: fp, value: disk);
+        _memory[memKey] = _MemCacheEntry(
+          at: DateTime.now(),
+          fingerprint: fp,
+          value: disk,
+        );
         AiUsageLogger.instance.logCacheHit(
           feature: 'generate-home-insights',
           userId: userId,
@@ -314,7 +312,8 @@ class AiRequestManager {
       return await _inflight[memKey]! as List<Map<String, dynamic>>;
     }
 
-    final under = await _dailyCount(userId, AiDailyBucket.insights) < maxInsightsPerDay;
+    final under =
+        await _dailyCount(userId, AiDailyBucket.insights) < maxInsightsPerDay;
     if (!under && !forceRefresh) {
       AiUsageLogger.instance.logSkippedQuota(
         feature: 'generate-home-insights',
@@ -376,9 +375,7 @@ class AiRequestManager {
       final m = jsonDecode(raw) as Map<String, dynamic>;
       final cards = m['cards'];
       if (cards is! List) return null;
-      return cards
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
+      return cards.map((e) => Map<String, dynamic>.from(e as Map)).toList();
     } catch (_) {
       return null;
     }
@@ -409,7 +406,11 @@ class AiRequestManager {
       }
       final disk = await _readDetailedDisk(userId, period, fp);
       if (disk != null) {
-        _memory[memKey] = _MemCacheEntry(at: DateTime.now(), fingerprint: fp, value: disk);
+        _memory[memKey] = _MemCacheEntry(
+          at: DateTime.now(),
+          fingerprint: fp,
+          value: disk,
+        );
         AiUsageLogger.instance.logCacheHit(
           feature: 'generate-detailed-insights',
           userId: userId,
@@ -429,7 +430,8 @@ class AiRequestManager {
       return await _inflight[memKey]! as List<Map<String, dynamic>>;
     }
 
-    final under = await _dailyCount(userId, AiDailyBucket.insights) < maxInsightsPerDay;
+    final under =
+        await _dailyCount(userId, AiDailyBucket.insights) < maxInsightsPerDay;
     if (!under && !forceRefresh) {
       AiUsageLogger.instance.logSkippedQuota(
         feature: 'generate-detailed-insights',
@@ -544,7 +546,10 @@ class AiRequestManager {
         reason: reason,
         inputHash: inputHash,
       );
-      final fallback = _localCategorizeFallback(transactionType, availableCategories);
+      final fallback = _localCategorizeFallback(
+        transactionType,
+        availableCategories,
+      );
       return fallback;
     }
 
@@ -557,15 +562,17 @@ class AiRequestManager {
           userId: userId,
           reason: '$reason|${kind.name}',
           inputHash: inputHash,
-          inputSizeEstimate: transactionName.length + availableCategories.join().length,
+          inputSizeEstimate:
+              transactionName.length + availableCategories.join().length,
         );
         _memory[memKey] = _MemCacheEntry(
           at: DateTime.now(),
           fingerprint: inputHash,
           value: result,
         );
-        final suggested =
-            (result['suggested_category'] ?? '').toString().trim();
+        final suggested = (result['suggested_category'] ?? '')
+            .toString()
+            .trim();
         if (mKey.isNotEmpty && suggested.isNotEmpty) {
           await _writeMerchantCategory(userId, mKey, result);
         }
@@ -592,7 +599,9 @@ class AiRequestManager {
         break;
       }
     }
-    pick ??= availableCategories.isNotEmpty ? availableCategories.first : 'Other';
+    pick ??= availableCategories.isNotEmpty
+        ? availableCategories.first
+        : 'Other';
     return {
       'suggested_category': pick,
       'confidence': 'local_fallback',
@@ -631,8 +640,7 @@ class AiRequestManager {
       return await _inflight[memKey]! as Map<String, dynamic>;
     }
 
-    final under =
-        await _dailyCount(userId, AiDailyBucket.leaf) < maxLeafPerDay;
+    final under = await _dailyCount(userId, AiDailyBucket.leaf) < maxLeafPerDay;
     if (!under) {
       AiUsageLogger.instance.logSkippedQuota(
         feature: 'classify-leaf-impact',

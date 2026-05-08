@@ -2,7 +2,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:infaq/screens/data_privacy_screen.dart';
 import 'package:infaq/screens/login_screen.dart';
 import 'package:infaq/screens/profile_info_screens.dart';
 import 'package:infaq/screens/register_flow_screen.dart';
@@ -213,7 +212,7 @@ class _LegalFooterState extends State<_LegalFooter> {
     _privacyTap = TapGestureRecognizer()
       ..onTap = () {
         Navigator.of(context).push<void>(
-          MaterialPageRoute<void>(builder: (_) => const DataPrivacyScreen()),
+          MaterialPageRoute<void>(builder: (_) => const PrivacyPolicyScreen()),
         );
       };
   }

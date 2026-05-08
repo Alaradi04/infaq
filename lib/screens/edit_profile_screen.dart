@@ -4,6 +4,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/profile/avatar_storage.dart';
+import 'package:infaq/security/input_sanitizer.dart';
+import 'package:infaq/services/auth_logout_service.dart';
 import 'package:infaq/ui/infaq_currency_meta.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
@@ -38,6 +40,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Uint8List? _pickedPreviewBytes;
   bool _saving = false;
   bool _uploadingPhoto = false;
+  bool _loggingOut = false;
 
   @override
   void initState() {
@@ -111,7 +114,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
     } catch (e) {
       if (mounted) {
-        showInfaqSnack(context, 'Could not update photo: $e');
+        showInfaqSnack(
+          context,
+          'Could not update photo right now. Please try again.',
+        );
         setState(() => _uploadingPhoto = false);
       }
     }
@@ -151,7 +157,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
-    final name = _nameCtrl.text.trim();
+    final name = InputSanitizer.cleanText(_nameCtrl.text, maxLength: 60);
     if (name.isEmpty) {
       showInfaqSnack(context, 'Please enter a name.');
       return;
@@ -173,7 +179,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       showInfaqSnack(context, 'Profile saved');
       Navigator.of(context).pop(true);
     } catch (e) {
-      if (mounted) showInfaqSnack(context, 'Could not save: $e');
+      if (mounted) {
+        showInfaqSnack(context, 'Could not save profile right now. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -231,7 +239,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       await Supabase.instance.client.auth.updateUser(UserAttributes(password: newCtrl.text));
       if (mounted) showInfaqSnack(context, 'Password updated');
     } catch (e) {
-      if (mounted) showInfaqSnack(context, 'Could not update password: $e');
+      if (mounted) {
+        showInfaqSnack(
+          context,
+          'Could not update password right now. Please try again.',
+        );
+      }
     }
   }
 
@@ -269,10 +282,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     try {
       await Supabase.instance.client.from('users').delete().eq('id', user.id);
     } catch (e) {
-      if (mounted) showInfaqSnack(context, 'Could not remove profile: $e');
+      if (mounted) {
+        showInfaqSnack(context, 'Could not remove profile right now.');
+      }
     }
 
-    await Supabase.instance.client.auth.signOut();
+    await _logout();
+  }
+
+  Future<void> _logout() async {
+    if (_loggingOut) return;
+    setState(() => _loggingOut = true);
+    await AuthLogoutService.logoutAndResetNavigation(context);
+    if (mounted) setState(() => _loggingOut = false);
   }
 
   ImageProvider<Object>? _avatarImageProvider() {
@@ -519,9 +541,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 ),
                 const SizedBox(height: 12),
                 FilledButton.icon(
-                  onPressed: () => Supabase.instance.client.auth.signOut(),
-                  icon: const Icon(Icons.logout_rounded, color: Colors.white),
-                  label: const Text('Log out'),
+                  onPressed: _loggingOut ? null : _logout,
+                  icon: _loggingOut
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: isDark ? cs.onSurface : Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.logout_rounded, color: Colors.white),
+                  label: Text(_loggingOut ? 'Logging out...' : 'Log out'),
                   style: FilledButton.styleFrom(
                     backgroundColor: isDark ? cs.surfaceContainerHighest : const Color(0xFF707070),
                     foregroundColor: isDark ? cs.onSurface : Colors.white,

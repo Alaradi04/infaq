@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/app_theme_mode.dart';
-import 'package:infaq/screens/ai_usage_debug_screen.dart';
 import 'package:infaq/screens/notification_settings_screen.dart';
 import 'package:infaq/screens/profile_info_screens.dart';
+import 'package:infaq/services/auth_logout_service.dart';
 import 'package:infaq/services/notification_preferences_service.dart';
 
 const Color _kPrimary = Color(0xFF4D6658);
 const Color _kProfileHeaderGreen = Color(0xFFE8F5E9);
+
 /// Soft sage ring for the name pill (light mode); aligns with primary green, not blue.
 const Color _kNamePillBorderLight = Color(0xFF9DB5A3);
 const Color _kLogoutBg = Color(0xFF707070);
@@ -22,7 +22,6 @@ class ProfileTabScreen extends StatefulWidget {
     required this.onOpenEditProfile,
     required this.onDataRefresh,
     this.onHelpAndSupport,
-    this.onDataAndPrivacy,
   });
 
   final String? displayName;
@@ -30,7 +29,6 @@ class ProfileTabScreen extends StatefulWidget {
   final Future<void> Function() onOpenEditProfile;
   final VoidCallback onDataRefresh;
   final VoidCallback? onHelpAndSupport;
-  final VoidCallback? onDataAndPrivacy;
 
   @override
   State<ProfileTabScreen> createState() => _ProfileTabScreenState();
@@ -38,6 +36,7 @@ class ProfileTabScreen extends StatefulWidget {
 
 class _ProfileTabScreenState extends State<ProfileTabScreen> {
   bool? _profileNotificationsOn;
+  bool _loggingOut = false;
 
   @override
   void initState() {
@@ -46,7 +45,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
   }
 
   Future<void> _refreshNotificationSummary() async {
-    final on = await NotificationPreferencesService.instance.profileNotificationsEnabled();
+    final on = await NotificationPreferencesService.instance
+        .profileNotificationsEnabled();
     if (mounted) setState(() => _profileNotificationsOn = on);
   }
 
@@ -57,6 +57,13 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
       ),
     );
     await _refreshNotificationSummary();
+  }
+
+  Future<void> _logout() async {
+    if (_loggingOut) return;
+    setState(() => _loggingOut = true);
+    await AuthLogoutService.logoutAndResetNavigation(context);
+    if (mounted) setState(() => _loggingOut = false);
   }
 
   @override
@@ -70,7 +77,9 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
     final headerBg = isDark ? const Color(0xFF1A2420) : _kProfileHeaderGreen;
     final titleColor = isDark ? cs.primary : _kPrimary;
     final pillBg = isDark ? cs.surfaceContainerHigh : Colors.white;
-    final pillBorder = isDark ? cs.outline.withValues(alpha: 0.35) : _kNamePillBorderLight;
+    final pillBorder = isDark
+        ? cs.outline.withValues(alpha: 0.35)
+        : _kNamePillBorderLight;
     final onSurface = cs.onSurface;
 
     return Scaffold(
@@ -83,7 +92,9 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
               width: double.infinity,
               decoration: BoxDecoration(
                 color: headerBg,
-                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(28),
+                ),
               ),
               child: SafeArea(
                 bottom: false,
@@ -94,7 +105,11 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                     children: [
                       Text(
                         'Profile',
-                        style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: titleColor),
+                        style: TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          color: titleColor,
+                        ),
                       ),
                       const SizedBox(height: 20),
                       Center(
@@ -107,14 +122,22 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                               if (mounted) widget.onDataRefresh();
                             },
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
                               decoration: BoxDecoration(
                                 color: pillBg,
                                 borderRadius: BorderRadius.circular(999),
-                                border: Border.all(color: pillBorder, width: 1.2),
+                                border: Border.all(
+                                  color: pillBorder,
+                                  width: 1.2,
+                                ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.08),
+                                    color: Colors.black.withValues(
+                                      alpha: isDark ? 0.25 : 0.08,
+                                    ),
                                     blurRadius: 16,
                                     offset: const Offset(0, 6),
                                   ),
@@ -123,10 +146,15 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  _Avatar(url: widget.avatarPublicUrl, radius: 26),
+                                  _Avatar(
+                                    url: widget.avatarPublicUrl,
+                                    radius: 26,
+                                  ),
                                   const SizedBox(width: 12),
                                   ConstrainedBox(
-                                    constraints: const BoxConstraints(maxWidth: 200),
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 200,
+                                    ),
                                     child: Text(
                                       label,
                                       maxLines: 1,
@@ -139,7 +167,10 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  Icon(Icons.chevron_right_rounded, color: onSurface.withValues(alpha: 0.35)),
+                                  Icon(
+                                    Icons.chevron_right_rounded,
+                                    color: onSurface.withValues(alpha: 0.35),
+                                  ),
                                 ],
                               ),
                             ),
@@ -161,19 +192,27 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                   child: Column(
                     children: [
                       _notificationsRow(context),
-                      Divider(height: 1, color: cs.outline.withValues(alpha: 0.2)),
+                      Divider(
+                        height: 1,
+                        color: cs.outline.withValues(alpha: 0.2),
+                      ),
                       _toggleTile(
                         context,
                         title: 'Use device theme',
                         value: isSystem,
                         onChanged: (v) => AppThemeMode.instance.setSystem(v),
                       ),
-                      Divider(height: 1, color: cs.outline.withValues(alpha: 0.2)),
+                      Divider(
+                        height: 1,
+                        color: cs.outline.withValues(alpha: 0.2),
+                      ),
                       _toggleTile(
                         context,
                         title: 'Dark mode',
                         value: isDark,
-                        onChanged: isSystem ? null : (v) => AppThemeMode.instance.setDark(v),
+                        onChanged: isSystem
+                            ? null
+                            : (v) => AppThemeMode.instance.setDark(v),
                       ),
                     ],
                   ),
@@ -183,22 +222,15 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                   context,
                   child: Column(
                     children: [
-                      _navTile(context, title: 'Help and support', onTap: widget.onHelpAndSupport ?? () {}),
-                      Divider(height: 1, color: cs.outline.withValues(alpha: 0.2)),
-                      _navTile(context, title: 'Data and privacy', onTap: widget.onDataAndPrivacy ?? () {}),
-                      Divider(height: 1, color: cs.outline.withValues(alpha: 0.2)),
                       _navTile(
                         context,
-                        title: 'AI usage (debug)',
-                        onTap: () {
-                          Navigator.of(context).push<void>(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const AiUsageDebugScreen(),
-                            ),
-                          );
-                        },
+                        title: 'Help and support',
+                        onTap: widget.onHelpAndSupport ?? () {},
                       ),
-                      Divider(height: 1, color: cs.outline.withValues(alpha: 0.2)),
+                      Divider(
+                        height: 1,
+                        color: cs.outline.withValues(alpha: 0.2),
+                      ),
                       _iconNavTile(
                         context,
                         icon: Icons.shield_outlined,
@@ -211,7 +243,10 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                           );
                         },
                       ),
-                      Divider(height: 1, color: cs.outline.withValues(alpha: 0.2)),
+                      Divider(
+                        height: 1,
+                        color: cs.outline.withValues(alpha: 0.2),
+                      ),
                       _iconNavTile(
                         context,
                         icon: Icons.info_outline_rounded,
@@ -224,7 +259,10 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                           );
                         },
                       ),
-                      Divider(height: 1, color: cs.outline.withValues(alpha: 0.2)),
+                      Divider(
+                        height: 1,
+                        color: cs.outline.withValues(alpha: 0.2),
+                      ),
                       _iconNavTile(
                         context,
                         icon: Icons.help_outline_rounded,
@@ -244,14 +282,24 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: isDark ? cs.surfaceContainerHigh : const Color(0xFFEEF7F0),
+                    color: isDark
+                        ? cs.surfaceContainerHigh
+                        : const Color(0xFFEEF7F0),
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: isDark ? cs.outline.withValues(alpha: 0.35) : const Color(0xFFD4E3D8)),
+                    border: Border.all(
+                      color: isDark
+                          ? cs.outline.withValues(alpha: 0.35)
+                          : const Color(0xFFD4E3D8),
+                    ),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.shield_outlined, color: isDark ? cs.primary : _kPrimary, size: 28),
+                      Icon(
+                        Icons.shield_outlined,
+                        color: isDark ? cs.primary : _kPrimary,
+                        size: 28,
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -267,7 +315,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              'We use AI to analyze your spending locally. Your financial data is encrypted and never shared with third parties.',
+                              'Your financial data is securely handled and protected. INFAQ keeps your data\'s safety a core priority.',
                               style: TextStyle(
                                 fontSize: 13,
                                 height: 1.35,
@@ -284,20 +332,36 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                 Text(
                   'v$kInfaqAppVersionLabel',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: onSurface.withValues(alpha: 0.35)),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: onSurface.withValues(alpha: 0.35),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: () => Supabase.instance.client.auth.signOut(),
-                    icon: const Icon(Icons.logout_rounded, color: Colors.white),
-                    label: const Text('Log out'),
+                    onPressed: _loggingOut ? null : _logout,
+                    icon: _loggingOut
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.logout_rounded, color: Colors.white),
+                    label: Text(_loggingOut ? 'Logging out...' : 'Log out'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: isDark ? const Color(0xFF5A5A5A) : _kLogoutBg,
+                      backgroundColor: isDark
+                          ? const Color(0xFF5A5A5A)
+                          : _kLogoutBg,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
                       elevation: 2,
                       shadowColor: Colors.black26,
                     ),
@@ -326,7 +390,9 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
             offset: const Offset(0, 6),
           ),
         ],
-        border: isDark ? Border.all(color: cs.outline.withValues(alpha: 0.2)) : null,
+        border: isDark
+            ? Border.all(color: cs.outline.withValues(alpha: 0.2))
+            : null,
       ),
       child: ClipRRect(borderRadius: BorderRadius.circular(20), child: child),
     );
@@ -342,7 +408,11 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
     return SwitchListTile.adaptive(
       title: Text(
         title,
-        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: cs.onSurface),
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 15,
+          color: cs.onSurface,
+        ),
       ),
       value: value,
       activeThumbColor: Colors.white,
@@ -353,7 +423,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
     );
   }
 
-  bool isDark(BuildContext context) => Theme.of(context).brightness == Brightness.dark;
+  bool isDark(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark;
 
   Widget _notificationsRow(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -363,7 +434,11 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
     return ListTile(
       title: Text(
         'Notifications',
-        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: cs.onSurface),
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 15,
+          color: cs.onSurface,
+        ),
       ),
       subtitle: Text(
         sub,
@@ -373,16 +448,33 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
           color: cs.onSurface.withValues(alpha: 0.5),
         ),
       ),
-      trailing: Icon(Icons.chevron_right_rounded, color: cs.onSurface.withValues(alpha: 0.35)),
+      trailing: Icon(
+        Icons.chevron_right_rounded,
+        color: cs.onSurface.withValues(alpha: 0.35),
+      ),
       onTap: _openNotificationSettings,
     );
   }
 
-  Widget _navTile(BuildContext context, {required String title, required VoidCallback onTap}) {
+  Widget _navTile(
+    BuildContext context, {
+    required String title,
+    required VoidCallback onTap,
+  }) {
     final cs = Theme.of(context).colorScheme;
     return ListTile(
-      title: Text(title, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: cs.onSurface)),
-      trailing: Icon(Icons.chevron_right_rounded, color: cs.onSurface.withValues(alpha: 0.35)),
+      title: Text(
+        title,
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 15,
+          color: cs.onSurface,
+        ),
+      ),
+      trailing: Icon(
+        Icons.chevron_right_rounded,
+        color: cs.onSurface.withValues(alpha: 0.35),
+      ),
       onTap: onTap,
     );
   }
@@ -398,8 +490,18 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
     final iconColor = isDark ? cs.primary : _kPrimary;
     return ListTile(
       leading: Icon(icon, size: 24, color: iconColor),
-      title: Text(title, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: cs.onSurface)),
-      trailing: Icon(Icons.chevron_right_rounded, color: cs.onSurface.withValues(alpha: 0.35)),
+      title: Text(
+        title,
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 15,
+          color: cs.onSurface,
+        ),
+      ),
+      trailing: Icon(
+        Icons.chevron_right_rounded,
+        color: cs.onSurface.withValues(alpha: 0.35),
+      ),
       onTap: onTap,
     );
   }
@@ -414,12 +516,16 @@ class _Avatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final u = url?.trim();
-    final muted = Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.35);
+    final muted = Theme.of(
+      context,
+    ).colorScheme.onSurface.withValues(alpha: 0.35);
     return CircleAvatar(
       radius: radius,
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
       backgroundImage: u != null && u.isNotEmpty ? NetworkImage(u) : null,
-      child: u == null || u.isEmpty ? Icon(Icons.person_rounded, size: radius * 1.1, color: muted) : null,
+      child: u == null || u.isEmpty
+          ? Icon(Icons.person_rounded, size: radius * 1.1, color: muted)
+          : null,
     );
   }
 }

@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/oauth_redirect.dart';
 import 'package:infaq/screens/login_screen.dart';
+import 'package:infaq/services/auth_navigation_service.dart';
 import 'package:infaq/ui/infaq_currency_meta.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
@@ -40,16 +40,16 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
     super.initState();
     _password.addListener(_onPasswordChanged);
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      debugPrint(
+        '[AuthNav] register onAuthStateChange event=${data.event} '
+        'hasSession=${data.session != null}',
+      );
       if (data.session == null) return;
       if (!mounted) return;
-      if (!Navigator.of(context).canPop()) return;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        final nav = Navigator.of(context);
-        if (nav.canPop()) {
-          nav.popUntil((route) => route.isFirst);
-        }
-      });
+      AuthNavigationService.clearAuthOverlaysIfSignedIn(
+        context,
+        reason: 'register_listener_${data.event.name}',
+      );
     });
   }
 
@@ -71,6 +71,7 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
   }
 
   Future<void> _signUpWithGoogle() async {
+    debugPrint('[AuthNav] sign-up start (Google OAuth)');
     setState(() => _googleLoading = true);
     try {
       await Supabase.instance.client.auth.signInWithOAuth(
@@ -186,6 +187,7 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
   }
 
   Future<void> _signUp() async {
+    debugPrint('[AuthNav] sign-up start (email/password)');
     setState(() => _loading = true);
     try {
       final email = _email.text.trim();
@@ -204,11 +206,22 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
           'balance': _balance.text.trim(),
         },
       );
-      final signedInUser = response.session?.user ?? response.user;
-      if (signedInUser != null && parsedBalance != null) {
+      var session = response.session;
+      final user = response.user;
+
+      if (session == null && user != null) {
+        debugPrint('[AuthNav] sign-up: response session null, polling…');
+        session = await AuthNavigationService.waitForSession(
+          timeout: const Duration(seconds: 2),
+        );
+      }
+      if (!mounted) return;
+
+      if (user != null && parsedBalance != null && session != null) {
         try {
+          debugPrint('[AuthNav] profile upsert start user=${user.id}');
           await _upsertUserRow(
-            userId: signedInUser.id,
+            userId: user.id,
             name: _fullName.text.trim(),
             username: usernameFromEmail,
             currency: _currency,
@@ -217,20 +230,77 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
           await Supabase.instance.client.auth.updateUser(
             UserAttributes(data: const {'registration_synced': true}),
           );
-        } catch (_) {
-          // No session after sign-up (e.g. email confirm) or RLS: first login syncs in main.dart.
+          debugPrint('[AuthNav] profile upsert + metadata update success');
+        } catch (e, st) {
+          debugPrint(
+            '[AuthNav] profile upsert failed (AuthGate may show setup): $e\n$st',
+          );
         }
       }
+
       if (!mounted) return;
-      showInfaqSnack(
-        context,
-        'Account created. Check your email to confirm (if enabled).',
-      );
-      Navigator.of(context).maybePop();
+
+      if (session != null) {
+        debugPrint('[AuthNav] sign-up success with session user=${user?.id}');
+        if (mounted) {
+          showInfaqSnack(context, 'Welcome! Finishing sign-up…');
+        }
+        AuthNavigationService.clearAuthOverlaysIfSignedIn(
+          context,
+          reason: 'email_sign_up',
+        );
+      } else if (user != null) {
+        debugPrint(
+          '[AuthNav] sign-up: no session (email confirmation) user=${user.id}',
+        );
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) {
+            final cs = Theme.of(ctx).colorScheme;
+            return AlertDialog(
+              title: const Text('Verify your email'),
+              content: const Text(
+                'Please verify your email before signing in. We sent you a link — '
+                'open it to activate your account, then use Sign in.\n\n'
+                'You are not signed in yet in this app.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: Text(
+                    'OK',
+                    style: TextStyle(color: cs.onSurfaceVariant),
+                  ),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const LoginScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text('Go to Sign in'),
+                ),
+              ],
+            );
+          },
+        );
+      } else {
+        debugPrint('[AuthNav] sign-up: no user in response');
+        showInfaqSnack(
+          context,
+          'Could not complete sign-up. Check your details and try again.',
+        );
+      }
     } on AuthException catch (e) {
       if (!mounted) return;
+      debugPrint('[AuthNav] sign-up AuthException: ${e.message}');
       showInfaqSnack(context, e.message);
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[AuthNav] sign-up error: $e\n$st');
       if (!mounted) return;
       showInfaqSnack(context, 'Sign up failed. Please try again.');
     } finally {
@@ -425,35 +495,10 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
       const SizedBox(height: 22),
       const _OrDividerLine(),
       const SizedBox(height: 16),
-      LayoutBuilder(
-        builder: (context, constraints) {
-          final maxW = constraints.maxWidth;
-          final gap = maxW < 340 ? 14.0 : 20.0;
-          return Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _SocialIcon(
-                icon: FontAwesomeIcons.apple,
-                onTap: _loading || _googleLoading
-                    ? null
-                    : () => showInfaqSnack(context, 'Apple sign-in is not available yet.'),
-              ),
-              SizedBox(width: gap),
-              _SocialIcon(
-                icon: FontAwesomeIcons.google,
-                onTap: _loading || _googleLoading ? null : _signUpWithGoogle,
-                loading: _googleLoading,
-              ),
-              SizedBox(width: gap),
-              _SocialIcon(
-                icon: FontAwesomeIcons.facebookF,
-                onTap: _loading || _googleLoading
-                    ? null
-                    : () => showInfaqSnack(context, 'Facebook sign-in is not available yet.'),
-              ),
-            ],
-          );
-        },
+      InfaqGoogleAuthButton(
+        onPressed: _loading || _googleLoading ? null : _signUpWithGoogle,
+        isLoading: _googleLoading,
+        label: 'Sign up with Google',
       ),
       const SizedBox(height: 4),
     ];
@@ -563,51 +608,6 @@ class _OrDividerLine extends StatelessWidget {
         ),
         Expanded(child: Divider(height: 1, thickness: 1, color: line)),
       ],
-    );
-  }
-}
-
-class _SocialIcon extends StatelessWidget {
-  const _SocialIcon({
-    required this.icon,
-    this.onTap,
-    this.loading = false,
-  });
-
-  final IconData icon;
-  final VoidCallback? onTap;
-  final bool loading;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return InkResponse(
-      onTap: loading || onTap == null ? null : onTap,
-      radius: 26,
-      child: Container(
-        width: 44,
-        height: 44,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(22),
-          boxShadow: [
-            BoxShadow(
-              color: Color(isDark ? 0x59000000 : 0x11000000),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: loading
-            ? SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
-              )
-            : FaIcon(icon, size: 20, color: cs.onSurface.withValues(alpha: 0.9)),
-      ),
     );
   }
 }

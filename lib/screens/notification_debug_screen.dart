@@ -7,7 +7,8 @@ class NotificationDebugScreen extends StatefulWidget {
   const NotificationDebugScreen({super.key});
 
   @override
-  State<NotificationDebugScreen> createState() => _NotificationDebugScreenState();
+  State<NotificationDebugScreen> createState() =>
+      _NotificationDebugScreenState();
 }
 
 class _NotificationDebugScreenState extends State<NotificationDebugScreen> {
@@ -52,15 +53,39 @@ class _NotificationDebugScreenState extends State<NotificationDebugScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  _kv('listener permission status', '${_state['listenerEnabled'] ?? 'unknown'}'),
+                  _kv(
+                    'listener permission status',
+                    '${_state['listenerEnabled'] ?? 'unknown'}',
+                  ),
                   _kv('pending local transaction count', '${_pending.length}'),
-                  _kv('last parser error', '${_state['lastParserError'] ?? '-'}'),
-                  _kv('last parsed result', '${_state['lastParsedResult'] ?? '-'}'),
-                  _kv('last duplicate decision', '${_state['lastDuplicateDecision'] ?? '-'}'),
-                  _kv('last transaction sync status', '${_state['lastTransactionSyncStatus'] ?? '-'}'),
-                  _kv('last Supabase insert error', '${_state['lastSupabaseInsertError'] ?? '-'}'),
-                  _kv('last AI enrichment status', '${_state['lastAiEnrichmentStatus'] ?? '-'}'),
-                  _kv('Gemini quota status', '${_state['geminiQuotaStatus'] ?? '-'}'),
+                  _kv(
+                    'last parser error',
+                    '${_state['lastParserError'] ?? '-'}',
+                  ),
+                  _kv(
+                    'last parsed result',
+                    '${_state['lastParsedResult'] ?? '-'}',
+                  ),
+                  _kv(
+                    'last duplicate decision',
+                    '${_state['lastDuplicateDecision'] ?? '-'}',
+                  ),
+                  _kv(
+                    'last transaction sync status',
+                    '${_state['lastTransactionSyncStatus'] ?? '-'}',
+                  ),
+                  _kv(
+                    'last Supabase insert error',
+                    '${_state['lastSupabaseInsertError'] ?? '-'}',
+                  ),
+                  _kv(
+                    'last AI enrichment status',
+                    '${_state['lastAiEnrichmentStatus'] ?? '-'}',
+                  ),
+                  _kv(
+                    'Gemini quota status',
+                    '${_state['geminiQuotaStatus'] ?? '-'}',
+                  ),
                   _kv(
                     'ignored non-financial notifications count',
                     '${_state['ignoredNonFinancialNotificationsCount'] ?? 0}',
@@ -71,10 +96,13 @@ class _NotificationDebugScreenState extends State<NotificationDebugScreen> {
                   ),
                   SwitchListTile.adaptive(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Show all raw notifications for debugging'),
+                    title: const Text(
+                      'Show all raw notifications for debugging',
+                    ),
                     value: _showAllRawForDebug,
                     onChanged: (v) async {
-                      await BankNotificationSyncService.instance.setBankNotificationDebugMode(v);
+                      await BankNotificationSyncService.instance
+                          .setBankNotificationDebugMode(v);
                       if (!mounted) return;
                       setState(() => _showAllRawForDebug = v);
                       await _refresh();
@@ -83,24 +111,46 @@ class _NotificationDebugScreenState extends State<NotificationDebugScreen> {
                   const SizedBox(height: 12),
                   FilledButton(
                     onPressed: () async {
-                      await BankNotificationSyncService.instance.syncPendingBankTransactions(trigger: 'manual_debug');
+                      await BankNotificationSyncService.instance
+                          .syncPendingBankTransactions(
+                            trigger: 'manual_debug',
+                            bypassThrottle: true,
+                          );
                       await _refresh();
                     },
                     child: const Text('Sync Pending Transactions'),
                   ),
                   const SizedBox(height: 14),
-                  Text('Last 10 raw notifications', style: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurface)),
+                  Text(
+                    'Last 10 raw notifications',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   SelectableText(
                     const JsonEncoder.withIndent('  ').convert(_recent),
-                    style: TextStyle(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.8)),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: cs.onSurface.withValues(alpha: 0.8),
+                    ),
                   ),
                   const SizedBox(height: 14),
-                  Text('Pending transactions JSON', style: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurface)),
+                  Text(
+                    'Pending transactions JSON',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   SelectableText(
                     const JsonEncoder.withIndent('  ').convert(_pending),
-                    style: TextStyle(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.8)),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: cs.onSurface.withValues(alpha: 0.8),
+                    ),
                   ),
                 ],
               ),
@@ -115,4 +165,3 @@ class _NotificationDebugScreenState extends State<NotificationDebugScreen> {
     );
   }
 }
-

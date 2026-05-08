@@ -56,57 +56,162 @@ class PrivacyPolicyScreen extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(22, 20, 22, 32),
               children: [
+                _p('Last updated: May 2026', muted),
+                _gap(),
                 _p(
-                  'INFAQ values your privacy and is committed to protecting your personal and financial information.',
+                  'Welcome to INFAQ.\n\n'
+                  'Your privacy matters to us. INFAQ is designed to help users manage their finances in a secure and transparent way. '
+                  'This Privacy Policy explains what information we collect, how it is used, and how we protect it.',
                   bodyColor,
                 ),
                 _gap(),
-                _p(
-                  'We only collect the information necessary to provide features such as expense tracking, budgeting insights, goals, subscriptions, and automatic transaction recording.',
+                _h('Information We Collect', cs),
+                _bullet(
+                  const [
+                    'Profile information such as name, email address, preferred currency, and profile photo',
+                    'Financial records created inside the app, including transactions, subscriptions, goals, and categories',
+                    'Notification content only when the user grants notification access permission',
+                    'App preferences such as theme settings and notification settings',
+                  ],
                   bodyColor,
                 ),
                 _gap(),
+                _h('Notification Access', cs),
                 _p(
-                  'Your financial data is stored securely using Supabase and is never sold to third parties.',
+                  'INFAQ may request notification access to automatically detect and record financial transactions from supported banking notifications.\n\n'
+                  'The app only attempts to process financial notifications from supported banking and payment services. '
+                  'Non-financial notifications are ignored whenever possible.',
+                  bodyColor,
+                ),
+                const SizedBox(height: 8),
+                _bullet(
+                  const [
+                    'transaction detection',
+                    'transaction categorization',
+                    'balance updates',
+                    'financial insights',
+                  ],
+                  bodyColor,
+                ),
+                const SizedBox(height: 8),
+                _p(
+                  'INFAQ does not read personal chats, messages, or unrelated notifications for advertising or tracking purposes.',
                   bodyColor,
                 ),
                 _gap(),
+                _h('AI Features', cs),
+                _p('INFAQ uses AI-powered features to provide:', bodyColor),
+                const SizedBox(height: 8),
+                _bullet(
+                  const [
+                    'spending insights',
+                    'smart categorization',
+                    'sustainability analysis',
+                    'financial recommendations',
+                  ],
+                  bodyColor,
+                ),
+                const SizedBox(height: 8),
                 _p(
-                  'If automatic transaction recording is enabled, INFAQ may process bank notification content locally on your device to detect transactions. Only relevant transaction data is used for financial management features.',
+                  'Some transaction or analytics data may be securely processed through AI services to generate these insights.\n\n'
+                  'AI-generated content is informational only and should not be considered professional financial advice.',
                   bodyColor,
                 ),
                 _gap(),
+                _h('Data Storage and Security', cs),
                 _p(
-                  'AI-powered insights may analyze spending behavior to generate personalized recommendations and financial summaries.',
+                  'Your data is securely stored using Supabase cloud infrastructure and protected through authentication and database security rules.\n\n'
+                  'We take reasonable measures to:',
+                  bodyColor,
+                ),
+                const SizedBox(height: 8),
+                _bullet(
+                  const [
+                    'protect user information',
+                    'prevent unauthorized access',
+                    'secure stored financial data',
+                  ],
+                  bodyColor,
+                ),
+                const SizedBox(height: 8),
+                _p('However, no online system can guarantee absolute security.', bodyColor),
+                _gap(),
+                _h('Data Sharing', cs),
+                _p(
+                  'INFAQ does not sell your personal data.\n\n'
+                  'We do not share your financial information with third parties except when required for:',
+                  bodyColor,
+                ),
+                const SizedBox(height: 8),
+                _bullet(
+                  const [
+                    'app functionality',
+                    'secure cloud storage',
+                    'authentication',
+                    'AI processing needed for app features',
+                  ],
                   bodyColor,
                 ),
                 _gap(),
-                _p(
-                  'INFAQ does not access unnecessary personal content such as private chats, photos, or unrelated notifications.',
+                _h('User Control', cs),
+                _p('You may:', bodyColor),
+                const SizedBox(height: 8),
+                _bullet(
+                  const [
+                    'edit or delete your transactions',
+                    'disable notification access',
+                    'delete your account',
+                    'request removal of your stored data',
+                  ],
                   bodyColor,
                 ),
                 _gap(),
+                _h('Third-Party Services', cs),
+                _p('INFAQ may use trusted third-party services such as:', bodyColor),
+                const SizedBox(height: 8),
+                _bullet(
+                  const [
+                    'Supabase',
+                    'Google Sign-In',
+                    'AI providers used for insights and categorization',
+                  ],
+                  bodyColor,
+                ),
+                const SizedBox(height: 8),
                 _p(
-                  'Users can edit or delete their data at any time from within the application.',
+                  'These services may process limited data necessary for app functionality.',
                   bodyColor,
                 ),
                 _gap(),
+                _h("Children's Privacy", cs),
+                _p('INFAQ is not intended for children under 13 years old.', bodyColor),
+                _gap(),
+                _h('Changes to This Policy', cs),
                 _p(
-                  'By using INFAQ, you agree to this privacy policy.',
+                  'This Privacy Policy may be updated over time. Continued use of the app after updates means you accept the revised policy.',
                   bodyColor,
                 ),
-                const SizedBox(height: 28),
-                Text('Contact', style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface)),
-                const SizedBox(height: 6),
-                Text(kInfaqContactEmail, style: TextStyle(fontSize: 15, color: muted)),
-                const SizedBox(height: 16),
-                Text('Website', style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface)),
-                const SizedBox(height: 6),
-                Text(kInfaqWebsiteLabel, style: TextStyle(fontSize: 15, color: muted)),
-                const SizedBox(height: 16),
-                Text('Version', style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface)),
-                const SizedBox(height: 6),
-                Text(kInfaqAppVersionLabel, style: TextStyle(fontSize: 15, color: muted)),
+                _gap(),
+                _h('Contact Us', cs),
+                _p(
+                  'If you have questions or concerns about privacy or data usage, contact us at:',
+                  bodyColor,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  kInfaqContactEmail,
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: cs.primary,
+                    fontWeight: FontWeight.w700,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Version $kInfaqAppVersionLabel',
+                  style: TextStyle(fontSize: 13, color: muted),
+                ),
               ],
             ),
           ),
@@ -116,6 +221,33 @@ class PrivacyPolicyScreen extends StatelessWidget {
   }
 
   Widget _p(String s, Color c) => Text(s, style: TextStyle(fontSize: 15, height: 1.45, color: c));
+
+  Widget _h(String s, ColorScheme cs) {
+    return Text(
+      s,
+      style: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w800,
+        color: cs.onSurface,
+      ),
+    );
+  }
+
+  Widget _bullet(List<String> lines, Color c) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final line in lines)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 5),
+            child: Text(
+              '• $line',
+              style: TextStyle(fontSize: 15, height: 1.4, color: c),
+            ),
+          ),
+      ],
+    );
+  }
 
   Widget _gap() => const SizedBox(height: 14);
 }
@@ -241,30 +373,35 @@ class FaqScreen extends StatelessWidget {
     (
       q: 'How does automatic transaction recording work?',
       a:
-          'INFAQ can detect supported bank transaction notifications and automatically record expenses and income securely on your device.',
+          'When enabled, INFAQ reads supported bank transaction notifications and extracts only relevant financial fields (amount, type, timestamp, merchant) for recording.',
     ),
     (
-      q: 'Does INFAQ access my private messages?',
-      a: 'No. INFAQ only processes supported financial notifications needed for transaction recording.',
+      q: 'Why do I need notification permission?',
+      a: 'Notification access is required for automatic transaction recording. You can disable it anytime in Notification Settings.',
     ),
     (
-      q: 'Why are some transactions categorized automatically?',
-      a:
-          'INFAQ uses local rules and AI-powered categorization to organize transactions into useful categories.',
+      q: 'Is my transaction data private?',
+      a: 'Yes. Your transaction data is tied to your account, protected by authentication, and is not sold by INFAQ.',
+    ),
+    (
+      q: 'Does INFAQ sell user data?',
+      a: 'No. INFAQ does not sell personal or financial data.',
+    ),
+    (
+      q: 'How do subscriptions work?',
+      a: 'You can add recurring subscriptions, track upcoming payments, and edit or remove subscriptions at any time.',
+    ),
+    (
+      q: 'How do goals work?',
+      a: 'Goals let you set targets, track progress, and monitor saved amounts against your deadline.',
     ),
     (
       q: 'Can I edit or recategorize transactions?',
-      a: 'Yes. Transactions can be edited, deleted, and recategorized anytime.',
+      a: 'Yes. Transactions can be edited, recategorized, or deleted from the app.',
     ),
     (
       q: 'Why do some transactions not show environmental impact?',
-      a:
-          'Transfers, income, and unsupported purchases may not have enough information for environmental impact classification.',
-    ),
-    (
-      q: 'Is my data secure?',
-      a:
-          'Yes. User data is securely stored and protected using Supabase authentication and database security.',
+      a: 'Transfers, income, or unsupported purchase descriptions may not have enough data for environmental classification.',
     ),
     (
       q: 'How can I contact INFAQ?',

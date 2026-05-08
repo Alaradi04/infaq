@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/category/category_icons.dart';
+import 'package:infaq/security/input_sanitizer.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
@@ -49,28 +50,46 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
       dynamic res;
       try {
         try {
-          res = await supabase
+          final global = await supabase
               .from('categories')
               .select('id,name,type,user_id,icon_key,color')
-              .or('user_id.is.null,user_id.eq.${user.id}')
+              .isFilter('user_id', null)
               .order('name');
+          final mine = await supabase
+              .from('categories')
+              .select('id,name,type,user_id,icon_key,color')
+              .eq('user_id', user.id)
+              .order('name');
+          res = [...(global as List<dynamic>), ...(mine as List<dynamic>)];
         } on PostgrestException catch (e) {
           if (e.code != '42703') rethrow;
-          res = await supabase
+          final global = await supabase
               .from('categories')
               .select('id,name,type,user_id,icon_key')
-              .or('user_id.is.null,user_id.eq.${user.id}')
+              .isFilter('user_id', null)
               .order('name');
+          final mine = await supabase
+              .from('categories')
+              .select('id,name,type,user_id,icon_key')
+              .eq('user_id', user.id)
+              .order('name');
+          res = [...(global as List<dynamic>), ...(mine as List<dynamic>)];
         }
         _supportsCategoryIconKey = true;
       } on PostgrestException catch (e) {
         // Older DB schema: categories.icon_key column does not exist yet.
         if (e.code != '42703') rethrow;
-        res = await supabase
+        final global = await supabase
             .from('categories')
             .select('id,name,type,user_id')
-            .or('user_id.is.null,user_id.eq.${user.id}')
+            .isFilter('user_id', null)
             .order('name');
+        final mine = await supabase
+            .from('categories')
+            .select('id,name,type,user_id')
+            .eq('user_id', user.id)
+            .order('name');
+        res = [...(global as List<dynamic>), ...(mine as List<dynamic>)];
         _supportsCategoryIconKey = false;
       }
 
@@ -84,8 +103,9 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      debugPrint('Manage categories load failed: $e');
       setState(() {
-        _error = e.toString();
+        _error = 'Could not load categories. Please try again.';
         _loading = false;
       });
     }
@@ -352,7 +372,10 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
         } catch (e, st) {
           debugPrint('Reassign transactions from $id failed: $e\n$st');
           if (mounted) {
-            showInfaqSnack(context, 'Could not reassign transactions: $e');
+            showInfaqSnack(
+              context,
+              'Could not reassign transactions right now. Please try again.',
+            );
           }
           return;
         }
@@ -460,7 +483,7 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
 
     if (ok != true || !mounted) return;
 
-    final name = nameCtrl.text.trim();
+    final name = InputSanitizer.cleanText(nameCtrl.text, maxLength: 60);
     if (name.isEmpty) {
       showInfaqSnack(context, 'Enter a category name.');
       return;
@@ -484,7 +507,12 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
         await _load();
       }
     } catch (e) {
-      if (mounted) showInfaqSnack(context, 'Could not add: $e');
+      if (mounted) {
+        showInfaqSnack(
+          context,
+          'Could not add category right now. Please try again.',
+        );
+      }
     }
   }
 
@@ -537,7 +565,7 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
 
     if (ok != true || !mounted) return;
 
-    final name = nameCtrl.text.trim();
+    final name = InputSanitizer.cleanText(nameCtrl.text, maxLength: 60);
     if (name.isEmpty) return;
 
     final user = Supabase.instance.client.auth.currentUser;
@@ -558,7 +586,12 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
         await _load();
       }
     } catch (e) {
-      if (mounted) showInfaqSnack(context, 'Could not update: $e');
+      if (mounted) {
+        showInfaqSnack(
+          context,
+          'Could not update category right now. Please try again.',
+        );
+      }
     }
   }
 
@@ -634,7 +667,12 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
         showInfaqSnack(context, 'Category deleted');
       }
     } catch (e) {
-      if (mounted) showInfaqSnack(context, 'Could not delete: $e');
+      if (mounted) {
+        showInfaqSnack(
+          context,
+          'Could not delete category right now. Please try again.',
+        );
+      }
     }
   }
 
@@ -814,16 +852,21 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
     );
 
     final outline = cs.outline.withValues(alpha: isDark ? 0.34 : 0.14);
+    final showSelected = !isBuiltIn && _catSelectMode && selected;
+    final selectedTint = cs.primary.withValues(alpha: isDark ? 0.18 : 0.1);
+    final cardColor = showSelected
+        ? Color.alphaBlend(selectedTint, cs.surfaceContainerLow)
+        : cs.surfaceContainerLow;
     final borderColor =
-        !isBuiltIn && _catSelectMode && selected ? cs.primary : outline;
-    final borderW = !isBuiltIn && _catSelectMode && selected ? 2.5 : 1.0;
+        showSelected ? cs.primary : outline;
+    final borderW = showSelected ? 2.0 : 1.0;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
+        color: cardColor,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: borderColor, width: borderW),
       ),
@@ -864,18 +907,7 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
                     ),
                   )
                 : _catSelectMode
-                ? AnimatedScale(
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOutCubic,
-                    scale: selected ? 1.0 : 0.88,
-                    child: Icon(
-                      selected
-                          ? Icons.check_circle_rounded
-                          : Icons.circle_outlined,
-                      color: selected ? cs.primary : cs.outline,
-                      size: 26,
-                    ),
-                  )
+                ? null
                 : Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [

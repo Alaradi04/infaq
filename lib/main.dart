@@ -73,10 +73,8 @@ class _StartupShellState extends State<_StartupShell> {
       setState(() => _error = e);
       return;
     }
-    unawaited(
-      BankNotificationSyncService.instance.syncPendingBankTransactions(
-        trigger: 'app_start_after_supabase_init',
-      ),
+    BankNotificationSyncService.scheduleDebouncedSync(
+      trigger: 'app_start_after_supabase_init',
     );
     if (mounted) setState(() => _ready = true);
   }
@@ -253,13 +251,19 @@ class _AuthGateState extends State<AuthGate> {
 
   Future<bool> _userRowExists(String userId) async {
     try {
+      debugPrint('[AuthNav] profile row fetch start userId=$userId');
       final row = await Supabase.instance.client
           .from('users')
           .select('id')
           .eq('id', userId)
           .maybeSingle();
-      return row != null;
-    } catch (_) {
+      final ok = row != null;
+      debugPrint(
+        '[AuthNav] profile row fetch ${ok ? 'success (exists)' : 'success (missing)'} userId=$userId',
+      );
+      return ok;
+    } catch (e, st) {
+      debugPrint('[AuthNav] profile row fetch failed: $e\n$st');
       return false;
     }
   }
@@ -277,6 +281,10 @@ class _AuthGateState extends State<AuthGate> {
       ),
       builder: (context, snapshot) {
         final session = snapshot.data?.session ?? supabase.auth.currentSession;
+        final event = snapshot.data?.event;
+        debugPrint(
+          '[AuthNav] AuthGate event=$event hasSession=${session != null} user=${session?.user.id}',
+        );
 
         if (session == null) {
           return const WelcomeScreen();
@@ -285,8 +293,19 @@ class _AuthGateState extends State<AuthGate> {
         final userId = session.user.id;
         return FutureBuilder<bool>(
           key: ValueKey<String>('${userId}_$_profileGateEpoch'),
-          future: _userRowExists(userId),
+          future: _userRowExists(userId).timeout(
+            const Duration(seconds: 15),
+            onTimeout: () {
+              debugPrint(
+                '[AuthNav] profile row fetch TIMEOUT userId=$userId — showing profile setup',
+              );
+              return false;
+            },
+          ),
           builder: (context, snap) {
+            if (snap.hasError) {
+              debugPrint('[AuthNav] AuthGate profile FutureBuilder error: ${snap.error}');
+            }
             if (snap.connectionState != ConnectionState.done) {
               return Scaffold(
                 backgroundColor: cs.surface,
@@ -295,12 +314,19 @@ class _AuthGateState extends State<AuthGate> {
             }
             final exists = snap.data ?? false;
             if (!exists) {
+              debugPrint(
+                '[AuthNav] navigation decision: OAuthProfileSetupScreen userId=$userId',
+              );
               return OAuthProfileSetupScreen(
                 onComplete: () {
-                  if (mounted) setState(() => _profileGateEpoch++);
+                  if (mounted) {
+                    debugPrint('[AuthNav] OAuth profile setup complete, recheck users row');
+                    setState(() => _profileGateEpoch++);
+                  }
                 },
               );
             }
+            debugPrint('[AuthNav] navigation decision: HomeScreen userId=$userId');
             return const HomeScreen();
           },
         );

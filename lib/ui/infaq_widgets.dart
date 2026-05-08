@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 /// Bundled wallet brand mark (`assets/`).
 const String kInfaqBrandIconAsset = 'assets/infaq_icon.jpeg';
@@ -196,6 +197,96 @@ class InfaqTextButton extends StatelessWidget {
           style: TextStyle(
             color: primary,
             fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class InfaqGoogleAuthButton extends StatelessWidget {
+  const InfaqGoogleAuthButton({
+    super.key,
+    required this.onPressed,
+    this.isLoading = false,
+    this.label = 'Continue with Google',
+  });
+
+  final VoidCallback? onPressed;
+  final bool isLoading;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final enabled = onPressed != null && !isLoading;
+
+    return SizedBox(
+      width: double.infinity,
+      height: 54,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(28),
+          onTap: enabled ? onPressed : null,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            decoration: BoxDecoration(
+              color: isDark ? cs.surfaceContainerHigh : Colors.white,
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                color: isDark
+                    ? cs.outline.withValues(alpha: 0.4)
+                    : const Color(0xFFD7DFDB),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.32 : 0.08),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Center(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                child: isLoading
+                    ? SizedBox(
+                        key: const ValueKey('loading'),
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: cs.primary,
+                        ),
+                      )
+                    : Row(
+                        key: const ValueKey('idle'),
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          FaIcon(
+                            FontAwesomeIcons.google,
+                            size: 18,
+                            color: cs.onSurface.withValues(alpha: 0.68),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            label,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: cs.onSurface,
+                              letterSpacing: 0.1,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
           ),
         ),
       ),

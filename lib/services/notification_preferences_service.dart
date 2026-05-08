@@ -22,7 +22,8 @@ class NotificationPreferences {
 /// Loads/saves notification prefs and keeps a cache for [shouldDeliverNotifications].
 class NotificationPreferencesService {
   NotificationPreferencesService._();
-  static final NotificationPreferencesService instance = NotificationPreferencesService._();
+  static final NotificationPreferencesService instance =
+      NotificationPreferencesService._();
 
   final SupabaseClient _client = Supabase.instance.client;
   NotificationPreferences? _cached;
@@ -73,7 +74,9 @@ class NotificationPreferencesService {
         .eq('user_id', user.id)
         .maybeSingle();
     if (existing != null) {
-      final p = NotificationPreferences.fromMap(Map<String, dynamic>.from(existing));
+      final p = NotificationPreferences.fromMap(
+        Map<String, dynamic>.from(existing),
+      );
       _setCache(p);
       return p;
     }
@@ -107,10 +110,10 @@ class NotificationPreferencesService {
   Future<void> updateNotificationsEnabled(bool value) async {
     final user = _client.auth.currentUser;
     if (user == null) return;
-    await _client.from('notification_preferences').update({
-      'notifications_enabled': value,
-      'updated_at': _nowIso(),
-    }).eq('user_id', user.id);
+    await _client
+        .from('notification_preferences')
+        .update({'notifications_enabled': value, 'updated_at': _nowIso()})
+        .eq('user_id', user.id);
     _setCache(
       NotificationPreferences(
         notificationsEnabled: value,
@@ -122,10 +125,10 @@ class NotificationPreferencesService {
   Future<void> updateSmsAutoRecordingEnabled(bool value) async {
     final user = _client.auth.currentUser;
     if (user == null) return;
-    await _client.from('notification_preferences').update({
-      'sms_auto_recording_enabled': value,
-      'updated_at': _nowIso(),
-    }).eq('user_id', user.id);
+    await _client
+        .from('notification_preferences')
+        .update({'sms_auto_recording_enabled': value, 'updated_at': _nowIso()})
+        .eq('user_id', user.id);
     _setCache(
       NotificationPreferences(
         notificationsEnabled: _cached?.notificationsEnabled ?? true,

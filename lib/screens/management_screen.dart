@@ -15,6 +15,7 @@ import 'package:infaq/screens/edit_goal_screen.dart';
 import 'package:infaq/screens/edit_subscription_screen.dart';
 import 'package:infaq/subscription_renewal.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
+import 'package:infaq/ui/monthly_spending_budget_card.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
@@ -289,7 +290,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
     if (!mounted || updates.isEmpty) return;
     setState(() {
       for (final e in updates.entries) {
-        final idx = _subscriptions.indexWhere((x) => x['id']?.toString() == e.key);
+        final idx = _subscriptions.indexWhere(
+          (x) => x['id']?.toString() == e.key,
+        );
         if (idx >= 0) {
           final m = Map<String, dynamic>.from(_subscriptions[idx]);
           m['next_payment'] = e.value;
@@ -363,10 +366,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
   }
 
   bool get _bulkSelectionActive => switch (_mainTab) {
-        _MgmtMainTab.transactions => _txSelectMode,
-        _MgmtMainTab.subscriptions => _subSelectMode,
-        _MgmtMainTab.goals => _goalSelectMode,
-      };
+    _MgmtMainTab.transactions => _txSelectMode,
+    _MgmtMainTab.subscriptions => _subSelectMode,
+    _MgmtMainTab.goals => _goalSelectMode,
+  };
 
   Widget _wrapListCardExit({required bool exiting, required Widget child}) {
     return AnimatedSlide(
@@ -641,6 +644,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
       if (_selectedTxIds.isEmpty) _txSelectMode = false;
     });
     unawaited(_refreshBalanceOnly());
+    widget.onDataChanged();
     if (failed.isNotEmpty) {
       showInfaqSnack(
         context,
@@ -661,9 +665,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(
-          'Delete $n ${n == 1 ? 'subscription' : 'subscriptions'}?',
-        ),
+        title: Text('Delete $n ${n == 1 ? 'subscription' : 'subscriptions'}?'),
         content: Text(
           'This action cannot be undone.',
           style: TextStyle(
@@ -1476,7 +1478,12 @@ class _ManagementScreenState extends State<ManagementScreen> {
       widget.onDataChanged();
       showInfaqSnack(context, 'Budget updated');
     } catch (e) {
-      if (mounted) showInfaqSnack(context, 'Could not save budget: $e');
+      if (mounted) {
+        showInfaqSnack(
+          context,
+          'Could not save budget right now. Please try again.',
+        );
+      }
     }
   }
 
@@ -1523,11 +1530,17 @@ class _ManagementScreenState extends State<ManagementScreen> {
         _transactions.removeWhere((t) => t['id']?.toString() == id);
       });
       unawaited(_refreshBalanceOnly());
+      widget.onDataChanged();
       if (mounted) showInfaqSnack(context, 'Transaction deleted');
       return true;
     } catch (e) {
       if (mounted) setState(() => _deletingTxIds.remove(id));
-      if (mounted) showInfaqSnack(context, 'Could not delete: $e');
+      if (mounted) {
+        showInfaqSnack(
+          context,
+          'Could not delete transaction right now. Please try again.',
+        );
+      }
       return false;
     }
   }
@@ -1571,14 +1584,19 @@ class _ManagementScreenState extends State<ManagementScreen> {
       if (fetched != null && mounted) {
         final fresh = Map<String, dynamic>.from(fetched as Map);
         setState(() {
-          final idx = _transactions.indexWhere((t) => t['id']?.toString() == id);
+          final idx = _transactions.indexWhere(
+            (t) => t['id']?.toString() == id,
+          );
           if (idx >= 0) _transactions[idx] = fresh;
         });
       }
       unawaited(_refreshBalanceOnly());
+      widget.onDataChanged();
       if (mounted) showInfaqSnack(context, 'Transaction updated');
     } catch (e) {
-      if (mounted) showInfaqSnack(context, 'Could not refresh edited row: $e');
+      if (mounted) {
+        showInfaqSnack(context, 'Could not refresh edited row right now.');
+      }
     } finally {
       if (mounted) setState(() => _updatingTxIds.remove(id));
     }
@@ -1618,12 +1636,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final spent = _totalSpentInPeriod();
     final budget = _monthlyBudget;
-    final progress = budget > 0 ? (spent / budget).clamp(0.0, 1.0) : 0.0;
 
     final headerTint = isDark ? _kHeaderGreenDark : _kHeaderGreenLight;
     final headerTintActive = _bulkSelectionActive
-        ? Color.lerp(headerTint, cs.primary, isDark ? 0.22 : 0.14) ??
-            headerTint
+        ? Color.lerp(headerTint, cs.primary, isDark ? 0.22 : 0.14) ?? headerTint
         : headerTint;
 
     return PopScope(
@@ -1660,53 +1676,51 @@ class _ManagementScreenState extends State<ManagementScreen> {
                         onChanged: _onMainTabChanged,
                       ),
                     ],
+                  ),
                 ),
               ),
             ),
-          ),
-          Expanded(
-            child: RefreshIndicator(
-              color: cs.primary,
-              onRefresh: _refreshAll,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 210),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                transitionBuilder: (child, animation) {
-                  final offset = Tween<Offset>(
-                    begin: const Offset(0.06, 0),
-                    end: Offset.zero,
-                  ).animate(animation);
-                  return FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(position: offset, child: child),
-                  );
-                },
-                child: KeyedSubtree(
-                  key: ValueKey(_mainTab.index),
-                  child: _mainTab == _MgmtMainTab.transactions
-                      ? _buildTransactionsTab(
-                          spent: spent,
-                          budget: budget,
-                          progress: progress,
-                        )
-                      : _mainTab == _MgmtMainTab.subscriptions
-                      ? _buildSubscriptionsTab()
-                      : _buildGoalsTab(),
+            Expanded(
+              child: RefreshIndicator(
+                color: cs.primary,
+                onRefresh: _refreshAll,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 210),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) {
+                    final offset = Tween<Offset>(
+                      begin: const Offset(0.06, 0),
+                      end: Offset.zero,
+                    ).animate(animation);
+                    return FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(position: offset, child: child),
+                    );
+                  },
+                  child: KeyedSubtree(
+                    key: ValueKey(_mainTab.index),
+                    child: _mainTab == _MgmtMainTab.transactions
+                        ? _buildTransactionsTab(
+                            spent: spent,
+                            budget: budget,
+                          )
+                        : _mainTab == _MgmtMainTab.subscriptions
+                        ? _buildSubscriptionsTab()
+                        : _buildGoalsTab(),
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
     );
   }
 
   Widget _buildTransactionsTab({
     required double spent,
     required double budget,
-    required double progress,
   }) {
     if (_loadingTx) {
       return ListView(
@@ -1726,7 +1740,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
       children: [
-        _SummaryCard(
+        MonthlySpendingBudgetCard(
           periodTitle: _periodTitle(),
           onPrev: _txPeriodMode == _PeriodMode.month
               ? () => _shiftMonth(-1)
@@ -1739,9 +1753,11 @@ class _ManagementScreenState extends State<ManagementScreen> {
               ? () => _shiftYear(1)
               : null,
           onEditBudget: _editBudget,
+          spentLabel: 'Total spent',
+          budgetLabel: 'Budget',
+          showRemainingLine: false,
           spent: spent,
           budget: budget,
-          progress: progress,
           format: _fmtMoney,
         ),
         const SizedBox(height: 14),
@@ -1779,7 +1795,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   format: _fmtMoney,
                   onTap: () => _openEditTransactionLocal(t),
                   confirmDismissDelete: () => _deleteTransaction(t),
-                  isBusy: _deletingTxIds.contains(t['id']?.toString()) ||
+                  isBusy:
+                      _deletingTxIds.contains(t['id']?.toString()) ||
                       _updatingTxIds.contains(t['id']?.toString()),
                   selectionMode: _txSelectMode,
                   selected: _selectedTxIds.contains(t['id']?.toString()),
@@ -2031,7 +2048,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
   }
 
   /// Relative renewal label under subscription price (calendar days).
-  ({String? text, Color color}) _subscriptionRenewalLine(Map<String, dynamic> s) {
+  ({String? text, Color color}) _subscriptionRenewalLine(
+    Map<String, dynamic> s,
+  ) {
     final cs = Theme.of(context).colorScheme;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -2050,9 +2069,11 @@ class _ManagementScreenState extends State<ManagementScreen> {
 
     final display = SubscriptionRenewal.displayNextRenewal(s);
     if (display == null) return (text: null, color: cs.onSurface);
-    final diff = DateTime(display.year, display.month, display.day)
-        .difference(today)
-        .inDays;
+    final diff = DateTime(
+      display.year,
+      display.month,
+      display.day,
+    ).difference(today).inDays;
     if (diff < 0) {
       return (text: 'Overdue', color: Colors.red.shade700);
     }
@@ -2062,10 +2083,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
     if (diff == 1) {
       return (text: 'Tomorrow', color: _kSubRenewalWarning);
     }
-    return (
-      text: '${diff}d left',
-      color: cs.onSurface.withValues(alpha: 0.5),
-    );
+    return (text: '${diff}d left', color: cs.onSurface.withValues(alpha: 0.5));
   }
 
   String _subscriptionSubtitle(Map<String, dynamic> s) {
@@ -2108,7 +2126,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
         if (fetched != null && mounted) {
           final fresh = Map<String, dynamic>.from(fetched as Map);
           setState(() {
-            final idx = _subscriptions.indexWhere((e) => e['id']?.toString() == id);
+            final idx = _subscriptions.indexWhere(
+              (e) => e['id']?.toString() == id,
+            );
             if (idx >= 0) _subscriptions[idx] = fresh;
           });
         }
@@ -2358,7 +2378,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   exiting: _removingSubIds.contains(s['id']?.toString()),
                   child: _buildSubscriptionDismissibleCard(
                     s,
-                    isBusy: _deletingSubIds.contains(s['id']?.toString()) ||
+                    isBusy:
+                        _deletingSubIds.contains(s['id']?.toString()) ||
                         _updatingSubIds.contains(s['id']?.toString()),
                     selectionMode: _subSelectMode,
                     selected: _selectedSubIds.contains(s['id']?.toString()),
@@ -2383,6 +2404,12 @@ class _ManagementScreenState extends State<ManagementScreen> {
     VoidCallback? onToggleSelect,
   }) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final showSelected = selectionMode && selected;
+    final selectedTint = cs.primary.withValues(alpha: isDark ? 0.18 : 0.1);
+    final cardColor = showSelected
+        ? Color.alphaBlend(selectedTint, cs.surfaceContainerLow)
+        : cs.surfaceContainerLow;
     final sid = s['id']?.toString() ?? s.hashCode.toString();
     final dimInactive = s['is_active'] == false;
     final renewal = _subscriptionRenewalLine(s);
@@ -2417,14 +2444,12 @@ class _ManagementScreenState extends State<ManagementScreen> {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: selectionMode && selected
-                      ? cs.primary
-                      : Colors.transparent,
-                  width: selectionMode && selected ? 2.5 : 0,
+                  color: showSelected ? cs.primary : Colors.transparent,
+                  width: showSelected ? 2 : 0,
                 ),
               ),
               child: Material(
-                color: cs.surfaceContainerLow,
+                color: cardColor,
                 borderRadius: BorderRadius.circular(20),
                 elevation: 0,
                 shadowColor: Colors.transparent,
@@ -2439,7 +2464,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   child: Ink(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(20),
-                      color: cs.surfaceContainerLow,
+                      color: cardColor,
                       boxShadow: [
                         BoxShadow(
                           color: cs.shadow.withValues(
@@ -2454,8 +2479,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
                       ],
                       border: Border.all(
                         color: cs.outline.withValues(
-                          alpha:
-                              Theme.of(context).brightness == Brightness.dark
+                          alpha: Theme.of(context).brightness == Brightness.dark
                               ? 0.35
                               : 0.12,
                         ),
@@ -2466,94 +2490,70 @@ class _ManagementScreenState extends State<ManagementScreen> {
                         horizontal: 12,
                         vertical: 10,
                       ),
-                      child: Stack(
-                        clipBehavior: Clip.none,
+                      child: Row(
                         children: [
-                          Row(
-                            children: [
-                              _subscriptionSquircleIcon(s),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      s['name']?.toString() ?? 'Subscription',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 13,
-                                        color: cs.onSurface,
-                                      ),
+                          _subscriptionSquircleIcon(s),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s['name']?.toString() ?? 'Subscription',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                    color: cs.onSurface,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  _subscriptionSubtitle(s),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: cs.onSurface.withValues(alpha: 0.55),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (isBusy)
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: cs.primary,
+                              ),
+                            )
+                          else
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    _fmtMoney(_readAmount(s['amount'])),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 12.5,
+                                      color: cs.onSurface,
                                     ),
+                                  ),
+                                  if (renewal.text != null) ...[
                                     const SizedBox(height: 3),
                                     Text(
-                                      _subscriptionSubtitle(s),
+                                      renewal.text!,
                                       style: TextStyle(
-                                        fontSize: 11,
-                                        color: cs.onSurface.withValues(
-                                          alpha: 0.55,
-                                        ),
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 10.5,
+                                        height: 1.1,
+                                        color: renewal.color,
                                       ),
                                     ),
                                   ],
-                                ),
-                              ),
-                              if (isBusy)
-                                SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: cs.primary,
-                                  ),
-                                )
-                              else
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 4),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        _fmtMoney(_readAmount(s['amount'])),
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 12.5,
-                                          color: cs.onSurface,
-                                        ),
-                                      ),
-                                      if (renewal.text != null) ...[
-                                        const SizedBox(height: 3),
-                                        Text(
-                                          renewal.text!,
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 10.5,
-                                            height: 1.1,
-                                            color: renewal.color,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          ),
-                          if (selectionMode)
-                            Positioned(
-                              right: 0,
-                              top: 0,
-                              child: AnimatedScale(
-                                duration: const Duration(milliseconds: 200),
-                                curve: Curves.easeOutCubic,
-                                scale: selected ? 1.0 : 0.88,
-                                child: Icon(
-                                  selected
-                                      ? Icons.check_circle_rounded
-                                      : Icons.circle_outlined,
-                                  size: 22,
-                                  color: selected ? cs.primary : cs.outline,
-                                ),
+                                ],
                               ),
                             ),
                         ],
@@ -2606,7 +2606,12 @@ class _ManagementScreenState extends State<ManagementScreen> {
       return true;
     } catch (e) {
       if (mounted) setState(() => _deletingSubIds.remove(id));
-      if (mounted) showInfaqSnack(context, 'Could not delete: $e');
+      if (mounted) {
+        showInfaqSnack(
+          context,
+          'Could not delete subscription right now. Please try again.',
+        );
+      }
       return false;
     }
   }
@@ -2760,6 +2765,11 @@ class _ManagementScreenState extends State<ManagementScreen> {
   }) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final showSelected = selectionMode && selected;
+    final selectedTint = cs.primary.withValues(alpha: isDark ? 0.18 : 0.1);
+    final cardColor = showSelected
+        ? Color.alphaBlend(selectedTint, cs.surfaceContainerLow)
+        : cs.surfaceContainerLow;
     final idStr = g['id']?.toString();
     final gid = idStr ?? g.hashCode.toString();
     final title = g['title']?.toString() ?? 'Goal';
@@ -2804,14 +2814,12 @@ class _ManagementScreenState extends State<ManagementScreen> {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: selectionMode && selected
-                    ? cs.primary
-                    : Colors.transparent,
-                width: selectionMode && selected ? 2.5 : 0,
+                color: showSelected ? cs.primary : Colors.transparent,
+                width: showSelected ? 2 : 0,
               ),
             ),
             child: Material(
-              color: cs.surfaceContainerLow,
+              color: cardColor,
               borderRadius: BorderRadius.circular(20),
               elevation: 0,
               shadowColor: Colors.transparent,
@@ -2865,7 +2873,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
                 child: Ink(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(20),
-                    color: cs.surfaceContainerLow,
+                    color: cardColor,
                     boxShadow: [
                       BoxShadow(
                         color: cs.shadow.withValues(
@@ -2876,111 +2884,82 @@ class _ManagementScreenState extends State<ManagementScreen> {
                       ),
                     ],
                     border: Border.all(
-                      color: cs.outline.withValues(
-                        alpha: isDark ? 0.35 : 0.12,
-                      ),
+                      color: cs.outline.withValues(alpha: isDark ? 0.35 : 0.12),
                     ),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(12, 14, 14, 12),
-                    child: Stack(
-                      clipBehavior: Clip.none,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  width: 52,
-                                  height: 52,
-                                  decoration: BoxDecoration(
-                                    color: goalColor.withValues(alpha: 0.2),
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(
-                                      color: goalColor.withValues(alpha: 0.38),
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: Icon(
-                                    goalIcon,
-                                    color: goalColor,
-                                    size: 26,
-                                  ),
+                            Container(
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                color: goalColor.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: goalColor.withValues(alpha: 0.38),
+                                  width: 1,
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        title,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 16,
-                                          color: cs.onSurface,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${_fmtMoney(current)} · $deadline',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: cs.onSurface.withValues(
-                                            alpha: 0.55,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 4),
-                                  child: Text(
-                                    _fmtMoney(target),
+                              ),
+                              child: Icon(goalIcon, color: goalColor, size: 26),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    title,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      fontWeight: FontWeight.w900,
+                                      fontWeight: FontWeight.w800,
                                       fontSize: 16,
                                       color: cs.onSurface,
                                     ),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${_fmtMoney(current)} · $deadline',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: cs.onSurface.withValues(
+                                        alpha: 0.55,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            const SizedBox(height: 12),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: LinearProgressIndicator(
-                                value: progress.clamp(0.0, 1.0),
-                                minHeight: 8,
-                                backgroundColor: cs.surfaceContainerHighest,
-                                color: goalColor,
+                            const SizedBox(width: 8),
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: Text(
+                                _fmtMoney(target),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 16,
+                                  color: cs.onSurface,
+                                ),
                               ),
                             ),
                           ],
                         ),
-                        if (selectionMode)
-                          Positioned(
-                            right: 0,
-                            top: 0,
-                            child: AnimatedScale(
-                              duration: const Duration(milliseconds: 200),
-                              curve: Curves.easeOutCubic,
-                              scale: selected ? 1.0 : 0.88,
-                              child: Icon(
-                                selected
-                                    ? Icons.check_circle_rounded
-                                    : Icons.circle_outlined,
-                                size: 24,
-                                color: selected ? cs.primary : cs.outline,
-                              ),
-                            ),
+                        const SizedBox(height: 12),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: LinearProgressIndicator(
+                            value: progress.clamp(0.0, 1.0),
+                            minHeight: 8,
+                            backgroundColor: cs.surfaceContainerHighest,
+                            color: goalColor,
                           ),
+                        ),
                       ],
                     ),
                   ),
@@ -3085,7 +3064,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
                 exiting: _removingGoalIds.contains(g['id']?.toString()),
                 child: _buildGoalDismissibleCard(
                   g,
-                  isBusy: _deletingGoalIds.contains(g['id']?.toString()) ||
+                  isBusy:
+                      _deletingGoalIds.contains(g['id']?.toString()) ||
                       _updatingGoalIds.contains(g['id']?.toString()),
                   selectionMode: _goalSelectMode,
                   selected: _selectedGoalIds.contains(g['id']?.toString()),
@@ -3139,7 +3119,12 @@ class _ManagementScreenState extends State<ManagementScreen> {
       return true;
     } catch (e) {
       if (mounted) setState(() => _deletingGoalIds.remove(id));
-      if (mounted) showInfaqSnack(context, 'Could not delete: $e');
+      if (mounted) {
+        showInfaqSnack(
+          context,
+          'Could not delete goal right now. Please try again.',
+        );
+      }
       return false;
     }
   }
@@ -3217,191 +3202,6 @@ class _MgmtPillTabs extends StatelessWidget {
           seg('Subscriptions', _MgmtMainTab.subscriptions),
           const SizedBox(width: 4),
           seg('Goals', _MgmtMainTab.goals),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
-    required this.periodTitle,
-    required this.onPrev,
-    required this.onNext,
-    required this.onEditBudget,
-    required this.spent,
-    required this.budget,
-    required this.progress,
-    required this.format,
-  });
-
-  static const double _cardRadius = 16;
-  static const double _amountSize = 17;
-
-  final String periodTitle;
-  final VoidCallback? onPrev;
-  final VoidCallback? onNext;
-  final VoidCallback onEditBudget;
-  final double spent;
-  final double budget;
-  final double progress;
-  final String Function(double) format;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final onSurface = cs.onSurface;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(_cardRadius),
-        border: Border.all(
-          color: cs.outline.withValues(alpha: isDark ? 0.22 : 0.12),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: cs.shadow.withValues(alpha: isDark ? 0.22 : 0.06),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              if (onPrev != null)
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  onPressed: onPrev,
-                  icon: Icon(
-                    Icons.chevron_left_rounded,
-                    color: cs.primary,
-                    size: 22,
-                  ),
-                )
-              else
-                const SizedBox(width: 40),
-              Expanded(
-                child: Text(
-                  periodTitle,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                    color: cs.primary,
-                  ),
-                ),
-              ),
-              if (onNext != null)
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  onPressed: onNext,
-                  icon: Icon(
-                    Icons.chevron_right_rounded,
-                    color: cs.primary,
-                    size: 22,
-                  ),
-                )
-              else
-                const SizedBox(width: 40),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                onPressed: onEditBudget,
-                icon: Icon(Icons.edit_outlined, color: cs.primary, size: 20),
-                tooltip: 'Edit budget',
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Total spent',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: onSurface.withValues(alpha: 0.55),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        format(spent),
-                        style: TextStyle(
-                          fontSize: _amountSize,
-                          fontWeight: FontWeight.w800,
-                          color: cs.primary,
-                          height: 1.1,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 2, 10, 0),
-                child: SizedBox(
-                  height: 40,
-                  child: Center(
-                    child: Container(
-                      width: 1,
-                      height: 36,
-                      color: cs.outline.withValues(alpha: 0.14),
-                    ),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'Budget',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: onSurface.withValues(alpha: 0.55),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        budget > 0 ? format(budget) : '—',
-                        style: TextStyle(
-                          fontSize: _amountSize,
-                          fontWeight: FontWeight.w800,
-                          color: onSurface.withValues(alpha: 0.5),
-                          height: 1.1,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: budget > 0 ? progress.clamp(0.0, 1.0) : 0,
-              minHeight: 6,
-              backgroundColor: cs.surfaceContainerHighest,
-              color: cs.primary,
-            ),
-          ),
         ],
       ),
     );
@@ -3727,6 +3527,11 @@ class _MgmtTxTileState extends State<_MgmtTxTile> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final showSelected = widget.selectionMode && widget.selected;
+    final selectedTint = cs.primary.withValues(alpha: isDark ? 0.18 : 0.1);
+    final cardColor = showSelected
+        ? Color.alphaBlend(selectedTint, cs.surfaceContainerLow)
+        : cs.surfaceContainerLow;
     final amountMaxWidth = (MediaQuery.sizeOf(context).width * 0.28).clamp(
       90.0,
       132.0,
@@ -3826,10 +3631,8 @@ class _MgmtTxTileState extends State<_MgmtTxTile> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: widget.selectionMode && widget.selected
-              ? cs.primary
-              : Colors.transparent,
-          width: widget.selectionMode && widget.selected ? 2.5 : 0,
+          color: showSelected ? cs.primary : Colors.transparent,
+          width: showSelected ? 2 : 0,
         ),
         boxShadow: [
           BoxShadow(
@@ -3844,7 +3647,7 @@ class _MgmtTxTileState extends State<_MgmtTxTile> {
         ],
       ),
       child: Material(
-        color: cs.surfaceContainerLow,
+        color: cardColor,
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           onTap: () {
@@ -3970,33 +3773,6 @@ class _MgmtTxTileState extends State<_MgmtTxTile> {
     );
 
     final id = widget.data['id']?.toString() ?? '';
-    final stacked = Stack(
-      clipBehavior: Clip.none,
-      children: [
-        tile,
-        if (widget.selectionMode)
-          Positioned(
-            top: 6,
-            right: 8,
-            child: AnimatedScale(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOutCubic,
-              scale: widget.selected ? 1.0 : 0.88,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 200),
-                opacity: 1,
-                child: Icon(
-                  widget.selected
-                      ? Icons.check_circle_rounded
-                      : Icons.circle_outlined,
-                  size: 24,
-                  color: widget.selected ? cs.primary : cs.outline,
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -4022,7 +3798,7 @@ class _MgmtTxTileState extends State<_MgmtTxTile> {
           _MgmtLeafTooltipOverlay.hide();
           return widget.confirmDismissDelete();
         },
-        child: IgnorePointer(ignoring: widget.isBusy, child: stacked),
+        child: IgnorePointer(ignoring: widget.isBusy, child: tile),
       ),
     );
   }

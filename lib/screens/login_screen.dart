@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/oauth_redirect.dart';
 import 'package:infaq/screens/register_flow_screen.dart';
+import 'package:infaq/services/auth_navigation_service.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -30,16 +30,16 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     // Google (and other OAuth) can set the session after the browser returns; pop this route then.
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      debugPrint(
+        '[AuthNav] login onAuthStateChange event=${data.event} '
+        'hasSession=${data.session != null}',
+      );
       if (data.session == null) return;
       if (!mounted) return;
-      if (!Navigator.of(context).canPop()) return;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        final nav = Navigator.of(context);
-        if (nav.canPop()) {
-          nav.popUntil((route) => route.isFirst);
-        }
-      });
+      AuthNavigationService.clearAuthOverlaysIfSignedIn(
+        context,
+        reason: 'login_listener_${data.event.name}',
+      );
     });
   }
 
@@ -60,6 +60,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    debugPrint('[AuthNav] sign-in start (password) email=$email');
     setState(() => _loading = true);
     var signedIn = false;
     try {
@@ -68,26 +69,49 @@ class _LoginScreenState extends State<LoginScreen> {
         password: password,
       );
       if (!mounted) return;
-      if (Supabase.instance.client.auth.currentSession == null) {
-        showInfaqSnack(context, 'No active session. Confirm your email if sign-up required verification.');
+
+      var session = Supabase.instance.client.auth.currentSession;
+      if (session == null) {
+        debugPrint('[AuthNav] sign-in: session null after await, polling…');
+        session = await AuthNavigationService.waitForSession();
+      }
+      if (!mounted) return;
+
+      if (session == null) {
+        debugPrint(
+          '[AuthNav] sign-in: no session after poll — email verification likely',
+        );
+        if (mounted) {
+          showInfaqSnack(
+            context,
+            'Please verify your email before signing in, then try again.',
+          );
+        }
         return;
       }
+
+      debugPrint('[AuthNav] sign-in success user=${session.user.id}');
       signedIn = true;
+      AuthNavigationService.clearAuthOverlaysIfSignedIn(
+        context,
+        reason: 'password_sign_in',
+      );
     } on AuthException catch (e) {
       if (!mounted) return;
+      debugPrint('[AuthNav] sign-in AuthException: ${e.message}');
       showInfaqSnack(context, e.message);
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[AuthNav] sign-in error: $e\n$st');
       if (!mounted) return;
       showInfaqSnack(context, 'Sign in failed. Please try again.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
     if (!mounted || !signedIn) return;
-    // AuthGate shows home under this route, but login was pushed above welcome — clear the stack.
-    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   Future<void> _signInWithGoogle() async {
+    debugPrint('[AuthNav] sign-in start (Google OAuth)');
     setState(() => _googleLoading = true);
     try {
       await Supabase.instance.client.auth.signInWithOAuth(
@@ -195,25 +219,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _SocialIcon(
-                      icon: FontAwesomeIcons.apple,
-                      onTap: () => showInfaqSnack(context, 'Apple sign-in is not available yet.'),
-                    ),
-                    const SizedBox(width: 20),
-                    _SocialIcon(
-                      icon: FontAwesomeIcons.google,
-                      onTap: _loading ? null : _signInWithGoogle,
-                      loading: _googleLoading,
-                    ),
-                    const SizedBox(width: 20),
-                    _SocialIcon(
-                      icon: FontAwesomeIcons.facebookF,
-                      onTap: () => showInfaqSnack(context, 'Facebook sign-in is not available yet.'),
-                    ),
-                  ],
+                InfaqGoogleAuthButton(
+                  onPressed: _loading ? null : _signInWithGoogle,
+                  isLoading: _googleLoading,
+                  label: 'Continue with Google',
                 ),
                 const SizedBox(height: 16),
                 Center(
@@ -255,50 +264,6 @@ class _LoginScreenState extends State<LoginScreen> {
         ],
       ),
     ),
-    );
-  }
-}
-
-class _SocialIcon extends StatelessWidget {
-  const _SocialIcon({
-    required this.icon,
-    this.onTap,
-    this.loading = false,
-  });
-
-  final IconData icon;
-  final VoidCallback? onTap;
-  final bool loading;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return InkResponse(
-      onTap: loading || onTap == null ? null : onTap,
-      radius: 26,
-      child: Container(
-        width: 44,
-        height: 44,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(22),
-          boxShadow: [
-            BoxShadow(
-              color: Color(Theme.of(context).brightness == Brightness.dark ? 0x59000000 : 0x11000000),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: loading
-            ? SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
-              )
-            : FaIcon(icon, size: 20, color: cs.onSurface.withValues(alpha: 0.9)),
-      ),
     );
   }
 }

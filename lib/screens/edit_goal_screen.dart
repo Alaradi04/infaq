@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/goal_icon_picker.dart';
 import 'package:infaq/goal_local_storage.dart';
+import 'package:infaq/security/input_sanitizer.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
@@ -212,14 +213,25 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
       await _clearExtras();
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      if (mounted) showInfaqSnack(context, 'Could not delete: $e');
+      if (mounted) {
+        showInfaqSnack(
+          context,
+          'Could not delete goal right now. Please try again.',
+        );
+      }
     }
   }
 
   Future<void> _save() async {
-    final title = _titleCtrl.text.trim();
-    final target = double.tryParse(_targetCtrl.text.replaceAll(',', ''));
-    final reached = double.tryParse(_reachedCtrl.text.replaceAll(',', '')) ?? 0;
+    final title = InputSanitizer.cleanText(_titleCtrl.text, maxLength: 80);
+    final target = InputSanitizer.parsePositiveAmount(_targetCtrl.text);
+    final reached =
+        InputSanitizer.parsePositiveAmount(
+          _reachedCtrl.text,
+          min: 0,
+          max: 1000000000,
+        ) ??
+        0;
 
     if (title.isEmpty) {
       showInfaqSnack(context, 'Enter a name for this goal.');
@@ -271,7 +283,10 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
           'Could not save: check database access for goals.',
         );
       } else {
-        showInfaqSnack(context, 'Could not save: $e');
+        showInfaqSnack(
+          context,
+          'Could not save goal right now. Please try again.',
+        );
       }
     }
   }

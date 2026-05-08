@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/goal_icon_picker.dart';
 import 'package:infaq/goal_local_storage.dart';
+import 'package:infaq/security/input_sanitizer.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
@@ -82,7 +83,9 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
       lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
-          data: Theme.of(context).copyWith(colorScheme: const ColorScheme.light(primary: kServiceFormGreen)),
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(primary: kServiceFormGreen),
+          ),
           child: child!,
         );
       },
@@ -93,9 +96,15 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
   void _cancel() => Navigator.pop(context);
 
   Future<void> _save() async {
-    final title = _nameCtrl.text.trim();
-    final target = double.tryParse(_targetCtrl.text.replaceAll(',', ''));
-    final current = double.tryParse(_savedCtrl.text.replaceAll(',', '')) ?? 0;
+    final title = InputSanitizer.cleanText(_nameCtrl.text, maxLength: 80);
+    final target = InputSanitizer.parsePositiveAmount(_targetCtrl.text);
+    final current =
+        InputSanitizer.parsePositiveAmount(
+          _savedCtrl.text,
+          min: 0,
+          max: 1000000000,
+        ) ??
+        0;
 
     if (title.isEmpty) {
       showInfaqSnack(context, 'Enter a title for your goal.');
@@ -106,7 +115,10 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
       return;
     }
     if (current < 0 || current > target) {
-      showInfaqSnack(context, 'Current saved amount must be between 0 and the target.');
+      showInfaqSnack(
+        context,
+        'Current saved amount must be between 0 and the target.',
+      );
       return;
     }
 
@@ -160,7 +172,10 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
           'Database blocked the save: add RLS policies for goals (see supabase/migrations).',
         );
       } else {
-        showInfaqSnack(context, 'Could not save goal: $e');
+        showInfaqSnack(
+          context,
+          'Could not save goal right now. Please try again.',
+        );
       }
     }
   }
@@ -174,169 +189,183 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
 
     return Scaffold(
       backgroundColor: cs.surface,
-        extendBody: true,
-        bottomNavigationBar: InfaqBottomNavBar(
-          tabIndex: -1,
-          onHome: _cancel,
-          onCurrency: () => Navigator.pop(context, 1),
-          onAdd: () {},
-          onAnalytics: () => Navigator.pop(context, 2),
-          onProfile: () => Navigator.pop(context, 3),
-        ),
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            InfaqServiceFormHeader(
-              backgroundColor: headerBg,
-              title: 'Add Goals',
-              onBack: _cancel,
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(22, 20, 22, 120),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    InfaqLabeledPillField(
-                      label: 'Title',
-                      child: InfaqPillTextField(
-                        controller: _nameCtrl,
-                        hintText: 'PhD, new car, emergency fund…',
-                        textInputAction: TextInputAction.next,
-                      ),
+      extendBody: true,
+      bottomNavigationBar: InfaqBottomNavBar(
+        tabIndex: -1,
+        onHome: _cancel,
+        onCurrency: () => Navigator.pop(context, 1),
+        onAdd: () {},
+        onAnalytics: () => Navigator.pop(context, 2),
+        onProfile: () => Navigator.pop(context, 3),
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InfaqServiceFormHeader(
+            backgroundColor: headerBg,
+            title: 'Add Goals',
+            onBack: _cancel,
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(22, 20, 22, 120),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  InfaqLabeledPillField(
+                    label: 'Title',
+                    child: InfaqPillTextField(
+                      controller: _nameCtrl,
+                      hintText: 'PhD, new car, emergency fund…',
+                      textInputAction: TextInputAction.next,
                     ),
-                    const SizedBox(height: 18),
-                    Text(
-                      'Goal icon',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: cs.onSurface.withValues(alpha: 0.65),
-                      ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Goal icon',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface.withValues(alpha: 0.65),
                     ),
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: InkWell(
-                        onTap: () {
-                          showGoalIconPickerSheet(
-                            context,
-                            selectedIcon: _goalIcon,
-                            selectedColor: _goalIconColor,
-                            onSelected: (ic, color) => setState(() {
-                              _goalIcon = ic;
-                              _goalIconColor = color;
-                            }),
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(20),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 64,
-                              height: 64,
-                              decoration: BoxDecoration(
-                                color: _goalIconColor.withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border.all(
-                                  color: _goalIconColor.withValues(alpha: 0.28),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Icon(_goalIcon, color: _goalIconColor, size: 32),
-                            ),
-                            const SizedBox(width: 14),
-                            Text(
-                              'Tap to choose icon',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: _goalIconColor,
-                                decoration: TextDecoration.underline,
-                                decorationColor: _goalIconColor.withValues(alpha: 0.5),
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: InkWell(
+                      onTap: () {
+                        showGoalIconPickerSheet(
+                          context,
+                          selectedIcon: _goalIcon,
+                          selectedColor: _goalIconColor,
+                          onSelected: (ic, color) => setState(() {
+                            _goalIcon = ic;
+                            _goalIconColor = color;
+                          }),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(20),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 64,
+                            height: 64,
+                            decoration: BoxDecoration(
+                              color: _goalIconColor.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                color: _goalIconColor.withValues(alpha: 0.28),
+                                width: 1,
                               ),
                             ),
-                          ],
+                            child: Icon(
+                              _goalIcon,
+                              color: _goalIconColor,
+                              size: 32,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Text(
+                            'Tap to choose icon',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: _goalIconColor,
+                              decoration: TextDecoration.underline,
+                              decorationColor: _goalIconColor.withValues(
+                                alpha: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  InfaqLabeledPillField(
+                    label: 'Target amount',
+                    child: InfaqPillAmountStepper(
+                      controller: _targetCtrl,
+                      currencySuffix: suffix,
+                      showStepper: false,
+                      onChanged: () => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  InfaqLabeledPillField(
+                    label: 'Current saved amount',
+                    child: InfaqPillAmountStepper(
+                      controller: _savedCtrl,
+                      currencySuffix: suffix,
+                      showStepper: false,
+                      onChanged: () => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  InfaqLabeledPillField(
+                    label: 'Date',
+                    child: InfaqPillDateRow(
+                      labelText: formatGoalDateLong(_targetDate),
+                      onTap: _pickDate,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  InfaqLabeledPillField(
+                    label: 'Monthly saving amount',
+                    child: InfaqPillAmountStepper(
+                      controller: _monthlyCtrl,
+                      currencySuffix: suffix,
+                      showStepper: false,
+                      onChanged: () => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _timeToGoalLine(),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  InfaqPrimaryButton(
+                    label: 'Save change',
+                    isLoading: _saving,
+                    onPressed: _saving ? null : _save,
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: OutlinedButton(
+                      onPressed: _saving ? null : _cancel,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: kServiceFormGreen,
+                        side: BorderSide(
+                          color: kServiceFormGreen.withValues(alpha: 0.45),
+                          width: 1.4,
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    InfaqLabeledPillField(
-                      label: 'Target amount',
-                      child: InfaqPillAmountStepper(
-                        controller: _targetCtrl,
-                        currencySuffix: suffix,
-                      showStepper: false,
-                        onChanged: () => setState(() {}),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    InfaqLabeledPillField(
-                      label: 'Current saved amount',
-                      child: InfaqPillAmountStepper(
-                        controller: _savedCtrl,
-                        currencySuffix: suffix,
-                      showStepper: false,
-                        onChanged: () => setState(() {}),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    InfaqLabeledPillField(
-                      label: 'Date',
-                      child: InfaqPillDateRow(
-                        labelText: formatGoalDateLong(_targetDate),
-                        onTap: _pickDate,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    InfaqLabeledPillField(
-                      label: 'Monthly saving amount',
-                      child: InfaqPillAmountStepper(
-                        controller: _monthlyCtrl,
-                        currencySuffix: suffix,
-                      showStepper: false,
-                        onChanged: () => setState(() {}),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      _timeToGoalLine(),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        height: 1.35,
-                        fontWeight: FontWeight.w600,
-                        color: cs.onSurface.withValues(alpha: 0.5),
-                      ),
-                    ),
-                    const SizedBox(height: 28),
-                    InfaqPrimaryButton(
-                      label: 'Save change',
-                      isLoading: _saving,
-                      onPressed: _saving ? null : _save,
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: OutlinedButton(
-                        onPressed: _saving ? null : _cancel,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: kServiceFormGreen,
-                          side: BorderSide(color: kServiceFormGreen.withValues(alpha: 0.45), width: 1.4),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                          backgroundColor: cs.surface,
-                          elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
                         ),
-                        child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700)),
+                        backgroundColor: cs.surface,
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
     );
   }
 }

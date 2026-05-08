@@ -152,9 +152,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
       final cards = await _aiService.generateDetailedInsights(
         period: period,
         forceRefresh: forceRefresh,
-        reason: forceRefresh
-            ? 'insights_pull_refresh'
-            : 'insights_tab_$period',
+        reason: forceRefresh ? 'insights_pull_refresh' : 'insights_tab_$period',
       );
       if (!mounted) return;
       _cachedDetailedInsights[period] = cards;

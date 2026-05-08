@@ -15,7 +15,8 @@ class NotificationSettingsScreen extends StatefulWidget {
   const NotificationSettingsScreen({super.key});
 
   @override
-  State<NotificationSettingsScreen> createState() => _NotificationSettingsScreenState();
+  State<NotificationSettingsScreen> createState() =>
+      _NotificationSettingsScreenState();
 }
 
 class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
@@ -44,8 +45,11 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      debugPrint('[Permissions] notification settings resumed — refresh listener');
       _refreshListenerStatus();
-      BankNotificationSyncService.instance.syncPendingBankTransactions(trigger: 'settings_resumed');
+      BankNotificationSyncService.scheduleDebouncedSync(
+        trigger: 'settings_resumed',
+      );
     }
   }
 
@@ -55,8 +59,10 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       _error = null;
     });
     try {
-      final p = await NotificationPreferencesService.instance.loadOrCreateForSettings();
-      final enabled = await BankNotificationSyncService.instance.isNotificationListenerEnabled();
+      final p = await NotificationPreferencesService.instance
+          .loadOrCreateForSettings();
+      final enabled = await BankNotificationSyncService.instance
+          .isNotificationListenerEnabled();
       if (!mounted) return;
       setState(() {
         _allowNotifications = p.notificationsEnabled;
@@ -79,10 +85,15 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       _savingNotifications = true;
     });
     try {
-      await NotificationPreferencesService.instance.updateNotificationsEnabled(v);
+      await NotificationPreferencesService.instance.updateNotificationsEnabled(
+        v,
+      );
     } catch (e) {
       if (mounted) {
-        showInfaqSnack(context, 'Could not save: $e');
+        showInfaqSnack(
+          context,
+          'Could not save settings right now. Please try again.',
+        );
         setState(() => _allowNotifications = !v);
       }
     } finally {
@@ -96,15 +107,20 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       _savingSms = true;
     });
     try {
-      await NotificationPreferencesService.instance.updateSmsAutoRecordingEnabled(v);
+      await NotificationPreferencesService.instance
+          .updateSmsAutoRecordingEnabled(v);
       if (v) {
         await BankNotificationSyncService.instance.syncPendingBankTransactions(
           trigger: 'auto_recording_enabled',
+          bypassThrottle: true,
         );
       }
     } catch (e) {
       if (mounted) {
-        showInfaqSnack(context, 'Could not save: $e');
+        showInfaqSnack(
+          context,
+          'Could not save settings right now. Please try again.',
+        );
         setState(() => _smsAutoRecording = !v);
       }
     } finally {
@@ -113,7 +129,8 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   }
 
   Future<void> _refreshListenerStatus() async {
-    final enabled = await BankNotificationSyncService.instance.isNotificationListenerEnabled();
+    final enabled = await BankNotificationSyncService.instance
+        .isNotificationListenerEnabled();
     if (!mounted) return;
     setState(() => _listenerEnabled = enabled);
   }
@@ -124,8 +141,12 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final headerBg = isDark ? _kHeaderMintDark : _kHeaderMint;
     final muted = cs.onSurface.withValues(alpha: 0.55);
-    final guidanceBg = isDark ? cs.surfaceContainerHigh : const Color(0xFFEEF7F0);
-    final guidanceBorder = isDark ? cs.outline.withValues(alpha: 0.35) : const Color(0xFFD4E3D8);
+    final guidanceBg = isDark
+        ? cs.surfaceContainerHigh
+        : const Color(0xFFEEF7F0);
+    final guidanceBorder = isDark
+        ? cs.outline.withValues(alpha: 0.35)
+        : const Color(0xFFD4E3D8);
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -170,11 +191,17 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                             padding: const EdgeInsets.only(top: 6, right: 8),
                             child: Text(
                               'Receive important alerts, reminders, and AI insights.',
-                              style: TextStyle(fontSize: 13, height: 1.35, color: muted),
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1.35,
+                                color: muted,
+                              ),
                             ),
                           ),
                           value: _allowNotifications,
-                          onChanged: _savingNotifications ? null : _onAllowNotificationsChanged,
+                          onChanged: _savingNotifications
+                              ? null
+                              : _onAllowNotificationsChanged,
                           activeTrackColor: isDark ? cs.primary : _kPrimary,
                           activeThumbColor: Colors.white,
                           inactiveTrackColor: Colors.grey.shade300,
@@ -195,7 +222,11 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                             padding: const EdgeInsets.only(top: 6, right: 8),
                             child: Text(
                               'Allow INFAQ to detect bank transaction notifications and record expenses automatically.',
-                              style: TextStyle(fontSize: 13, height: 1.35, color: muted),
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1.35,
+                                color: muted,
+                              ),
                             ),
                           ),
                           value: _smsAutoRecording,
@@ -212,13 +243,19 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                                 ? 'Notification access enabled'
                                 : 'Notification access not enabled',
                             style: TextStyle(
-                              color: _listenerEnabled ? cs.primary : cs.onSurface,
+                              color: _listenerEnabled
+                                  ? cs.primary
+                                  : cs.onSurface,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
                           trailing: Icon(
-                            _listenerEnabled ? Icons.check_circle : Icons.error_outline,
-                            color: _listenerEnabled ? cs.primary : Colors.orange,
+                            _listenerEnabled
+                                ? Icons.check_circle
+                                : Icons.error_outline,
+                            color: _listenerEnabled
+                                ? cs.primary
+                                : Colors.orange,
                           ),
                         ),
                         const SizedBox(height: 14),
@@ -232,7 +269,11 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(Icons.info_outline_rounded, color: isDark ? cs.primary : _kPrimary, size: 22),
+                              Icon(
+                                Icons.info_outline_rounded,
+                                color: isDark ? cs.primary : _kPrimary,
+                                size: 22,
+                              ),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
@@ -242,7 +283,11 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                                   '3. Choose INFAQ.\n'
                                   '4. Enable notification access.\n'
                                   '5. Keep bank app notifications enabled.',
-                                  style: TextStyle(fontSize: 12.5, height: 1.35, color: muted),
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    height: 1.35,
+                                    color: muted,
+                                  ),
                                 ),
                               ),
                             ],
@@ -251,18 +296,22 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                         const SizedBox(height: 12),
                         FilledButton(
                           onPressed: () async {
-                            await BankNotificationSyncService.instance.openNotificationListenerSettings();
+                            await BankNotificationSyncService.instance
+                                .openNotificationListenerSettings();
                           },
                           child: const Text('Open Android settings'),
                         ),
                         const SizedBox(height: 8),
                         OutlinedButton(
                           onPressed: () async {
-                            await BankNotificationSyncService.instance.syncPendingBankTransactions(
-                              trigger: 'manual_settings',
-                            );
+                            await BankNotificationSyncService.instance
+                                .syncPendingBankTransactions(
+                                  trigger: 'manual_settings',
+                                  bypassThrottle: true,
+                                );
                             await _refreshListenerStatus();
-                            if (mounted) showInfaqSnack(context, 'Sync requested');
+                            if (!context.mounted) return;
+                            showInfaqSnack(context, 'Sync requested');
                           },
                           child: const Text('Sync Pending Transactions'),
                         ),

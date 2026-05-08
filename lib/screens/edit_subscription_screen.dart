@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/profile/subscription_icon_storage.dart';
+import 'package:infaq/security/input_sanitizer.dart';
 import 'package:infaq/subscription/subscription_analytics.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
@@ -38,10 +39,7 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
   bool _uploadingIcon = false;
   bool _saving = false;
 
-  static const _cycles = [
-    ('monthly', 'Monthly'),
-    ('yearly', 'Yearly'),
-  ];
+  static const _cycles = [('monthly', 'Monthly'), ('yearly', 'Yearly')];
 
   String? _currencySuffix() {
     switch (widget.currencyCode?.toUpperCase()) {
@@ -91,7 +89,12 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
     if (user == null) return;
     setState(() => _uploadingIcon = true);
     try {
-      final x = await _picker.pickImage(source: source, maxWidth: 512, maxHeight: 512, imageQuality: 88);
+      final x = await _picker.pickImage(
+        source: source,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 88,
+      );
       if (x == null || !mounted) {
         setState(() => _uploadingIcon = false);
         return;
@@ -100,8 +103,11 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
       final lower = x.name.toLowerCase();
       final ext = lower.endsWith('.png') ? 'png' : 'jpg';
       final mime = ext == 'png' ? 'image/png' : 'image/jpeg';
-      final path = '${user.id}/sub_${DateTime.now().millisecondsSinceEpoch}.$ext';
-      await Supabase.instance.client.storage.from(InfaqSubscriptionIconStorage.bucket).uploadBinary(
+      final path =
+          '${user.id}/sub_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      await Supabase.instance.client.storage
+          .from(InfaqSubscriptionIconStorage.bucket)
+          .uploadBinary(
             path,
             bytes,
             fileOptions: FileOptions(contentType: mime),
@@ -115,7 +121,10 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _uploadingIcon = false);
-        showInfaqSnack(context, 'Could not upload icon: $e');
+        showInfaqSnack(
+          context,
+          'Could not upload icon right now. Please try again.',
+        );
       }
     }
   }
@@ -123,7 +132,9 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
   Future<void> _onEditIcon() async {
     await showModalBottomSheet<void>(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -212,7 +223,9 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
       lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
-          data: Theme.of(context).copyWith(colorScheme: const ColorScheme.light(primary: kServiceFormGreen)),
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(primary: kServiceFormGreen),
+          ),
           child: child!,
         );
       },
@@ -221,8 +234,8 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
   }
 
   Future<void> _save() async {
-    final name = _nameCtrl.text.trim();
-    final amount = double.tryParse(_amountCtrl.text.replaceAll(',', '').replaceAll(r'$', ''));
+    final name = InputSanitizer.cleanText(_nameCtrl.text, maxLength: 80);
+    final amount = InputSanitizer.parsePositiveAmount(_amountCtrl.text);
     final id = widget.subscription['id']?.toString();
     final user = Supabase.instance.client.auth.currentUser;
     if (id == null || user == null) return;
@@ -251,14 +264,21 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
         patch['icon_url'] = _iconStoragePath;
       }
 
-      await Supabase.instance.client.from('subscriptions').update(patch).eq('id', id).eq('user_id', user.id);
+      await Supabase.instance.client
+          .from('subscriptions')
+          .update(patch)
+          .eq('id', id)
+          .eq('user_id', user.id);
 
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
-        showInfaqSnack(context, 'Could not save: $e');
+        showInfaqSnack(
+          context,
+          'Could not save subscription right now. Please try again.',
+        );
       }
     }
   }
@@ -272,9 +292,15 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete subscription?'),
-        content: Text('Remove "${_nameCtrl.text}"?', style: TextStyle(color: Colors.black.withValues(alpha: 0.7))),
+        content: Text(
+          'Remove "${_nameCtrl.text}"?',
+          style: TextStyle(color: Colors.black.withValues(alpha: 0.7)),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
@@ -289,13 +315,24 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
       final path = _iconStoragePath?.trim();
       if (path != null && path.isNotEmpty) {
         try {
-          await Supabase.instance.client.storage.from(InfaqSubscriptionIconStorage.bucket).remove([path]);
+          await Supabase.instance.client.storage
+              .from(InfaqSubscriptionIconStorage.bucket)
+              .remove([path]);
         } catch (_) {}
       }
-      await Supabase.instance.client.from('subscriptions').delete().eq('id', id).eq('user_id', user.id);
+      await Supabase.instance.client
+          .from('subscriptions')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', user.id);
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      if (mounted) showInfaqSnack(context, 'Could not delete: $e');
+      if (mounted) {
+        showInfaqSnack(
+          context,
+          'Could not delete subscription right now. Please try again.',
+        );
+      }
     }
   }
 
@@ -336,7 +373,11 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
             onBack: () => Navigator.pop(context),
             trailing: IconButton(
               onPressed: _delete,
-              icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade600, size: 24),
+              icon: Icon(
+                Icons.delete_outline_rounded,
+                color: Colors.red.shade600,
+                size: 24,
+              ),
               tooltip: 'Delete',
             ),
           ),
@@ -368,7 +409,9 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
                             vertical: 12,
                           ),
                           decoration: BoxDecoration(
-                            color: isDark ? cs.surfaceContainerHigh : const Color(0xFFF7F8F7),
+                            color: isDark
+                                ? cs.surfaceContainerHigh
+                                : const Color(0xFFF7F8F7),
                             borderRadius: BorderRadius.circular(22),
                             border: Border.all(
                               color: kServiceFormGreen.withValues(alpha: 0.2),
@@ -381,13 +424,16 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
                                 children: [
                                   CircleAvatar(
                                     radius: 28,
-                                    backgroundColor: isDark ? cs.surfaceContainerHighest : Colors.white,
+                                    backgroundColor: isDark
+                                        ? cs.surfaceContainerHighest
+                                        : Colors.white,
                                     backgroundImage: _iconProvider(),
-                                    child:
-                                        _iconProvider() == null
+                                    child: _iconProvider() == null
                                         ? Icon(
                                             Icons.add_photo_alternate_outlined,
-                                            color: cs.onSurface.withValues(alpha: 0.5),
+                                            color: cs.onSurface.withValues(
+                                              alpha: 0.5,
+                                            ),
                                             size: 28,
                                           )
                                         : null,
@@ -464,7 +510,12 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
                     toggled: _isActive,
                     child: Container(
                       decoration: infaqServicePillDecoration(context),
-                      padding: const EdgeInsets.only(left: 16, right: 8, top: 4, bottom: 4),
+                      padding: const EdgeInsets.only(
+                        left: 16,
+                        right: 8,
+                        top: 4,
+                        bottom: 4,
+                      ),
                       child: Row(
                         children: [
                           Text(
@@ -480,7 +531,9 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
                             value: _isActive,
                             onChanged: (v) => setState(() => _isActive = v),
                             activeTrackColor: kServiceFormGreen,
-                            inactiveTrackColor: cs.onSurface.withValues(alpha: 0.2),
+                            inactiveTrackColor: cs.onSurface.withValues(
+                              alpha: 0.2,
+                            ),
                           ),
                         ],
                       ),
@@ -524,5 +577,4 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
       ),
     );
   }
-
 }

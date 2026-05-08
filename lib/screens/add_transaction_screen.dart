@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/category/category_icons.dart';
+import 'package:infaq/security/input_sanitizer.dart';
 import 'package:infaq/services/ai_service.dart'
     show AiCategorizeCallKind, AiService;
 import 'package:infaq/ui/infaq_bottom_nav.dart';
@@ -172,20 +173,32 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     try {
       dynamic res;
       try {
-        res = await supabase
+        final global = await supabase
             .from('categories')
             .select('id,name,type,icon_key')
-            .or('user_id.is.null,user_id.eq.${user.id}')
+            .isFilter('user_id', null)
             .order('name');
+        final mine = await supabase
+            .from('categories')
+            .select('id,name,type,icon_key')
+            .eq('user_id', user.id)
+            .order('name');
+        res = [...(global as List<dynamic>), ...(mine as List<dynamic>)];
         _supportsCategoryIconKey = true;
       } on PostgrestException catch (e) {
         // Backward compatibility before icon_key migration is applied.
         if (e.code != '42703') rethrow;
-        res = await supabase
+        final global = await supabase
             .from('categories')
             .select('id,name,type')
-            .or('user_id.is.null,user_id.eq.${user.id}')
+            .isFilter('user_id', null)
             .order('name');
+        final mine = await supabase
+            .from('categories')
+            .select('id,name,type')
+            .eq('user_id', user.id)
+            .order('name');
+        res = [...(global as List<dynamic>), ...(mine as List<dynamic>)];
         _supportsCategoryIconKey = false;
       }
 
@@ -545,9 +558,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   Future<void> _save() async {
-    final desc = _descCtrl.text.trim();
+    final desc = InputSanitizer.cleanText(_descCtrl.text, maxLength: 120);
     final amountRaw = _amountCtrl.text.trim().replaceAll(',', '');
-    final amount = double.tryParse(amountRaw);
+    final amount = InputSanitizer.parsePositiveAmount(
+      amountRaw,
+      min: 0.01,
+      max: 1000000000,
+    );
 
     if (desc.isEmpty) {
       showInfaqSnack(
@@ -634,7 +651,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      showInfaqSnack(context, 'Could not save: $e');
+      showInfaqSnack(
+        context,
+        'Could not save transaction right now. Please try again.',
+      );
     }
   }
 
@@ -652,19 +672,17 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return;
     }
     final id = _existingId!;
-    final desc = _descCtrl.text.trim();
+    final desc = InputSanitizer.cleanText(_descCtrl.text, maxLength: 120);
     if (desc.length < 3) {
-      showInfaqSnack(
-        context,
-        'Add a short description before recategorizing.',
-      );
+      showInfaqSnack(context, 'Add a short description before recategorizing.');
       return;
     }
     final amountValue =
         double.tryParse(_amountCtrl.text.trim().replaceAll(',', '')) ?? 0;
     final snap = _transactionEditSnapshot;
     final oldCategoryId = _categoryId ?? snap?['category_id']?.toString();
-    final oldCategoryName = _selectedCategory?.name ??
+    final oldCategoryName =
+        _selectedCategory?.name ??
         (snap?['categories'] is Map
             ? (snap!['categories']['name'] ?? '').toString()
             : '');
@@ -857,7 +875,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     } catch (e, st) {
       debugPrint('[Recategorize] error: $e\n$st');
       if (!mounted) return;
-      showInfaqSnack(context, 'Recategorize failed: $e');
+      showInfaqSnack(context, 'Recategorize failed. Please try again.');
     } finally {
       if (mounted) setState(() => _recategorizing = false);
     }
@@ -896,53 +914,295 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           onProfile: () => Navigator.pop(context, 3),
         ),
         body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1A2520) : const Color(0xFFE8F2EA),
-              borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
-              boxShadow: const [],
-            ),
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 4, 8, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed: _cancel,
-                          icon: Icon(
-                            Icons.arrow_back_ios_new_rounded,
-                            color: cs.primary,
-                          ),
-                        ),
-                        Expanded(
-                          child: Text(
-                            _isEditing ? 'Edit transaction' : 'Add transaction',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xFF1A2520)
+                    : const Color(0xFFE8F2EA),
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(28),
+                ),
+                boxShadow: const [],
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          IconButton(
+                            onPressed: _cancel,
+                            icon: Icon(
+                              Icons.arrow_back_ios_new_rounded,
                               color: cs.primary,
                             ),
                           ),
+                          Expanded(
+                            child: Text(
+                              _isEditing
+                                  ? 'Edit transaction'
+                                  : 'Add transaction',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                color: cs.primary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 48),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 380),
+                          child: _ExpenseIncomeToggle(
+                            isIncome: _isIncome,
+                            onExpense: () => _setIncome(false),
+                            onIncome: () => _setIncome(true),
+                          ),
                         ),
-                        const SizedBox(width: 48),
-                      ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(22, 22, 22, 120),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _LabeledField(
+                      label: 'Description',
+                      subtitle: 'What you spent or received — not the category',
+                      child: _ShadowTextField(
+                        controller: _descCtrl,
+                        hintText: descHint,
+                        textInputAction: TextInputAction.next,
+                        onChanged: (value) {
+                          _aiDebounce?.cancel();
+                          _aiDebounce = Timer(
+                            const Duration(milliseconds: 700),
+                            () {
+                              _suggestCategoryWithAi(value);
+                            },
+                          );
+                        },
+                      ),
                     ),
-                    const SizedBox(height: 6),
-                    Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 380),
-                        child: _ExpenseIncomeToggle(
-                          isIncome: _isIncome,
-                          onExpense: () => _setIncome(false),
-                          onIncome: () => _setIncome(true),
+                    const SizedBox(height: 18),
+                    _LabeledField(
+                      label: 'Amount',
+                      child: _ShadowTextField(
+                        controller: _amountCtrl,
+                        hintText: '${prefix}0',
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    _LabeledField(
+                      label: 'Date',
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _pickDate,
+                          borderRadius: BorderRadius.circular(999),
+                          child: Ink(
+                            decoration: _addTxPillDecoration(context),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 16,
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      '${_date.day}/${_date.month}/${_date.year}',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: cs.onSurface.withValues(
+                                          alpha: 0.75,
+                                        ),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                  const Icon(
+                                    Icons.calendar_month_rounded,
+                                    color: _primary,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    _LabeledField(
+                      label: 'Category',
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap:
+                              _loadingCategories || _filteredCategories.isEmpty
+                              ? null
+                              : _pickCategory,
+                          borderRadius: BorderRadius.circular(999),
+                          child: Ink(
+                            decoration: _addTxPillDecoration(context),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 16,
+                              ),
+                              child: Row(
+                                children: [
+                                  if (_selectedCategory != null &&
+                                      !_loadingCategories) ...[
+                                    Icon(
+                                      _selectedCategory!.displayIcon,
+                                      color: _primary,
+                                      size: 22,
+                                    ),
+                                    const SizedBox(width: 12),
+                                  ],
+                                  Expanded(
+                                    child: _loadingCategories
+                                        ? Text(
+                                            'Loading…',
+                                            style: TextStyle(
+                                              color: cs.onSurface.withValues(
+                                                alpha: 0.45,
+                                              ),
+                                            ),
+                                          )
+                                        : Text(
+                                            _selectedCategory?.name ??
+                                                'Choose a category',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w500,
+                                              color: _selectedCategory != null
+                                                  ? cs.onSurface.withValues(
+                                                      alpha: 0.85,
+                                                    )
+                                                  : cs.onSurface.withValues(
+                                                      alpha: 0.45,
+                                                    ),
+                                            ),
+                                          ),
+                                  ),
+                                  const Icon(
+                                    Icons.keyboard_arrow_down_rounded,
+                                    color: _primary,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (_aiConfidence != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _aiCategorizing
+                            ? 'AI suggesting category...'
+                            : 'AI suggested this category',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: switch (_aiLeafColor) {
+                            'green' => Colors.green.shade700,
+                            'orange' => Colors.orange.shade800,
+                            'red' => Colors.red.shade700,
+                            _ => cs.onSurface.withValues(alpha: 0.5),
+                          },
+                        ),
+                      ),
+                    ],
+                    if (_isEditing) ...[
+                      const SizedBox(height: 6),
+                      TextButton(
+                        onPressed: _recategorizing || _saving
+                            ? null
+                            : _recategorizeCurrentTransaction,
+                        child: _recategorizing
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Recategorize'),
+                      ),
+                    ],
+                    if (_categoryError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _categoryError!,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.red.shade700,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _loadCategories,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                    if (!_loadingCategories &&
+                        _categoryError == null &&
+                        _filteredCategories.isEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'No ${_isIncome ? 'income' : 'expense'} categories yet. Add some in Supabase.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: cs.onSurface.withValues(alpha: 0.55),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 28),
+                    InfaqPrimaryButton(
+                      label: saveLabel,
+                      isLoading: _saving,
+                      onPressed: _saving ? null : _save,
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: OutlinedButton(
+                        onPressed: _saving ? null : _cancel,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _primary,
+                          side: const BorderSide(color: _primary, width: 1.4),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          backgroundColor: cs.surface,
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(fontWeight: FontWeight.w700),
                         ),
                       ),
                     ),
@@ -950,242 +1210,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 ),
               ),
             ),
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(22, 22, 22, 120),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _LabeledField(
-                    label: 'Description',
-                    subtitle: 'What you spent or received — not the category',
-                    child: _ShadowTextField(
-                      controller: _descCtrl,
-                      hintText: descHint,
-                      textInputAction: TextInputAction.next,
-                      onChanged: (value) {
-                        _aiDebounce?.cancel();
-                        _aiDebounce = Timer(
-                          const Duration(milliseconds: 700),
-                          () {
-                            _suggestCategoryWithAi(value);
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  _LabeledField(
-                    label: 'Amount',
-                    child: _ShadowTextField(
-                      controller: _amountCtrl,
-                      hintText: '${prefix}0',
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  _LabeledField(
-                    label: 'Date',
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: _pickDate,
-                        borderRadius: BorderRadius.circular(999),
-                        child: Ink(
-                          decoration: _addTxPillDecoration(context),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 16,
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    '${_date.day}/${_date.month}/${_date.year}',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: cs.onSurface.withValues(
-                                        alpha: 0.75,
-                                      ),
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                const Icon(
-                                  Icons.calendar_month_rounded,
-                                  color: _primary,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  _LabeledField(
-                    label: 'Category',
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: _loadingCategories || _filteredCategories.isEmpty
-                            ? null
-                            : _pickCategory,
-                        borderRadius: BorderRadius.circular(999),
-                        child: Ink(
-                          decoration: _addTxPillDecoration(context),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 16,
-                            ),
-                            child: Row(
-                              children: [
-                                if (_selectedCategory != null &&
-                                    !_loadingCategories) ...[
-                                  Icon(
-                                    _selectedCategory!.displayIcon,
-                                    color: _primary,
-                                    size: 22,
-                                  ),
-                                  const SizedBox(width: 12),
-                                ],
-                                Expanded(
-                                  child: _loadingCategories
-                                      ? Text(
-                                          'Loading…',
-                                          style: TextStyle(
-                                            color: cs.onSurface.withValues(
-                                              alpha: 0.45,
-                                            ),
-                                          ),
-                                        )
-                                      : Text(
-                                          _selectedCategory?.name ??
-                                              'Choose a category',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w500,
-                                            color: _selectedCategory != null
-                                                ? cs.onSurface.withValues(
-                                                    alpha: 0.85,
-                                                  )
-                                                : cs.onSurface.withValues(
-                                                    alpha: 0.45,
-                                                  ),
-                                          ),
-                                        ),
-                                ),
-                                const Icon(
-                                  Icons.keyboard_arrow_down_rounded,
-                                  color: _primary,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (_aiConfidence != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      _aiCategorizing
-                          ? 'AI suggesting category...'
-                          : 'AI suggested this category',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: switch (_aiLeafColor) {
-                          'green' => Colors.green.shade700,
-                          'orange' => Colors.orange.shade800,
-                          'red' => Colors.red.shade700,
-                          _ => cs.onSurface.withValues(alpha: 0.5),
-                        },
-                      ),
-                    ),
-                  ],
-                  if (_isEditing) ...[
-                    const SizedBox(height: 6),
-                    TextButton(
-                      onPressed: _recategorizing || _saving
-                          ? null
-                          : _recategorizeCurrentTransaction,
-                      child: _recategorizing
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Recategorize'),
-                    ),
-                  ],
-                  if (_categoryError != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      _categoryError!,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.red.shade700,
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: _loadCategories,
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                  if (!_loadingCategories &&
-                      _categoryError == null &&
-                      _filteredCategories.isEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'No ${_isIncome ? 'income' : 'expense'} categories yet. Add some in Supabase.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: cs.onSurface.withValues(alpha: 0.55),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 28),
-                  InfaqPrimaryButton(
-                    label: saveLabel,
-                    isLoading: _saving,
-                    onPressed: _saving ? null : _save,
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: OutlinedButton(
-                      onPressed: _saving ? null : _cancel,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: _primary,
-                        side: const BorderSide(color: _primary, width: 1.4),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(28),
-                        ),
-                        backgroundColor: cs.surface,
-                        elevation: 0,
-                      ),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
     );
   }
 }

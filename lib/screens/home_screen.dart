@@ -7,7 +7,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:infaq/screens/add_goal_screen.dart';
 import 'package:infaq/screens/add_subscription_screen.dart';
 import 'package:infaq/screens/add_transaction_screen.dart';
-import 'package:infaq/screens/data_privacy_screen.dart';
 import 'package:infaq/screens/edit_profile_screen.dart';
 import 'package:infaq/screens/help_support_screen.dart';
 import 'package:infaq/screens/insights_screen.dart';
@@ -16,12 +15,15 @@ import 'package:infaq/screens/management_screen.dart';
 import 'package:infaq/screens/profile_tab_screen.dart';
 import 'package:infaq/category/category_icons.dart';
 import 'package:infaq/profile/avatar_storage.dart';
+import 'package:infaq/services/auth_logout_service.dart';
 import 'package:infaq/services/ai_background_tasks.dart';
 import 'package:infaq/services/ai_service.dart';
+import 'package:infaq/services/auto_detection_permissions_coordinator.dart';
 import 'package:infaq/services/bank_notification_sync_service.dart';
 import 'package:infaq/services/home_services_layout_store.dart';
 import 'package:infaq/ui/ai_insight_card.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
+import 'package:infaq/ui/monthly_spending_budget_card.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 import 'package:infaq/user_profile_sync.dart';
 
@@ -40,13 +42,14 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _loading = true;
   String? _error;
   String? _name;
   String? _currency;
   double _balance = 0;
-  double _spentToday = 0;
+  /// Sum of expense rows in the current calendar month (same rules as Transactions tab).
+  double _spentThisMonth = 0;
   List<Map<String, dynamic>> _transactions = [];
 
   /// Incremented after each successful `_bootstrap()` so [ManagementScreen] reloads its transaction list.
@@ -76,11 +79,51 @@ class _HomeScreenState extends State<HomeScreen> {
   );
   final LayerLink _servicesLayerLink = LayerLink();
 
+  /// Shown when notification-listener access is still off after the user dismissed
+  /// the intro or enabled SMS auto-recording in settings.
+  bool _showAutoDetectBanner = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _bootstrap();
     unawaited(_loadAiHomeInsights());
+    // Defer permission / listener prompts until after AuthGate → Home navigation settles
+    // (avoids dialogs competing with auth overlay pops).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future<void>.delayed(const Duration(milliseconds: 600), () async {
+        if (!mounted) return;
+        debugPrint('[Permissions] post-auth delayed startup on Home');
+        await AutoDetectionPermissionsCoordinator.instance
+            .handleStartupOnHomeScreen(context);
+        if (!mounted) return;
+        await _refreshAutoDetectBanner();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('[Permissions] home resumed — re-check banner + bank sync');
+      unawaited(_refreshAutoDetectBanner());
+      BankNotificationSyncService.scheduleDebouncedSync(
+        trigger: 'home_resumed',
+      );
+    }
+  }
+
+  Future<void> _refreshAutoDetectBanner() async {
+    final show = await AutoDetectionPermissionsCoordinator.instance
+        .shouldShowHomeBanner();
+    if (mounted) setState(() => _showAutoDetectBanner = show);
   }
 
   Future<void> _loadAiHomeInsights({bool forceRefresh = false}) async {
@@ -103,11 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _bootstrap() async {
-    unawaited(
-      BankNotificationSyncService.instance.syncPendingBankTransactions(
-        trigger: 'home_bootstrap',
-      ),
-    );
+    BankNotificationSyncService.scheduleDebouncedSync(trigger: 'home_bootstrap');
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
 
@@ -184,7 +223,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final tx = await _fetchRecentTransactions(user.id);
-    final spent = _computeSpentToday(tx);
+    final spentMonth = _computeSpentThisCalendarMonth(tx);
 
     var serviceOrder = List<String>.from(HomeServicesLayoutStore.defaultOrder);
     try {
@@ -201,7 +240,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _currency = (profile?['currency'] as String?)?.trim() ?? 'BHD';
       _balance = _readBalance(profile?['Balance']);
       _transactions = tx;
-      _spentToday = spent;
+      _spentThisMonth = spentMonth;
       _transactionsListRefreshToken++;
       _profilePhotoStoragePath = photoPath != null && photoPath.isNotEmpty
           ? photoPath
@@ -259,10 +298,16 @@ class _HomeScreenState extends State<HomeScreen> {
             .limit(100);
       }
       final list = res as List<dynamic>;
-      final rows = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final rows = list
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
       rows.sort((a, b) {
-        final ad = DateTime.tryParse((a['date'] ?? a['created_at'] ?? '').toString());
-        final bd = DateTime.tryParse((b['date'] ?? b['created_at'] ?? '').toString());
+        final ad = DateTime.tryParse(
+          (a['date'] ?? a['created_at'] ?? '').toString(),
+        );
+        final bd = DateTime.tryParse(
+          (b['date'] ?? b['created_at'] ?? '').toString(),
+        );
         if (ad != null && bd != null) {
           final cmp = bd.compareTo(ad);
           if (cmp != 0) return cmp;
@@ -282,36 +327,36 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  double _computeSpentToday(List<Map<String, dynamic>> rows) {
-    final today = DateTime.now();
-    final start = DateTime(today.year, today.month, today.day);
+  /// Matches [ManagementScreen] expense detection for budget totals.
+  bool _isExpenseRowForBudget(Map<String, dynamic> data, double amount) {
+    final catMap = data['categories'];
+    String? catType;
+    if (catMap is Map) {
+      catType = catMap['type']?.toString().toLowerCase();
+    }
+    final legacyType = (data['type'] ?? data['transaction_type'] ?? '')
+        .toString()
+        .toLowerCase();
+    return catType == 'expense' ||
+        (catType == null &&
+            (legacyType == 'expense' ||
+                legacyType == 'debit' ||
+                legacyType == 'out' ||
+                (legacyType.isEmpty && amount < 0)));
+  }
+
+  double _computeSpentThisCalendarMonth(List<Map<String, dynamic>> rows) {
+    final now = DateTime.now();
     var sum = 0.0;
     for (final r in rows) {
-      final createdRaw = r['date'] ?? r['created_at'];
-      if (createdRaw == null) continue;
-      final d = DateTime.tryParse(createdRaw.toString());
+      final raw = r['date'] ?? r['created_at'];
+      if (raw == null) continue;
+      final d = DateTime.tryParse(raw.toString());
       if (d == null) continue;
-      final day = DateTime(d.year, d.month, d.day);
-      if (day.isBefore(start)) continue;
-
+      if (d.year != now.year || d.month != now.month) continue;
       final amount = _readAmount(r['amount']);
-      final cat = r['categories'];
-      String? catType;
-      if (cat is Map) {
-        catType = cat['type']?.toString().toLowerCase();
-      }
-      if (catType == 'expense') {
-        sum += amount.abs();
-      } else if (catType == null || catType.isEmpty) {
-        final type = (r['type'] ?? r['transaction_type'] ?? '')
-            .toString()
-            .toLowerCase();
-        if (type == 'expense' || type == 'debit' || type == 'out') {
-          sum += amount.abs();
-        } else if (type.isEmpty && amount < 0) {
-          sum += amount.abs();
-        }
-      }
+      if (!_isExpenseRowForBudget(r, amount)) continue;
+      sum += amount.abs();
     }
     return sum;
   }
@@ -451,6 +496,33 @@ class _HomeScreenState extends State<HomeScreen> {
     showInfaqSnack(context, '$label — coming soon');
   }
 
+  void _clearLocalSessionState() {
+    if (!mounted) return;
+    setState(() {
+      _name = null;
+      _currency = null;
+      _balance = 0;
+      _spentThisMonth = 0;
+      _transactions = <Map<String, dynamic>>[];
+      _profilePhotoStoragePath = null;
+      _profileAvatarPublicUrl = null;
+      _aiInsightCards = <Map<String, dynamic>>[];
+      _loadingAiInsights = false;
+      _loading = false;
+      _error = null;
+      _tabIndex = 0;
+      _managementTabIndex = 0;
+      _showAutoDetectBanner = false;
+    });
+  }
+
+  Future<void> _logout() async {
+    await AuthLogoutService.logoutAndResetNavigation(
+      context,
+      onBeforeSignOut: () async => _clearLocalSessionState(),
+    );
+  }
+
   Future<void> _openAddTransaction({bool? initialIncome}) async {
     final result = await Navigator.of(context).push<dynamic>(
       MaterialPageRoute<void>(
@@ -526,7 +598,12 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) showInfaqSnack(context, 'Transaction deleted');
       return true;
     } catch (e) {
-      if (mounted) showInfaqSnack(context, 'Could not delete: $e');
+      if (mounted) {
+        showInfaqSnack(
+          context,
+          'Could not delete transaction right now. Please try again.',
+        );
+      }
       return false;
     }
   }
@@ -586,12 +663,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openHelpSupport() {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(builder: (context) => const HelpSupportScreen()),
-    );
-  }
-
-  void _openDataAndPrivacy() {
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (context) => const DataPrivacyScreen()),
     );
   }
 
@@ -742,10 +813,6 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    final progress = _balance > 0
-        ? (_spentToday / _balance).clamp(0.0, 1.0)
-        : 0.0;
-
     return Scaffold(
       backgroundColor: cs.surface,
       extendBody: true,
@@ -794,6 +861,73 @@ class _HomeScreenState extends State<HomeScreen> {
                           ? const NeverScrollableScrollPhysics()
                           : const AlwaysScrollableScrollPhysics(),
                       slivers: [
+                        if (_showAutoDetectBanner)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                              child: Material(
+                                color: cs.errorContainer.withValues(alpha: 0.35),
+                                borderRadius: BorderRadius.circular(14),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(14),
+                                  onTap: () async {
+                                    await AutoDetectionPermissionsCoordinator
+                                        .instance
+                                        .openListenerSettingsFromBanner();
+                                    await _refreshAutoDetectBanner();
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 12,
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Icon(
+                                          Icons.notifications_active_outlined,
+                                          color: cs.error,
+                                          size: 22,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                'Automatic recording is off',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w800,
+                                                  color: cs.onErrorContainer,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'Notification access for INFAQ is not enabled. '
+                                                'Tap to open settings, then return — we refresh automatically.',
+                                                style: TextStyle(
+                                                  fontSize: 12.5,
+                                                  height: 1.35,
+                                                  color: cs.onSurface
+                                                      .withValues(alpha: 0.8),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Icon(
+                                          Icons.chevron_right_rounded,
+                                          color: cs.onSurfaceVariant,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         SliverToBoxAdapter(
                           child: Container(
                             width: double.infinity,
@@ -838,11 +972,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         IconButton(
                                           tooltip: 'Sign out',
                                           visualDensity: VisualDensity.compact,
-                                          onPressed: () => Supabase
-                                              .instance
-                                              .client
-                                              .auth
-                                              .signOut(),
+                                          onPressed: _logout,
                                           icon: Icon(
                                             Icons.logout_rounded,
                                             color: cs.primary,
@@ -861,12 +991,17 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ),
                                     ),
                                     const SizedBox(height: 14),
-                                    _SummaryCard(
-                                      monthLabel: _monthYearLabel(),
-                                      dateDayLabel: _todayLabel(),
-                                      spentToday: _spentToday,
-                                      balance: _balance,
-                                      progress: progress,
+                                    MonthlySpendingBudgetCard(
+                                      periodTitle: _monthYearLabel(),
+                                      onPrev: null,
+                                      onNext: null,
+                                      onEditBudget: () =>
+                                          setState(() => _tabIndex = 1),
+                                      spentLabel: 'Total spent this month',
+                                      budgetLabel: 'Monthly budget',
+                                      showRemainingLine: true,
+                                      spent: _spentThisMonth,
+                                      budget: _balance,
                                       format: _fmtMoney,
                                     ),
                                   ],
@@ -991,7 +1126,6 @@ class _HomeScreenState extends State<HomeScreen> {
               onOpenEditProfile: _openEditProfile,
               onDataRefresh: _bootstrap,
               onHelpAndSupport: _openHelpSupport,
-              onDataAndPrivacy: _openDataAndPrivacy,
             ),
           ],
         ),
@@ -1018,166 +1152,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return '${months[d.month - 1]} ${d.year}';
   }
 
-  String _todayLabel() {
-    final d = DateTime.now();
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    // weekday 1 = Monday
-    final wd = days[d.weekday - 1];
-    return '$wd, ${d.day}/${d.month}/${d.year}';
-  }
-}
-
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
-    required this.monthLabel,
-    required this.dateDayLabel,
-    required this.spentToday,
-    required this.balance,
-    required this.progress,
-    required this.format,
-  });
-
-  static const double _cardRadius = 16;
-  static const double _amountSize = 17;
-
-  final String monthLabel;
-  final String dateDayLabel;
-  final double spentToday;
-  final double balance;
-  final double progress;
-  final String Function(double) format;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final onSurface = cs.onSurface;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(_cardRadius),
-        border: Border.all(
-          color: cs.outline.withValues(alpha: isDark ? 0.22 : 0.12),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.06),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Text(
-            monthLabel,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: onSurface.withValues(alpha: 0.45),
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            dateDayLabel,
-            style: TextStyle(
-              fontSize: 11,
-              color: onSurface.withValues(alpha: 0.38),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Total spent (today)',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: onSurface.withValues(alpha: 0.5),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        format(spentToday),
-                        style: TextStyle(
-                          fontSize: _amountSize,
-                          fontWeight: FontWeight.w800,
-                          color: cs.primary,
-                          height: 1.1,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 2, 10, 0),
-                child: SizedBox(
-                  height: 40,
-                  child: Center(
-                    child: Container(
-                      width: 1,
-                      height: 36,
-                      color: cs.outline.withValues(alpha: 0.14),
-                    ),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'Balance',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: onSurface.withValues(alpha: 0.5),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        format(balance),
-                        style: TextStyle(
-                          fontSize: _amountSize,
-                          fontWeight: FontWeight.w800,
-                          color: onSurface.withValues(alpha: 0.5),
-                          height: 1.1,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: progress.clamp(0.0, 1.0),
-              minHeight: 6,
-              backgroundColor: cs.surfaceContainerHighest,
-              color: cs.primary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _ServicesGridOrdered extends StatelessWidget {

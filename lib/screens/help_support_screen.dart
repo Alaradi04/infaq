@@ -1,16 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:infaq/screens/profile_info_screens.dart';
-import 'package:infaq/ui/infaq_widgets.dart';
-
-/// Contact targets — adjust to your real handles and numbers.
-const String _kInstagramHandle = 'INFAQ.BH';
-const String _kInstagramUrl = 'https://www.instagram.com/infaq.bh/';
-const String _kWebsiteDisplay = 'www.infaqbh.com';
-const String _kWebsiteUrl = 'https://www.infaqbh.com';
 
 class HelpSupportScreen extends StatelessWidget {
   const HelpSupportScreen({super.key});
@@ -39,198 +31,156 @@ class HelpSupportScreen extends StatelessWidget {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: statusStyle,
       child: Scaffold(
-      backgroundColor: cs.surface,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: headerBg,
-              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.08),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+        backgroundColor: cs.surface,
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: headerBg,
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 20, 24),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        icon: Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: cs.primary),
+                      ),
+                      Text(
+                        'Help and support',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: cs.primary,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
+              ),
             ),
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 4, 20, 24),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isDark ? cs.surfaceContainerHigh : Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.35 : 0.18)),
+                    ),
+                    child: Text(
+                      'Need help with your account, notifications, or transaction recording? '
+                      'Our support team is here to help.',
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        height: 1.4,
+                        color: cs.onSurface.withValues(alpha: 0.82),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _SupportActionRow(
+                    icon: Icons.mail_outline_rounded,
+                    title: 'Contact support',
+                    subtitle: kInfaqContactEmail,
+                    onTap: () => _launch(kInfaqSupportMailto),
+                  ),
+                  const SizedBox(height: 10),
+                  _SupportActionRow(
+                    icon: Icons.bug_report_outlined,
+                    title: 'Report a bug',
+                    subtitle: 'Send issue details to support',
+                    onTap: () => _launch(
+                      'mailto:$kInfaqContactEmail?subject=INFAQ%20Bug%20Report',
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Center(
+                    child: Text(
+                      'v$kInfaqAppVersionLabel',
+                      style: TextStyle(fontSize: 13, color: cs.onSurface.withValues(alpha: 0.5)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SupportActionRow extends StatelessWidget {
+  const _SupportActionRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: isDark ? cs.surfaceContainerHigh : Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: cs.outline.withValues(alpha: isDark ? 0.35 : 0.16)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 22, color: cs.primary),
+              const SizedBox(width: 12),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed: () => Navigator.of(context).maybePop(),
-                          icon: Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: cs.primary),
-                        ),
-                        Text(
-                          'Help and support',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: cs.primary,
-                            letterSpacing: -0.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      margin: const EdgeInsets.only(left: 8, right: 8),
-                      padding: const EdgeInsets.fromLTRB(0, 8, 0, 10),
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(22),
-                        boxShadow: [
-                          BoxShadow(
-                            color: cs.shadow.withValues(alpha: isDark ? 0.25 : 0.08),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14.5,
+                        color: cs.onSurface,
                       ),
-                      child: Column(
-                        children: [
-                          _ContactInkRow(
-                            label: 'Instagram',
-                            detail: _kInstagramHandle,
-                            onTap: () => _launch(_kInstagramUrl),
-                            trailing: FaIcon(
-                              FontAwesomeIcons.instagram,
-                              color: const Color(0xFFE4405F),
-                              size: 22,
-                            ),
-                          ),
-                          Divider(height: 1, indent: 16, endIndent: 16, color: cs.outline.withValues(alpha: 0.2)),
-                          _ContactInkRow(
-                            label: 'Website',
-                            detail: _kWebsiteDisplay,
-                            onTap: () => _launch(_kWebsiteUrl),
-                            trailing: Icon(
-                              Icons.language_rounded,
-                              color: cs.primary,
-                              size: 22,
-                            ),
-                          ),
-                          Divider(height: 1, indent: 16, endIndent: 16, color: cs.outline.withValues(alpha: 0.2)),
-                          _ContactInkRow(
-                            label: 'Email',
-                            detail: kInfaqContactEmail,
-                            onTap: () => _launch(kInfaqSupportMailto),
-                            trailing: Icon(
-                              Icons.mail_outline_rounded,
-                              color: cs.primary,
-                              size: 22,
-                            ),
-                          ),
-                        ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: cs.onSurface.withValues(alpha: 0.65),
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-          ),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'v$kInfaqAppVersionLabel',
-                          style: TextStyle(fontSize: 14, color: cs.onSurface.withValues(alpha: 0.45)),
-                        ),
-                        const SizedBox(height: 20),
-                        Image.asset(
-                          kInfaqBrandIconAsset,
-                          height: 88,
-                          fit: BoxFit.contain,
-                          filterQuality: FilterQuality.high,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'INFAQ',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.w800,
-                            color: cs.primary,
-                            fontFamily: 'Georgia',
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    ));
-  }
-}
-
-class _ContactInkRow extends StatelessWidget {
-  const _ContactInkRow({
-    required this.label,
-    required this.detail,
-    required this.onTap,
-    required this.trailing,
-  });
-
-  final String label;
-  final String detail;
-  final VoidCallback onTap;
-  final Widget trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 92,
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                  color: cs.onSurface.withValues(alpha: 0.78),
-                ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: cs.onSurface.withValues(alpha: 0.45),
               ),
-            ),
-            Expanded(
-              child: Text(
-                detail,
-                textAlign: TextAlign.left,
-                style: TextStyle(
-                  fontSize: 15,
-                  color: cs.onSurface.withValues(alpha: 0.62),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            trailing,
-          ],
+            ],
+          ),
         ),
       ),
     );

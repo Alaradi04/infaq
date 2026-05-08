@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/profile/subscription_icon_storage.dart';
+import 'package:infaq/security/input_sanitizer.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
@@ -115,7 +116,10 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _uploadingIcon = false);
-        showInfaqSnack(context, 'Could not upload icon: $e');
+        showInfaqSnack(
+          context,
+          'Could not upload icon right now. Please try again.',
+        );
       }
     }
   }
@@ -209,10 +213,8 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
   void _cancel() => Navigator.pop(context);
 
   Future<void> _save() async {
-    final name = _nameCtrl.text.trim();
-    final amount = double.tryParse(
-      _amountCtrl.text.replaceAll(',', '').replaceAll(r'$', ''),
-    );
+    final name = InputSanitizer.cleanText(_nameCtrl.text, maxLength: 80);
+    final amount = InputSanitizer.parsePositiveAmount(_amountCtrl.text);
     if (name.isEmpty) {
       showInfaqSnack(context, 'Enter a name for this subscription.');
       return;
@@ -259,7 +261,10 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
           'Database blocked the save: turn on RLS policies for subscriptions (see supabase/migrations in the project).',
         );
       } else {
-        showInfaqSnack(context, 'Could not save subscription: $e');
+        showInfaqSnack(
+          context,
+          'Could not save subscription right now. Please try again.',
+        );
       }
     }
   }
@@ -319,7 +324,9 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                             vertical: 12,
                           ),
                           decoration: BoxDecoration(
-                            color: isDark ? cs.surfaceContainerHigh : const Color(0xFFF7F8F7),
+                            color: isDark
+                                ? cs.surfaceContainerHigh
+                                : const Color(0xFFF7F8F7),
                             borderRadius: BorderRadius.circular(22),
                             border: Border.all(
                               color: kServiceFormGreen.withValues(alpha: 0.2),
@@ -332,7 +339,9 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                                 children: [
                                   CircleAvatar(
                                     radius: 28,
-                                    backgroundColor: isDark ? cs.surfaceContainerHighest : Colors.white,
+                                    backgroundColor: isDark
+                                        ? cs.surfaceContainerHighest
+                                        : Colors.white,
                                     backgroundImage: _iconPreviewBytes != null
                                         ? MemoryImage(_iconPreviewBytes!)
                                         : (_iconStoragePath != null &&
@@ -350,7 +359,9 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                                                 _iconStoragePath!.isEmpty)
                                         ? Icon(
                                             Icons.add_photo_alternate_outlined,
-                                            color: cs.onSurface.withValues(alpha: 0.5),
+                                            color: cs.onSurface.withValues(
+                                              alpha: 0.5,
+                                            ),
                                             size: 28,
                                           )
                                         : null,
