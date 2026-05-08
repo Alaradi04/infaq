@@ -304,7 +304,9 @@ class _AuthGateState extends State<AuthGate> {
           ),
           builder: (context, snap) {
             if (snap.hasError) {
-              debugPrint('[AuthNav] AuthGate profile FutureBuilder error: ${snap.error}');
+              debugPrint(
+                '[AuthNav] AuthGate profile FutureBuilder error: ${snap.error}',
+              );
             }
             if (snap.connectionState != ConnectionState.done) {
               return Scaffold(
@@ -320,13 +322,17 @@ class _AuthGateState extends State<AuthGate> {
               return OAuthProfileSetupScreen(
                 onComplete: () {
                   if (mounted) {
-                    debugPrint('[AuthNav] OAuth profile setup complete, recheck users row');
+                    debugPrint(
+                      '[AuthNav] OAuth profile setup complete, recheck users row',
+                    );
                     setState(() => _profileGateEpoch++);
                   }
                 },
               );
             }
-            debugPrint('[AuthNav] navigation decision: HomeScreen userId=$userId');
+            debugPrint(
+              '[AuthNav] navigation decision: HomeScreen userId=$userId',
+            );
             return const HomeScreen();
           },
         );

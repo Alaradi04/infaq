@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -7,11 +8,21 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:infaq/oauth_redirect.dart';
 import 'package:infaq/screens/login_screen.dart';
 import 'package:infaq/services/auth_navigation_service.dart';
+import 'package:infaq/services/bank_notification_sync_service.dart';
+import 'package:infaq/services/notification_preferences_service.dart';
 import 'package:infaq/ui/infaq_currency_meta.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
 /// Strong password: at least this many characters (12–16+ recommended in UI copy).
 const int _kPasswordMinLength = 12;
+
+/// Matches [NotificationSettingsScreen] guidance / primary green for consistency.
+const Color _kRegisterGuidancePrimary = Color(0xFF4D6658);
+const Color _kRegisterGuidanceBgLight = Color(0xFFEEF7F0);
+const Color _kRegisterGuidanceBorderLight = Color(0xFFD4E3D8);
+
+bool get _isAndroidPlatform =>
+    !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
 class RegisterFlowScreen extends StatefulWidget {
   const RegisterFlowScreen({super.key});
@@ -20,11 +31,16 @@ class RegisterFlowScreen extends StatefulWidget {
   State<RegisterFlowScreen> createState() => _RegisterFlowScreenState();
 }
 
-class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
+class _RegisterFlowScreenState extends State<RegisterFlowScreen>
+    with WidgetsBindingObserver {
   int _step = 1;
   bool _loading = false;
   bool _googleLoading = false;
   bool _obscure = true;
+
+  /// When true, after sign-up we enable automatic bank-notification recording in Supabase prefs.
+  bool _autoBankTransactions = false;
+  bool _notificationListenerEnabled = false;
 
   StreamSubscription<AuthState>? _authSub;
 
@@ -38,6 +54,7 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _password.addListener(_onPasswordChanged);
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       debugPrint(
@@ -53,6 +70,31 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
     });
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed &&
+        mounted &&
+        _step == 2 &&
+        _autoBankTransactions) {
+      unawaited(_refreshNotificationListenerStatus());
+    }
+  }
+
+  Future<void> _refreshNotificationListenerStatus() async {
+    final enabled = await BankNotificationSyncService.instance
+        .isNotificationListenerEnabled();
+    if (!mounted) return;
+    setState(() => _notificationListenerEnabled = enabled);
+  }
+
+  void _onAutoBankTransactionsChanged(bool v) {
+    setState(() => _autoBankTransactions = v);
+    if (v) {
+      unawaited(_refreshNotificationListenerStatus());
+    }
+  }
+
   void _onPasswordChanged() {
     // Rebuild so the strength label updates while typing.
     if (!mounted) return;
@@ -61,6 +103,7 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _authSub?.cancel();
     _fullName.dispose();
     _email.dispose();
@@ -231,6 +274,25 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
             UserAttributes(data: const {'registration_synced': true}),
           );
           debugPrint('[AuthNav] profile upsert + metadata update success');
+          if (_autoBankTransactions) {
+            try {
+              await NotificationPreferencesService.instance
+                  .loadOrCreateForSettings();
+              await NotificationPreferencesService.instance
+                  .updateSmsAutoRecordingEnabled(true);
+              unawaited(
+                BankNotificationSyncService.instance
+                    .syncPendingBankTransactions(
+                  trigger: 'register_auto_recording_enabled',
+                  bypassThrottle: true,
+                ),
+              );
+            } catch (e, st) {
+              debugPrint(
+                '[AuthNav] register auto-recording prefs failed: $e\n$st',
+              );
+            }
+          }
         } catch (e, st) {
           debugPrint(
             '[AuthNav] profile upsert failed (AuthGate may show setup): $e\n$st',
@@ -376,7 +438,9 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    _step == 1 ? 'Start your journey to better financial health' : 'Just a little more',
+                    _step == 1
+                        ? 'Start your journey to better financial health'
+                        : 'Set your budget currency and optional auto-import',
                     style: TextStyle(color: muted),
                   ),
                   const SizedBox(height: 20),
@@ -507,8 +571,22 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
   List<Widget> _buildStep2(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final muted = cs.onSurface.withValues(alpha: 0.55);
+    final guidanceBg =
+        isDark ? cs.surfaceContainerHigh : _kRegisterGuidanceBgLight;
+    final guidanceBorder = isDark
+        ? cs.outline.withValues(alpha: 0.35)
+        : _kRegisterGuidanceBorderLight;
 
     return [
+      const _FieldLabel('Balance'),
+      InfaqPillField(
+        controller: _balance,
+        hintText: '0.00',
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        textInputAction: TextInputAction.next,
+      ),
+      const SizedBox(height: 14),
       const _FieldLabel('currency'),
       Container(
         decoration: BoxDecoration(
@@ -551,14 +629,106 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen> {
           ),
         ),
       ),
-      const SizedBox(height: 14),
-      const _FieldLabel('Balance'),
-      InfaqPillField(
-        controller: _balance,
-        hintText: '0.00',
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        textInputAction: TextInputAction.done,
+      const SizedBox(height: 22),
+      SwitchListTile.adaptive(
+        contentPadding: EdgeInsets.zero,
+        title: Text(
+          'Add transactions from bank alerts',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
+            color: cs.onSurface,
+          ),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 6, right: 8),
+          child: Text(
+            'Let INFAQ read transaction notifications from your bank (for example SMS or payment alerts) '
+            'and turn them into expenses in your account. You stay in control: you can turn this off anytime in Profile → Notifications.',
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.35,
+              color: muted,
+            ),
+          ),
+        ),
+        value: _autoBankTransactions,
+        onChanged: _loading ? null : _onAutoBankTransactionsChanged,
+        activeTrackColor: isDark ? cs.primary : _kRegisterGuidancePrimary,
+        activeThumbColor: Colors.white,
+        inactiveTrackColor: Colors.grey.shade300,
+        inactiveThumbColor: Colors.grey.shade400,
       ),
+      if (_autoBankTransactions) ...[
+        const SizedBox(height: 4),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(
+            _notificationListenerEnabled
+                ? 'Notification access enabled'
+                : 'Notification access not enabled yet',
+            style: TextStyle(
+              color: _notificationListenerEnabled ? cs.primary : cs.onSurface,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          trailing: Icon(
+            _notificationListenerEnabled
+                ? Icons.check_circle
+                : Icons.error_outline,
+            color: _notificationListenerEnabled ? cs.primary : Colors.orange,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: guidanceBg,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: guidanceBorder),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.info_outline_rounded,
+                color: isDark ? cs.primary : _kRegisterGuidancePrimary,
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _isAndroidPlatform
+                      ? 'To finish setup after you create your account:\n'
+                          '1. Tap Open Android settings below.\n'
+                          '2. Choose INFAQ and allow notification access.\n'
+                          '3. Keep notifications from your banking apps turned on so alerts can be detected.\n\n'
+                          'INFAQ only uses this to spot payment amounts and merchants from alerts you already receive — not to read unrelated messages.'
+                      : 'After you sign up, open Profile → Notifications to allow notification access where your device supports automatic import (for example on Android). '
+                          'You can finish setup there anytime.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.35,
+                    color: muted,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (_isAndroidPlatform) ...[
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: _loading
+                ? null
+                : () async {
+                    await BankNotificationSyncService.instance
+                        .openNotificationListenerSettings();
+                  },
+            child: const Text('Open Android settings'),
+          ),
+        ],
+      ],
     ];
   }
 }
