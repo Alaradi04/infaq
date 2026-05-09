@@ -2248,9 +2248,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
   }
 
   Widget _subscriptionSquircleIcon(Map<String, dynamic> s) {
-    final resolved = InfaqSubscriptionIconStorage.resolveDisplayUrl(
+    final resolved = InfaqSubscriptionIconStorage.resolveSubscriptionIconUrl(
       Supabase.instance.client,
-      s['icon_url']?.toString(),
+      iconKey: s['icon_key']?.toString(),
+      iconUrl: s['icon_url']?.toString(),
     );
     final cs = Theme.of(context).colorScheme;
     final placeholderIconColor = Color.lerp(

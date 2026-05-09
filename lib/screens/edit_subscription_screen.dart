@@ -7,6 +7,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:infaq/profile/subscription_icon_storage.dart';
 import 'package:infaq/security/input_sanitizer.dart';
 import 'package:infaq/subscription/subscription_analytics.dart';
+import 'package:infaq/subscription/subscription_icon_picker_sheet.dart';
+import 'package:infaq/subscription/subscription_preset_icons.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
@@ -34,6 +36,7 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
   late DateTime _nextDate;
   late bool _isActive;
   String? _iconStoragePath;
+  String? _selectedIconKey;
   Uint8List? _iconPreviewBytes;
   final ImagePicker _picker = ImagePicker();
   bool _uploadingIcon = false;
@@ -73,8 +76,13 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
     _nextDate = parsed ?? DateTime.now();
 
     _isActive = parseSubscriptionIsActive(s['is_active']);
+    _selectedIconKey = validatedSubscriptionIconKey(s['icon_key']?.toString());
     final p = s['icon_url']?.toString().trim();
-    _iconStoragePath = p != null && p.isNotEmpty ? p : null;
+    if (_selectedIconKey != null) {
+      _iconStoragePath = null;
+    } else {
+      _iconStoragePath = p != null && p.isNotEmpty ? p : null;
+    }
   }
 
   @override
@@ -84,13 +92,22 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
     super.dispose();
   }
 
-  Future<void> _pickIcon(ImageSource source) async {
+  (String ext, String mime) _imageExtAndMime(String lowerName) {
+    if (lowerName.endsWith('.webp')) return ('webp', 'image/webp');
+    if (lowerName.endsWith('.png')) return ('png', 'image/png');
+    if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) {
+      return ('jpg', 'image/jpeg');
+    }
+    return ('jpg', 'image/jpeg');
+  }
+
+  Future<void> _pickIconFromGallery() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
     setState(() => _uploadingIcon = true);
     try {
       final x = await _picker.pickImage(
-        source: source,
+        source: ImageSource.gallery,
         maxWidth: 512,
         maxHeight: 512,
         imageQuality: 88,
@@ -101,12 +118,14 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
       }
       final bytes = await x.readAsBytes();
       final lower = x.name.toLowerCase();
-      final ext = lower.endsWith('.png') ? 'png' : 'jpg';
-      final mime = ext == 'png' ? 'image/png' : 'image/jpeg';
-      final path =
-          '${user.id}/sub_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final (ext, mime) = _imageExtAndMime(lower);
+      final fileName = 'sub_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final path = InfaqSubscriptionIconStorage.customUploadPath(
+        user.id,
+        fileName,
+      );
       await Supabase.instance.client.storage
-          .from(InfaqSubscriptionIconStorage.bucket)
+          .from(InfaqSubscriptionIconStorage.userUploadBucket)
           .uploadBinary(
             path,
             bytes,
@@ -116,6 +135,7 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
       setState(() {
         _iconPreviewBytes = bytes;
         _iconStoragePath = path;
+        _selectedIconKey = null;
         _uploadingIcon = false;
       });
     } catch (e) {
@@ -130,89 +150,16 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
   }
 
   Future<void> _onEditIcon() async {
-    await showModalBottomSheet<void>(
+    await showSubscriptionIconPickerSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Choose from gallery'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _pickIcon(ImageSource.gallery);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Take a photo'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _pickIcon(ImageSource.camera);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.link_rounded),
-              title: const Text('Use image URL'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _enterImageUrl();
-              },
-            ),
-          ],
-        ),
-      ),
+      onPresetChosen: (key) {
+        setState(() {
+          _selectedIconKey = validatedSubscriptionIconKey(key);
+          _iconStoragePath = null;
+          _iconPreviewBytes = null;
+        });
+      },
     );
-  }
-
-  Future<void> _enterImageUrl() async {
-    final ctrl = TextEditingController(
-      text: _iconStoragePath != null && _iconStoragePath!.startsWith('http')
-          ? _iconStoragePath
-          : '',
-    );
-    final value = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Image URL'),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.url,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'https://example.com/icon.png',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Use URL'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted || value == null) return;
-    final uri = Uri.tryParse(value);
-    final valid =
-        uri != null &&
-        (uri.scheme == 'http' || uri.scheme == 'https') &&
-        (uri.host.isNotEmpty);
-    if (!valid) {
-      showInfaqSnack(context, 'Please enter a valid http/https image URL.');
-      return;
-    }
-    setState(() {
-      _iconPreviewBytes = null;
-      _iconStoragePath = value;
-    });
   }
 
   Future<void> _pickDate() async {
@@ -260,8 +207,17 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
         'next_payment': dateStr,
         'is_active': _isActive,
       };
-      if (_iconStoragePath != null && _iconStoragePath!.isNotEmpty) {
-        patch['icon_url'] = _iconStoragePath;
+      final preset = validatedSubscriptionIconKey(_selectedIconKey);
+      final path = _iconStoragePath?.trim();
+      if (preset != null) {
+        patch['icon_key'] = preset;
+        patch['icon_url'] = null;
+      } else if (path != null && path.isNotEmpty) {
+        patch['icon_url'] = path;
+        patch['icon_key'] = null;
+      } else {
+        patch['icon_key'] = null;
+        patch['icon_url'] = null;
       }
 
       await Supabase.instance.client
@@ -313,11 +269,15 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
 
     try {
       final path = _iconStoragePath?.trim();
-      if (path != null && path.isNotEmpty) {
+      if (path != null &&
+          path.isNotEmpty &&
+          !path.startsWith('http://') &&
+          !path.startsWith('https://')) {
         try {
-          await Supabase.instance.client.storage
-              .from(InfaqSubscriptionIconStorage.bucket)
-              .remove([path]);
+          final bucket = path.startsWith('custom/')
+              ? InfaqSubscriptionIconStorage.userUploadBucket
+              : InfaqSubscriptionIconStorage.legacyUserIconBucket;
+          await Supabase.instance.client.storage.from(bucket).remove([path]);
         } catch (_) {}
       }
       await Supabase.instance.client
@@ -338,6 +298,14 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
 
   ImageProvider<Object>? _iconProvider() {
     if (_iconPreviewBytes != null) return MemoryImage(_iconPreviewBytes!);
+    final presetKey = validatedSubscriptionIconKey(_selectedIconKey);
+    if (presetKey != null) {
+      final u = InfaqSubscriptionIconStorage.presetPublicUrl(
+        Supabase.instance.client,
+        presetKey,
+      );
+      if (u != null && u.isNotEmpty) return NetworkImage(u);
+    }
     final resolved = InfaqSubscriptionIconStorage.resolveDisplayUrl(
       Supabase.instance.client,
       _iconStoragePath,
@@ -345,6 +313,8 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
     if (resolved != null && resolved.isNotEmpty) return NetworkImage(resolved);
     return null;
   }
+
+  bool _hasIconSelection() => _iconProvider() != null;
 
   @override
   Widget build(BuildContext context) {
@@ -428,15 +398,15 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
                                         ? cs.surfaceContainerHighest
                                         : Colors.white,
                                     backgroundImage: _iconProvider(),
-                                    child: _iconProvider() == null
-                                        ? Icon(
+                                    child: _hasIconSelection()
+                                        ? null
+                                        : Icon(
                                             Icons.add_photo_alternate_outlined,
                                             color: cs.onSurface.withValues(
                                               alpha: 0.5,
                                             ),
                                             size: 28,
-                                          )
-                                        : null,
+                                          ),
                                   ),
                                   if (_uploadingIcon)
                                     const SizedBox(
@@ -452,10 +422,9 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
                               const SizedBox(width: 14),
                               Expanded(
                                 child: Text(
-                                  _iconStoragePath != null &&
-                                          _iconStoragePath!.isNotEmpty
-                                      ? 'Tap to change picture'
-                                      : 'Tap to add subscription icon',
+                                  _hasIconSelection()
+                                      ? 'Tap to change preset'
+                                      : 'Tap to choose a preset icon',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     color: cs.onSurface.withValues(alpha: 0.65),
@@ -470,6 +439,33 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
                             ],
                           ),
                         ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: OutlinedButton.icon(
+                      onPressed: _uploadingIcon || _saving
+                          ? null
+                          : _pickIconFromGallery,
+                      icon: const Icon(Icons.photo_library_outlined, size: 22),
+                      label: const Text(
+                        'Upload from gallery',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: kServiceFormGreen,
+                        side: BorderSide(
+                          color: kServiceFormGreen.withValues(alpha: 0.45),
+                          width: 1.4,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                        backgroundColor: cs.surface,
+                        elevation: 0,
                       ),
                     ),
                   ),

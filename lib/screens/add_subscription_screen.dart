@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/profile/subscription_icon_storage.dart';
 import 'package:infaq/security/input_sanitizer.dart';
+import 'package:infaq/subscription/subscription_icon_picker_sheet.dart';
+import 'package:infaq/subscription/subscription_preset_icons.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
@@ -29,7 +31,10 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
   final ImagePicker _imagePicker = ImagePicker();
   Uint8List? _iconPreviewBytes;
 
-  /// Storage path inside the configured storage bucket (saved to `icon_url`).
+  /// Preset from catalog → saved as `icon_key`.
+  String? _selectedIconKey;
+
+  /// Storage path inside `subscription-icons` (saved to `icon_url`).
   String? _iconStoragePath;
   bool _uploadingIcon = false;
 
@@ -75,14 +80,23 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
     if (picked != null) setState(() => _nextDate = picked);
   }
 
-  Future<void> _pickIcon(ImageSource source) async {
+  (String ext, String mime) _imageExtAndMime(String lowerName) {
+    if (lowerName.endsWith('.webp')) return ('webp', 'image/webp');
+    if (lowerName.endsWith('.png')) return ('png', 'image/png');
+    if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) {
+      return ('jpg', 'image/jpeg');
+    }
+    return ('jpg', 'image/jpeg');
+  }
+
+  Future<void> _pickIconFromGallery() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
     setState(() => _uploadingIcon = true);
     try {
       final x = await _imagePicker.pickImage(
-        source: source,
+        source: ImageSource.gallery,
         maxWidth: 512,
         maxHeight: 512,
         imageQuality: 88,
@@ -94,13 +108,15 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
 
       final bytes = await x.readAsBytes();
       final lower = x.name.toLowerCase();
-      final ext = lower.endsWith('.png') ? 'png' : 'jpg';
-      final mime = ext == 'png' ? 'image/png' : 'image/jpeg';
-      final path =
-          '${user.id}/sub_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final (ext, mime) = _imageExtAndMime(lower);
+      final fileName = 'sub_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final path = InfaqSubscriptionIconStorage.customUploadPath(
+        user.id,
+        fileName,
+      );
 
       await Supabase.instance.client.storage
-          .from(InfaqSubscriptionIconStorage.bucket)
+          .from(InfaqSubscriptionIconStorage.userUploadBucket)
           .uploadBinary(
             path,
             bytes,
@@ -111,6 +127,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
       setState(() {
         _iconPreviewBytes = bytes;
         _iconStoragePath = path;
+        _selectedIconKey = null;
         _uploadingIcon = false;
       });
     } catch (e) {
@@ -125,90 +142,40 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
   }
 
   Future<void> _onIconFieldTap() async {
-    await showModalBottomSheet<void>(
+    await showSubscriptionIconPickerSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Choose from gallery'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _pickIcon(ImageSource.gallery);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Take a photo'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _pickIcon(ImageSource.camera);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.link_rounded),
-              title: const Text('Use image URL'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _enterImageUrl();
-              },
-            ),
-          ],
-        ),
-      ),
+      onPresetChosen: (key) {
+        setState(() {
+          _selectedIconKey = validatedSubscriptionIconKey(key);
+          _iconStoragePath = null;
+          _iconPreviewBytes = null;
+        });
+      },
     );
   }
 
-  Future<void> _enterImageUrl() async {
-    final ctrl = TextEditingController(
-      text: _iconStoragePath != null && _iconStoragePath!.startsWith('http')
-          ? _iconStoragePath
-          : '',
-    );
-    final value = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Image URL'),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.url,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'https://example.com/icon.png',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Use URL'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted || value == null) return;
-    final uri = Uri.tryParse(value);
-    final valid =
-        uri != null &&
-        (uri.scheme == 'http' || uri.scheme == 'https') &&
-        (uri.host.isNotEmpty);
-    if (!valid) {
-      showInfaqSnack(context, 'Please enter a valid http/https image URL.');
-      return;
+  ImageProvider<Object>? _iconAvatarProvider() {
+    if (_iconPreviewBytes != null) return MemoryImage(_iconPreviewBytes!);
+    final presetKey = validatedSubscriptionIconKey(_selectedIconKey);
+    if (presetKey != null) {
+      final u = InfaqSubscriptionIconStorage.presetPublicUrl(
+        Supabase.instance.client,
+        presetKey,
+      );
+      if (u != null && u.isNotEmpty) return NetworkImage(u);
     }
-    setState(() {
-      _iconPreviewBytes = null;
-      _iconStoragePath = value;
-    });
+    final path = _iconStoragePath?.trim();
+    if (path != null && path.isNotEmpty) {
+      final u = InfaqSubscriptionIconStorage.resolveDisplayUrl(
+        Supabase.instance.client,
+        path,
+      );
+      if (u != null && u.isNotEmpty) return NetworkImage(u);
+    }
+    return null;
   }
+
+  bool _hasIconSelection() => _iconAvatarProvider() != null;
 
   void _cancel() => Navigator.pop(context);
 
@@ -243,8 +210,17 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
         'next_payment': dateStr,
         'is_active': true,
       };
-      if (_iconStoragePath != null && _iconStoragePath!.trim().isNotEmpty) {
-        row['icon_url'] = _iconStoragePath!.trim();
+      final preset = validatedSubscriptionIconKey(_selectedIconKey);
+      final path = _iconStoragePath?.trim();
+      if (preset != null) {
+        row['icon_key'] = preset;
+        row['icon_url'] = null;
+      } else if (path != null && path.isNotEmpty) {
+        row['icon_url'] = path;
+        row['icon_key'] = null;
+      } else {
+        row['icon_key'] = null;
+        row['icon_url'] = null;
       }
 
       await Supabase.instance.client.from('subscriptions').insert(row);
@@ -342,29 +318,16 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                                     backgroundColor: isDark
                                         ? cs.surfaceContainerHighest
                                         : Colors.white,
-                                    backgroundImage: _iconPreviewBytes != null
-                                        ? MemoryImage(_iconPreviewBytes!)
-                                        : (_iconStoragePath != null &&
-                                                  _iconStoragePath!.isNotEmpty
-                                              ? NetworkImage(
-                                                  InfaqSubscriptionIconStorage.resolveDisplayUrl(
-                                                    Supabase.instance.client,
-                                                    _iconStoragePath!,
-                                                  )!,
-                                                )
-                                              : null),
-                                    child:
-                                        _iconPreviewBytes == null &&
-                                            (_iconStoragePath == null ||
-                                                _iconStoragePath!.isEmpty)
-                                        ? Icon(
+                                    backgroundImage: _iconAvatarProvider(),
+                                    child: _hasIconSelection()
+                                        ? null
+                                        : Icon(
                                             Icons.add_photo_alternate_outlined,
                                             color: cs.onSurface.withValues(
                                               alpha: 0.5,
                                             ),
                                             size: 28,
-                                          )
-                                        : null,
+                                          ),
                                   ),
                                   if (_uploadingIcon)
                                     const SizedBox(
@@ -380,10 +343,9 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                               const SizedBox(width: 14),
                               Expanded(
                                 child: Text(
-                                  _iconStoragePath != null &&
-                                          _iconStoragePath!.isNotEmpty
-                                      ? 'Tap to change picture'
-                                      : 'Tap to add subscription icon',
+                                  _hasIconSelection()
+                                      ? 'Tap to change preset'
+                                      : 'Tap to choose a preset icon',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     color: cs.onSurface.withValues(alpha: 0.65),
@@ -398,6 +360,33 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                             ],
                           ),
                         ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: OutlinedButton.icon(
+                      onPressed: (_uploadingIcon || _saving)
+                          ? null
+                          : _pickIconFromGallery,
+                      icon: const Icon(Icons.photo_library_outlined, size: 22),
+                      label: const Text(
+                        'Upload from gallery',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: kServiceFormGreen,
+                        side: BorderSide(
+                          color: kServiceFormGreen.withValues(alpha: 0.45),
+                          width: 1.4,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                        backgroundColor: cs.surface,
+                        elevation: 0,
                       ),
                     ),
                   ),
