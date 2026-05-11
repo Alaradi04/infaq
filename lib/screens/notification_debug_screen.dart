@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:infaq/services/bank_notification_sync_service.dart';
+import 'package:infaq/services/infaq_local_notifications_service.dart';
+import 'package:infaq/ui/infaq_widgets.dart';
 
 class NotificationDebugScreen extends StatefulWidget {
   const NotificationDebugScreen({super.key});
@@ -119,6 +121,37 @@ class _NotificationDebugScreenState extends State<NotificationDebugScreen> {
                       await _refresh();
                     },
                     child: const Text('Sync Pending Transactions'),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.tonal(
+                    onPressed: () async {
+                      final err = await InfaqLocalNotificationsService.instance
+                          .debugSendTestNotification();
+                      if (!context.mounted) return;
+                      if (err != null) {
+                        showInfaqSnack(context, err);
+                      } else {
+                        showInfaqSnack(context, 'Test notification sent.');
+                      }
+                    },
+                    child: const Text('Send test notification'),
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton.tonal(
+                    onPressed: () async {
+                      final err = await InfaqLocalNotificationsService.instance
+                          .debugScheduleTestIn10Seconds();
+                      if (!context.mounted) return;
+                      if (err != null) {
+                        showInfaqSnack(context, err);
+                      } else {
+                        showInfaqSnack(
+                          context,
+                          'Scheduled test in about 10 seconds.',
+                        );
+                      }
+                    },
+                    child: const Text('Schedule test notification in 10 seconds'),
                   ),
                   const SizedBox(height: 14),
                   Text(

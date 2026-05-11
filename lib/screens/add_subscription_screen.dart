@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/profile/subscription_icon_storage.dart';
+import 'package:infaq/services/subscription_reminder_local_notifications.dart';
 import 'package:infaq/security/input_sanitizer.dart';
 import 'package:infaq/subscription/subscription_icon_picker_sheet.dart';
 import 'package:infaq/subscription/subscription_preset_icons.dart';
@@ -223,9 +226,25 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
         row['icon_url'] = null;
       }
 
-      await Supabase.instance.client.from('subscriptions').insert(row);
+      final inserted = await Supabase.instance.client
+          .from('subscriptions')
+          .insert(row)
+          .select('id')
+          .maybeSingle();
+      final newId = inserted?['id']?.toString();
 
       if (!mounted) return;
+      if (newId != null && newId.isNotEmpty) {
+        unawaited(
+          SubscriptionReminderLocalNotifications.replaceRemindersForSubscription({
+            'id': newId,
+            'name': name,
+            'billing_cycle': _cycle,
+            'next_payment': dateStr,
+            'is_active': true,
+          }),
+        );
+      }
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/goal_icon_picker.dart';
 import 'package:infaq/goal_local_storage.dart';
+import 'package:infaq/services/goal_local_notifications.dart';
 import 'package:infaq/security/input_sanitizer.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
@@ -158,6 +161,16 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
         } catch (_) {
           // Row exists; user can set icon later in edit if prefs fail.
         }
+        unawaited(
+          GoalLocalNotifications.onAfterGoalSaved(
+            goalId: newId,
+            title: title,
+            target: target,
+            current: current,
+            deadlineIso: deadline,
+            currencyCode: widget.currencyCode,
+          ),
+        );
       }
 
       if (!mounted) return;

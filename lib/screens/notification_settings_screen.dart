@@ -1,8 +1,15 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'package:infaq/screens/notification_debug_screen.dart';
 import 'package:infaq/services/bank_notification_sync_service.dart';
-import 'package:infaq/services/notification_preferences_service.dart';
+import 'package:infaq/services/local_notification_toggle_store.dart';
+import 'package:infaq/services/notification_preferences_service.dart'
+    show NotificationPreferences, NotificationPreferencesService;
+import 'package:infaq/services/subscription_reminder_local_notifications.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
@@ -28,6 +35,14 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   bool _savingNotifications = false;
   bool _savingSms = false;
   bool _listenerEnabled = false;
+  bool _localTx = true;
+  bool _localBudget = true;
+  bool _localCategory = true;
+  bool _localSubscription = true;
+  bool _savingLocalTx = false;
+  bool _savingLocalBudget = false;
+  bool _savingLocalCategory = false;
+  bool _savingLocalSubscription = false;
 
   @override
   void initState() {
@@ -46,10 +61,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       debugPrint('[Permissions] notification settings resumed — refresh listener');
-      _refreshListenerStatus();
-      BankNotificationSyncService.scheduleDebouncedSync(
-        trigger: 'settings_resumed',
-      );
+      unawaited(_refreshListenerStatus());
     }
   }
 
@@ -59,15 +71,23 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       _error = null;
     });
     try {
-      final p = await NotificationPreferencesService.instance
-          .loadOrCreateForSettings();
-      final enabled = await BankNotificationSyncService.instance
-          .isNotificationListenerEnabled();
+      final results = await Future.wait<Object?>([
+        NotificationPreferencesService.instance.loadOrCreateForSettings(),
+        BankNotificationSyncService.instance.isNotificationListenerEnabled(),
+        LocalNotificationToggleStore.readAll(),
+      ]);
       if (!mounted) return;
+      final p = results[0]! as NotificationPreferences;
+      final enabled = results[1]! as bool;
+      final local = results[2]! as LocalNotificationToggles;
       setState(() {
         _allowNotifications = p.notificationsEnabled;
         _smsAutoRecording = p.smsAutoRecordingEnabled;
         _listenerEnabled = enabled;
+        _localTx = local.transaction;
+        _localBudget = local.budget;
+        _localCategory = local.category;
+        _localSubscription = local.subscription;
         _loading = false;
       });
     } catch (e) {
@@ -85,9 +105,22 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       _savingNotifications = true;
     });
     try {
+      if (v && defaultTargetPlatform == TargetPlatform.android) {
+        final status = await Permission.notification.request();
+        debugPrint('[LocalNotif] settings: POST_NOTIFICATIONS request -> $status');
+        if (!status.isGranted && mounted) {
+          showInfaqSnack(
+            context,
+            'Notifications are blocked for INFAQ. Enable them in Android Settings → Apps → INFAQ → Notifications.',
+          );
+        }
+      }
       await NotificationPreferencesService.instance.updateNotificationsEnabled(
         v,
       );
+      if (!v) {
+        await SubscriptionReminderLocalNotifications.cancelAllTrackedReminders();
+      }
     } catch (e) {
       if (mounted) {
         showInfaqSnack(
@@ -133,6 +166,57 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
         .isNotificationListenerEnabled();
     if (!mounted) return;
     setState(() => _listenerEnabled = enabled);
+  }
+
+  Future<void> _onLocalTxChanged(bool v) async {
+    setState(() {
+      _localTx = v;
+      _savingLocalTx = true;
+    });
+    try {
+      await LocalNotificationToggleStore.setTransactionAlertsEnabled(v);
+    } finally {
+      if (mounted) setState(() => _savingLocalTx = false);
+    }
+  }
+
+  Future<void> _onLocalBudgetChanged(bool v) async {
+    setState(() {
+      _localBudget = v;
+      _savingLocalBudget = true;
+    });
+    try {
+      await LocalNotificationToggleStore.setBudgetAlertsEnabled(v);
+    } finally {
+      if (mounted) setState(() => _savingLocalBudget = false);
+    }
+  }
+
+  Future<void> _onLocalCategoryChanged(bool v) async {
+    setState(() {
+      _localCategory = v;
+      _savingLocalCategory = true;
+    });
+    try {
+      await LocalNotificationToggleStore.setCategoryAlertsEnabled(v);
+    } finally {
+      if (mounted) setState(() => _savingLocalCategory = false);
+    }
+  }
+
+  Future<void> _onLocalSubscriptionChanged(bool v) async {
+    setState(() {
+      _localSubscription = v;
+      _savingLocalSubscription = true;
+    });
+    try {
+      await LocalNotificationToggleStore.setSubscriptionRemindersEnabled(v);
+      if (!v) {
+        await SubscriptionReminderLocalNotifications.cancelAllTrackedReminders();
+      }
+    } finally {
+      if (mounted) setState(() => _savingLocalSubscription = false);
+    }
   }
 
   @override
@@ -202,6 +286,146 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                           onChanged: _savingNotifications
                               ? null
                               : _onAllowNotificationsChanged,
+                          activeTrackColor: isDark ? cs.primary : _kPrimary,
+                          activeThumbColor: Colors.white,
+                          inactiveTrackColor: Colors.grey.shade300,
+                          inactiveThumbColor: Colors.grey.shade400,
+                        ),
+                        const SizedBox(height: 18),
+                        Text(
+                          'Local alerts on this device',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                            color: cs.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'These use your phone’s notification system only (no SMS changes).',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            height: 1.35,
+                            color: muted,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            'Transaction notifications',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: cs.onSurface,
+                            ),
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 6, right: 8),
+                            child: Text(
+                              'When automatic recording saves a new income or expense.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1.35,
+                                color: muted,
+                              ),
+                            ),
+                          ),
+                          value: _localTx,
+                          onChanged: !_allowNotifications || _savingLocalTx
+                              ? null
+                              : _onLocalTxChanged,
+                          activeTrackColor: isDark ? cs.primary : _kPrimary,
+                          activeThumbColor: Colors.white,
+                          inactiveTrackColor: Colors.grey.shade300,
+                          inactiveThumbColor: Colors.grey.shade400,
+                        ),
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            'Budget alerts',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: cs.onSurface,
+                            ),
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 6, right: 8),
+                            child: Text(
+                              'Warnings at 80% and 100% of your monthly budget.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1.35,
+                                color: muted,
+                              ),
+                            ),
+                          ),
+                          value: _localBudget,
+                          onChanged: !_allowNotifications || _savingLocalBudget
+                              ? null
+                              : _onLocalBudgetChanged,
+                          activeTrackColor: isDark ? cs.primary : _kPrimary,
+                          activeThumbColor: Colors.white,
+                          inactiveTrackColor: Colors.grey.shade300,
+                          inactiveThumbColor: Colors.grey.shade400,
+                        ),
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            'Category overspending alerts',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: cs.onSurface,
+                            ),
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 6, right: 8),
+                            child: Text(
+                              'Lightweight comparison to last month by category.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1.35,
+                                color: muted,
+                              ),
+                            ),
+                          ),
+                          value: _localCategory,
+                          onChanged: !_allowNotifications || _savingLocalCategory
+                              ? null
+                              : _onLocalCategoryChanged,
+                          activeTrackColor: isDark ? cs.primary : _kPrimary,
+                          activeThumbColor: Colors.white,
+                          inactiveTrackColor: Colors.grey.shade300,
+                          inactiveThumbColor: Colors.grey.shade400,
+                        ),
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            'Subscription reminders',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: cs.onSurface,
+                            ),
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 6, right: 8),
+                            child: Text(
+                              'Two days and one day before each renewal.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1.35,
+                                color: muted,
+                              ),
+                            ),
+                          ),
+                          value: _localSubscription,
+                          onChanged:
+                              !_allowNotifications || _savingLocalSubscription
+                              ? null
+                              : _onLocalSubscriptionChanged,
                           activeTrackColor: isDark ? cs.primary : _kPrimary,
                           activeThumbColor: Colors.white,
                           inactiveTrackColor: Colors.grey.shade300,

@@ -1018,10 +1018,12 @@ class _ManagementScreenState extends State<ManagementScreen> {
     widget.onMainTabIndexChanged?.call(t.index);
     if (t == _MgmtMainTab.subscriptions &&
         _subscriptions.isEmpty &&
-        !_loadingSub)
+        !_loadingSub) {
       _loadSubscriptions();
-    if (t == _MgmtMainTab.goals && _goals.isEmpty && !_loadingGoals)
+    }
+    if (t == _MgmtMainTab.goals && _goals.isEmpty && !_loadingGoals) {
       _loadGoals();
+    }
   }
 
   String _currencyPrefix() {
@@ -1109,8 +1111,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
     var hasUncategorized = false;
     for (final r in _transactions) {
       final d = _txDate(r);
-      if (!_inPeriod(d, _txPeriodMode, _txFocusedMonth, _txFocusedYear))
+      if (!_inPeriod(d, _txPeriodMode, _txFocusedMonth, _txFocusedYear)) {
         continue;
+      }
       if (!_rowMatchesTypeFilter(r)) continue;
       final label = _categoryDisplayName(r);
       if (label.isEmpty) {
@@ -1164,8 +1167,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
     if (_categoryFilterKey != null) {
       list = list.where((r) {
         final name = _categoryDisplayName(r);
-        if (_categoryFilterKey == _kUncategorizedCategoryKey)
+        if (_categoryFilterKey == _kUncategorizedCategoryKey) {
           return name.isEmpty;
+        }
         return name == _categoryFilterKey;
       }).toList();
     }
@@ -1701,10 +1705,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   child: KeyedSubtree(
                     key: ValueKey(_mainTab.index),
                     child: _mainTab == _MgmtMainTab.transactions
-                        ? _buildTransactionsTab(
-                            spent: spent,
-                            budget: budget,
-                          )
+                        ? _buildTransactionsTab(spent: spent, budget: budget)
                         : _mainTab == _MgmtMainTab.subscriptions
                         ? _buildSubscriptionsTab()
                         : _buildGoalsTab(),
@@ -2680,8 +2681,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
     if (months < 0) months = 0;
     final y = months ~/ 12;
     final m = months % 12;
-    if (y > 0 && m > 0)
+    if (y > 0 && m > 0) {
       return '$y ${y == 1 ? 'year' : 'years'} $m ${m == 1 ? 'month' : 'months'}';
+    }
     if (y > 0) return '$y ${y == 1 ? 'year' : 'years'}';
     return '$m ${m == 1 ? 'month' : 'months'}';
   }

@@ -72,8 +72,9 @@ class _InsightsScreenState extends State<InsightsScreen> {
 
   String _trendSectionTitle(InsightsPayload p) {
     if (p.range == InsightsTimeRange.thisYear) return 'Spending by month';
-    if (_customPeriodActive && p.trendBars.length > 6)
+    if (_customPeriodActive && p.trendBars.length > 6) {
       return 'Spending by month';
+    }
     return 'Spending trend';
   }
 
@@ -274,8 +275,9 @@ class _InsightsScreenState extends State<InsightsScreen> {
         if (day.isBefore(periodStart) || day.isAfter(periodEnd)) continue;
 
         final categoryId = row['category_id']?.toString();
-        if (categoryId == null || categoryById[categoryId] != 'expense')
+        if (categoryId == null || categoryById[categoryId] != 'expense') {
           continue;
+        }
         filteredExpenseCount++;
         final bucketKey = _bucketKeyForDate(day);
         if (bucketKey == null || !bucketCounts.containsKey(bucketKey)) {
@@ -423,6 +425,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
       case InsightsTimeRange.thisYear:
         return day.month.toString();
     }
+    return null;
   }
 
   Future<void> _migrateMissingLeafImpacts() async {
@@ -462,8 +465,9 @@ class _InsightsScreenState extends State<InsightsScreen> {
       for (final row in rows) {
         final txId = row['id']?.toString();
         final catId = row['category_id']?.toString();
-        if (txId == null || txId.isEmpty || catId == null || catId.isEmpty)
+        if (txId == null || txId.isEmpty || catId == null || catId.isEmpty) {
           continue;
+        }
         final cat = categoryById[catId];
         if (cat == null || cat['type']?.toString().toLowerCase() != 'expense') {
           continue;
@@ -617,11 +621,12 @@ class _InsightsScreenState extends State<InsightsScreen> {
       if (sel.useCurrentScreenFilter) {
         final p = _data;
         if (p == null) {
-          if (mounted)
+          if (mounted) {
             showInfaqSnack(
               context,
               'Insights still loading. Try again in a moment.',
             );
+          }
           return;
         }
         payload = p;
@@ -1272,8 +1277,9 @@ class _TrendCard extends StatelessWidget {
                   showTitles: true,
                   getTitlesWidget: (v, m) {
                     final i = v.toInt();
-                    if (i < 0 || i >= bars.length)
+                    if (i < 0 || i >= bars.length) {
                       return const SizedBox.shrink();
+                    }
                     return Padding(
                       padding: const EdgeInsets.only(top: 6),
                       child: Text(

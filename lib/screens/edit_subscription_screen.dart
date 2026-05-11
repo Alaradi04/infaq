@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/profile/subscription_icon_storage.dart';
+import 'package:infaq/services/subscription_reminder_local_notifications.dart';
 import 'package:infaq/security/input_sanitizer.dart';
 import 'package:infaq/subscription/subscription_analytics.dart';
 import 'package:infaq/subscription/subscription_icon_picker_sheet.dart';
@@ -227,6 +229,14 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
           .eq('user_id', user.id);
 
       if (!mounted) return;
+      final updatedSub = Map<String, dynamic>.from(widget.subscription);
+      updatedSub.addAll(patch);
+      updatedSub['id'] = id;
+      unawaited(
+        SubscriptionReminderLocalNotifications.replaceRemindersForSubscription(
+          updatedSub,
+        ),
+      );
       Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
@@ -268,6 +278,9 @@ class _EditSubscriptionScreenState extends State<EditSubscriptionScreen> {
     if (ok != true || !mounted) return;
 
     try {
+      await SubscriptionReminderLocalNotifications.cancelRemindersForSubscriptionId(
+        id,
+      );
       final path = _iconStoragePath?.trim();
       if (path != null &&
           path.isNotEmpty &&

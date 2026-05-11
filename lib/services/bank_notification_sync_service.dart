@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:infaq/services/automatic_transaction_local_notifications.dart';
 import 'package:infaq/services/notification_preferences_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -311,6 +312,17 @@ class BankNotificationSyncService {
     unawaited(
       _runOptionalAiEnrichment(transactionId: insertedId, merchant: merchant),
     );
+    unawaited(
+      AutomaticTransactionLocalNotifications.onAfterAutomaticTransactionSaved(
+        userId: userId,
+        transactionId: insertedId,
+        transactionType: transactionType,
+        merchant: merchant,
+        amount: amount,
+        categoryId: categoryChoice.$2,
+        categoryName: categoryChoice.$1,
+      ),
+    );
     return true;
   }
 
@@ -400,8 +412,9 @@ class BankNotificationSyncService {
     required String transactionType,
   }) {
     final m = merchant.toLowerCase();
-    if (m.contains('fawri+'))
+    if (m.contains('fawri+')) {
       return transactionType == 'income' ? 'Other Income' : 'Other Expense';
+    }
     if (m.contains('talabat') ||
         m.contains('jahez') ||
         m.contains('restaurant') ||
@@ -410,11 +423,13 @@ class BankNotificationSyncService {
       return 'Food';
     }
     if (m.contains('talabat')) return 'Food';
-    if (m.contains('uber') || m.contains('careem') || m.contains('taxi'))
+    if (m.contains('uber') || m.contains('careem') || m.contains('taxi')) {
       return 'Transport';
+    }
     if (m.contains('netflix') || m.contains('spotify')) return 'Entertainment';
-    if (m.contains('benefit') || m.contains('fawri') || m.contains('iban'))
+    if (m.contains('benefit') || m.contains('fawri') || m.contains('iban')) {
       return 'Transfer';
+    }
     if (m.contains('salary')) return 'Income';
     return transactionType == 'income' ? 'Income' : 'Other Expense';
   }
@@ -442,16 +457,18 @@ class BankNotificationSyncService {
         (m.contains('fawri') || m.contains('benefit') || m.contains('iban'))) {
       if (m.contains('fawri+')) {
         final otherIncome = pickByNameContains(['other income', 'income']);
-        if (otherIncome != null)
+        if (otherIncome != null) {
           return (otherIncome['name']!, otherIncome['id']);
+        }
       }
       final transfer = pickByNameContains(['transfer', 'income']);
       if (transfer != null) return (transfer['name']!, transfer['id']);
     }
     if (!isIncome && m.contains('fawri+')) {
       final otherExpense = pickByNameContains(['other expense', 'expense']);
-      if (otherExpense != null)
+      if (otherExpense != null) {
         return (otherExpense['name']!, otherExpense['id']);
+      }
     }
 
     final fallbackName = _fallbackCategoryName(
@@ -466,8 +483,9 @@ class BankNotificationSyncService {
     final byContains = pickByNameContains([fallbackName]);
     if (byContains != null) return (byContains['name']!, byContains['id']);
 
-    if (typeRows.isNotEmpty)
+    if (typeRows.isNotEmpty) {
       return (typeRows.first['name']!, typeRows.first['id']);
+    }
     return (isIncome ? 'Income' : 'Other Expense', null);
   }
 

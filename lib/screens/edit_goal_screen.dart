@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/goal_icon_picker.dart';
 import 'package:infaq/goal_local_storage.dart';
+import 'package:infaq/services/goal_local_notifications.dart';
 import 'package:infaq/security/input_sanitizer.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_service_form_widgets.dart';
@@ -124,7 +126,15 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
     super.dispose();
   }
 
-  void _cancel() => Navigator.pop(context);
+  void _cancel() {
+    if (!mounted) return;
+    final nav = Navigator.of(context);
+    if (nav.canPop()) {
+      nav.pop();
+    } else {
+      debugPrint('[EditGoal] Cancel/back: cannot pop (no route above)');
+    }
+  }
 
   String? _currencySuffix() {
     switch (widget.currencyCode?.toUpperCase()) {
@@ -212,12 +222,107 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
           .eq('created_by', user.id);
       await _clearExtras();
       if (mounted) Navigator.pop(context, true);
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[EditGoal] delete failed: $e\n$st');
       if (mounted) {
+        final detail = e.toString();
         showInfaqSnack(
           context,
-          'Could not delete goal right now. Please try again.',
+          detail.length > 160
+              ? 'Could not delete: ${detail.substring(0, 160)}…'
+              : 'Could not delete: $detail',
         );
+      }
+    }
+  }
+
+  String _deadlineIso() {
+    final d = _deadline;
+    return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  }
+
+  /// Persists goal fields; [reached] may equal [target] for “mark completed”.
+  Future<void> _runGoalSave({
+    required String title,
+    required double target,
+    required double reached,
+  }) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    final id = _goalId;
+    if (user == null || id == null || id.isEmpty) {
+      showInfaqSnack(context, 'You are not signed in.');
+      return;
+    }
+
+    setState(() => _saving = true);
+    final deadline = _deadlineIso();
+    try {
+      debugPrint(
+        '[EditGoal] save start goalId=$id target=$target reached=$reached deadline=$deadline',
+      );
+
+      final row = await Supabase.instance.client
+          .from('goals')
+          .update({
+            'title': title,
+            'target_amount': target,
+            'current_amount': reached,
+            'deadline': deadline,
+          })
+          .eq('id', id)
+          .eq('created_by', user.id)
+          .select('id')
+          .maybeSingle();
+
+      if (row == null) {
+        throw StateError(
+          'Update affected 0 rows (goal missing or blocked by access rules).',
+        );
+      }
+
+      await _persistExtras();
+      if (!mounted) return;
+
+      _reachedCtrl.text = reached % 1 == 0
+          ? reached.toStringAsFixed(0)
+          : reached.toStringAsFixed(2);
+
+      unawaited(
+        GoalLocalNotifications.onAfterGoalSaved(
+          goalId: id,
+          title: title,
+          target: target,
+          current: reached,
+          deadlineIso: deadline,
+          currencyCode: widget.currencyCode,
+        ),
+      );
+
+      if (!mounted) return;
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop(true);
+        debugPrint('[EditGoal] save success, popped');
+      } else {
+        debugPrint('[EditGoal] save success but cannot pop — staying on screen');
+        showInfaqSnack(context, 'Saved, but could not close this screen.');
+        setState(() {});
+      }
+    } catch (e, st) {
+      debugPrint('[EditGoal] save FAILED: $e\n$st');
+      if (!mounted) return;
+      final msg = e.toString();
+      if (msg.contains('row-level security') || msg.contains('42501')) {
+        showInfaqSnack(
+          context,
+          'Could not save: check database access for goals. ($msg)',
+        );
+      } else {
+        final short = msg.length > 180 ? '${msg.substring(0, 180)}…' : msg;
+        showInfaqSnack(context, 'Save failed: $short');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
       }
     }
   }
@@ -246,49 +351,21 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
       return;
     }
 
-    final user = Supabase.instance.client.auth.currentUser;
-    final id = _goalId;
-    if (user == null || id == null || id.isEmpty) {
-      showInfaqSnack(context, 'You are not signed in.');
+    await _runGoalSave(title: title, target: target, reached: reached);
+  }
+
+  Future<void> _markAsCompleted() async {
+    final title = InputSanitizer.cleanText(_titleCtrl.text, maxLength: 80);
+    final target = InputSanitizer.parsePositiveAmount(_targetCtrl.text);
+    if (title.isEmpty) {
+      showInfaqSnack(context, 'Enter a name for this goal.');
       return;
     }
-
-    setState(() => _saving = true);
-    try {
-      final d = _deadline;
-      final deadline =
-          '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-      await Supabase.instance.client
-          .from('goals')
-          .update({
-            'title': title,
-            'target_amount': target,
-            'current_amount': reached,
-            'deadline': deadline,
-          })
-          .eq('id', id)
-          .eq('created_by', user.id);
-
-      await _persistExtras();
-      if (!mounted) return;
-      Navigator.pop(context, true);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _saving = false);
-      final msg = e.toString();
-      if (msg.contains('row-level security') || msg.contains('42501')) {
-        showInfaqSnack(
-          context,
-          'Could not save: check database access for goals.',
-        );
-      } else {
-        showInfaqSnack(
-          context,
-          'Could not save goal right now. Please try again.',
-        );
-      }
+    if (target == null || target <= 0) {
+      showInfaqSnack(context, 'Enter a target amount greater than zero.');
+      return;
     }
+    await _runGoalSave(title: title, target: target, reached: target);
   }
 
   void _showIconPicker() {
@@ -321,9 +398,12 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
       );
     }
 
+    // Space below scroll content so it clears the bottom nav bar (not extendBody).
+    final bottomInset = MediaQuery.of(context).padding.bottom + 88;
+
     return Scaffold(
       backgroundColor: cs.surface,
-      extendBody: true,
+      extendBody: false,
       bottomNavigationBar: InfaqBottomNavBar(
         tabIndex: -1,
         onHome: _cancel,
@@ -340,7 +420,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
             title: 'Goals',
             onBack: _cancel,
             trailing: IconButton(
-              onPressed: _confirmDelete,
+              onPressed: _saving ? null : _confirmDelete,
               icon: Icon(
                 Icons.delete_outline_rounded,
                 color: Colors.red.shade600,
@@ -350,7 +430,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
           ),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 120),
+              padding: EdgeInsets.fromLTRB(20, 18, 20, bottomInset),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -394,7 +474,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                               elevation: 2,
                               shape: const CircleBorder(),
                               child: InkWell(
-                                onTap: _showIconPicker,
+                                onTap: _saving ? null : _showIconPicker,
                                 customBorder: const CircleBorder(),
                                 child: Padding(
                                   padding: const EdgeInsets.all(6),
@@ -542,6 +622,47 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
+                  if (t > 0 && reached >= t)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        'This goal is completed.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: kServiceFormGreen,
+                          height: 1.35,
+                        ),
+                      ),
+                    )
+                  else if (t > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: OutlinedButton(
+                          onPressed: _saving ? null : _markAsCompleted,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: kServiceFormGreen,
+                            side: BorderSide(
+                              color: kServiceFormGreen.withValues(alpha: 0.55),
+                              width: 1.4,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                            backgroundColor: cs.surface,
+                            elevation: 0,
+                          ),
+                          child: const Text(
+                            'Mark as completed',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
+                    ),
                   InfaqPrimaryButton(
                     label: 'Save changes',
                     isLoading: _saving,
@@ -552,7 +673,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                     width: double.infinity,
                     height: 52,
                     child: OutlinedButton(
-                      onPressed: _saving ? null : _cancel,
+                      onPressed: _cancel,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: cs.primary,
                         side: BorderSide(

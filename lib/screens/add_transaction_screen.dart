@@ -8,6 +8,7 @@ import 'package:infaq/category/category_icons.dart';
 import 'package:infaq/security/input_sanitizer.dart';
 import 'package:infaq/services/ai_service.dart'
     show AiCategorizeCallKind, AiService;
+import 'package:infaq/services/automatic_transaction_local_notifications.dart';
 import 'package:infaq/ui/infaq_bottom_nav.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
@@ -638,16 +639,45 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             .update(txPayload)
             .eq('id', _existingId!)
             .eq('user_id', user.id);
+        if (!mounted) return;
+        _didRemoteUpdate = true;
+        unawaited(
+          AutomaticTransactionLocalNotifications.onAfterManualTransactionSaved(
+            userId: user.id,
+            transactionId: _existingId,
+            transactionType: _isIncome ? 'income' : 'expense',
+            merchant: desc,
+            amount: amount,
+            categoryId: _categoryId,
+            categoryName: categoryName,
+          ),
+        );
+        Navigator.pop(context, true);
       } else {
-        await client.from('transactions').insert({
-          'user_id': user.id,
-          ...txPayload,
-        });
+        final inserted = await client
+            .from('transactions')
+            .insert({
+              'user_id': user.id,
+              ...txPayload,
+            })
+            .select('id')
+            .maybeSingle();
+        final newId = inserted?['id']?.toString();
+        if (!mounted) return;
+        _didRemoteUpdate = true;
+        unawaited(
+          AutomaticTransactionLocalNotifications.onAfterManualTransactionSaved(
+            userId: user.id,
+            transactionId: newId,
+            transactionType: _isIncome ? 'income' : 'expense',
+            merchant: desc,
+            amount: amount,
+            categoryId: _categoryId,
+            categoryName: categoryName,
+          ),
+        );
+        Navigator.pop(context, true);
       }
-
-      if (!mounted) return;
-      _didRemoteUpdate = true;
-      Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
