@@ -345,7 +345,7 @@ class _AddGoalScreenState extends State<AddGoalScreen> {
                   ),
                   const SizedBox(height: 28),
                   InfaqPrimaryButton(
-                    label: 'Save change',
+                    label: 'Add',
                     isLoading: _saving,
                     onPressed: _saving ? null : _save,
                   ),

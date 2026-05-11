@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import 'package:infaq/screens/notification_debug_screen.dart';
 import 'package:infaq/services/bank_notification_sync_service.dart';
 import 'package:infaq/services/local_notification_toggle_store.dart';
 import 'package:infaq/services/notification_preferences_service.dart'
@@ -118,9 +117,22 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       await NotificationPreferencesService.instance.updateNotificationsEnabled(
         v,
       );
-      if (!v) {
-        await SubscriptionReminderLocalNotifications.cancelAllTrackedReminders();
-      }
+
+      // Master switch controls all local notification types.
+      // (We reuse the internal toggle handlers even though their switches are
+      // not visible anymore, to keep the notification logic unchanged.)
+      debugPrint(
+        '[LocalNotif] settings: internal before allow=$v '
+        '(localTx=$_localTx, localBudget=$_localBudget, localCategory=$_localCategory, localSub=$_localSubscription) '
+        'savingFlags(tx=$_savingLocalTx,bud=$_savingLocalBudget,cat=$_savingLocalCategory,sub=$_savingLocalSubscription)',
+      );
+
+      await Future.wait([
+        if (_localTx != v) _onLocalTxChanged(v) else Future.value(),
+        if (_localBudget != v) _onLocalBudgetChanged(v) else Future.value(),
+        if (_localCategory != v) _onLocalCategoryChanged(v) else Future.value(),
+        if (_localSubscription != v) _onLocalSubscriptionChanged(v) else Future.value(),
+      ]);
     } catch (e) {
       if (mounted) {
         showInfaqSnack(
@@ -292,146 +304,6 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                           inactiveThumbColor: Colors.grey.shade400,
                         ),
                         const SizedBox(height: 18),
-                        Text(
-                          'Local alerts on this device',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 14,
-                            color: cs.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'These use your phone’s notification system only (no SMS changes).',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            height: 1.35,
-                            color: muted,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        SwitchListTile.adaptive(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            'Transaction notifications',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                              color: cs.onSurface,
-                            ),
-                          ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 6, right: 8),
-                            child: Text(
-                              'When automatic recording saves a new income or expense.',
-                              style: TextStyle(
-                                fontSize: 13,
-                                height: 1.35,
-                                color: muted,
-                              ),
-                            ),
-                          ),
-                          value: _localTx,
-                          onChanged: !_allowNotifications || _savingLocalTx
-                              ? null
-                              : _onLocalTxChanged,
-                          activeTrackColor: isDark ? cs.primary : _kPrimary,
-                          activeThumbColor: Colors.white,
-                          inactiveTrackColor: Colors.grey.shade300,
-                          inactiveThumbColor: Colors.grey.shade400,
-                        ),
-                        SwitchListTile.adaptive(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            'Budget alerts',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                              color: cs.onSurface,
-                            ),
-                          ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 6, right: 8),
-                            child: Text(
-                              'Warnings at 80% and 100% of your monthly budget.',
-                              style: TextStyle(
-                                fontSize: 13,
-                                height: 1.35,
-                                color: muted,
-                              ),
-                            ),
-                          ),
-                          value: _localBudget,
-                          onChanged: !_allowNotifications || _savingLocalBudget
-                              ? null
-                              : _onLocalBudgetChanged,
-                          activeTrackColor: isDark ? cs.primary : _kPrimary,
-                          activeThumbColor: Colors.white,
-                          inactiveTrackColor: Colors.grey.shade300,
-                          inactiveThumbColor: Colors.grey.shade400,
-                        ),
-                        SwitchListTile.adaptive(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            'Category overspending alerts',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                              color: cs.onSurface,
-                            ),
-                          ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 6, right: 8),
-                            child: Text(
-                              'Lightweight comparison to last month by category.',
-                              style: TextStyle(
-                                fontSize: 13,
-                                height: 1.35,
-                                color: muted,
-                              ),
-                            ),
-                          ),
-                          value: _localCategory,
-                          onChanged: !_allowNotifications || _savingLocalCategory
-                              ? null
-                              : _onLocalCategoryChanged,
-                          activeTrackColor: isDark ? cs.primary : _kPrimary,
-                          activeThumbColor: Colors.white,
-                          inactiveTrackColor: Colors.grey.shade300,
-                          inactiveThumbColor: Colors.grey.shade400,
-                        ),
-                        SwitchListTile.adaptive(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            'Subscription reminders',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                              color: cs.onSurface,
-                            ),
-                          ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 6, right: 8),
-                            child: Text(
-                              'Two days and one day before each renewal.',
-                              style: TextStyle(
-                                fontSize: 13,
-                                height: 1.35,
-                                color: muted,
-                              ),
-                            ),
-                          ),
-                          value: _localSubscription,
-                          onChanged:
-                              !_allowNotifications || _savingLocalSubscription
-                              ? null
-                              : _onLocalSubscriptionChanged,
-                          activeTrackColor: isDark ? cs.primary : _kPrimary,
-                          activeThumbColor: Colors.white,
-                          inactiveTrackColor: Colors.grey.shade300,
-                          inactiveThumbColor: Colors.grey.shade400,
-                        ),
-                        const SizedBox(height: 8),
                         SwitchListTile.adaptive(
                           contentPadding: EdgeInsets.zero,
                           title: Text(
@@ -540,16 +412,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                           child: const Text('Sync Pending Transactions'),
                         ),
                         const SizedBox(height: 8),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(context).push<void>(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const NotificationDebugScreen(),
-                              ),
-                            );
-                          },
-                          child: const Text('Open Notification Debug'),
-                        ),
+                        // Debug page removed from normal settings UI.
                       ],
                     ),
                   ),

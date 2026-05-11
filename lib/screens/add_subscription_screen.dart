@@ -442,7 +442,7 @@ class _AddSubscriptionScreenState extends State<AddSubscriptionScreen> {
                   ),
                   const SizedBox(height: 28),
                   InfaqPrimaryButton(
-                    label: 'Save change',
+                    label: 'Add',
                     isLoading: _saving,
                     onPressed: _saving ? null : _save,
                   ),
