@@ -1756,7 +1756,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
           onEditBudget: _editBudget,
           spentLabel: 'Total spent',
           budgetLabel: 'Budget',
-          showRemainingLine: false,
+          showRemainingLine: true,
           spent: spent,
           budget: budget,
           format: _fmtMoney,
