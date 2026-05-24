@@ -57,11 +57,23 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
   String? _currency = 'BHD';
   final _balance = TextEditingController();
 
+  String? _emailInlineError;
+
+  static const List<String> _kDuplicateEmailPhrases = [
+    'already registered',
+    'already exists',
+    'user already registered',
+    'email already registered',
+    'email already exists',
+    'user already exists',
+  ];
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _password.addListener(_onPasswordChanged);
+    _email.addListener(_onEmailChanged);
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       debugPrint(
         '[AuthNav] register onAuthStateChange event=${data.event} '
@@ -385,6 +397,36 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
     setState(() {});
   }
 
+  void _onEmailChanged() {
+    if (_emailInlineError == null) return;
+    if (!mounted) return;
+    setState(() => _emailInlineError = null);
+  }
+
+  bool _authMessageIndicatesDuplicateEmail(String message) {
+    final lower = message.toLowerCase();
+    return _kDuplicateEmailPhrases.any(lower.contains);
+  }
+
+  bool _isDuplicateEmailSignUpResponse(AuthResponse response) {
+    final user = response.user;
+    if (user == null) return false;
+    final identities = user.identities;
+    return identities == null || identities.isEmpty;
+  }
+
+  void _handleDuplicateEmailSignUp() {
+    debugPrint('[SignupValidation] duplicate email detected');
+    debugPrint('[SignupValidation] email inline error set=Email already exists.');
+    debugPrint('[SignupValidation] stopped before confirm email dialog');
+    setState(() {
+      _emailInlineError = 'Email already exists.';
+      _step = 1;
+      _awaitingEmailConfirmation = false;
+      _emailConfirmDialogOpen = false;
+    });
+  }
+
   @override
   void dispose() {
     if (_ownsEmailConfirmHandler) {
@@ -393,6 +435,7 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
     WidgetsBinding.instance.removeObserver(this);
     _authSub?.cancel();
     _fullName.dispose();
+    _email.removeListener(_onEmailChanged);
     _email.dispose();
     _password.removeListener(_onPasswordChanged);
     _password.dispose();
@@ -572,8 +615,20 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
           'balance': _balance.text.trim(),
         },
       );
+
+      final signupUser = response.user;
+      debugPrint('[SignupValidation] signup response userId=${signupUser?.id}');
+      debugPrint(
+        '[SignupValidation] signup response identitiesCount=${signupUser?.identities?.length}',
+      );
+
+      if (_isDuplicateEmailSignUpResponse(response)) {
+        _handleDuplicateEmailSignUp();
+        return;
+      }
+
       session = response.session;
-      final user = response.user;
+      final user = signupUser;
 
       if (session == null && user != null) {
         debugPrint('[AuthNav] sign-up: response session null, polling…');
@@ -613,6 +668,10 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
     } on AuthException catch (e) {
       if (!mounted) return;
       debugPrint('[AuthNav] sign-up AuthException: ${e.message}');
+      if (_authMessageIndicatesDuplicateEmail(e.message)) {
+        _handleDuplicateEmailSignUp();
+        return;
+      }
       showInfaqSnack(context, e.message);
     } catch (e, st) {
       debugPrint('[AuthNav] sign-up error: $e\n$st');
@@ -757,6 +816,20 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
         textInputAction: TextInputAction.next,
         autofillHints: const [AutofillHints.email],
       ),
+      if (_emailInlineError != null) ...[
+        const SizedBox(height: 4),
+        Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: Text(
+            _emailInlineError!,
+            style: TextStyle(
+              color: Colors.red.withValues(alpha: 0.9),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
       const SizedBox(height: 14),
       const _FieldLabel('Password'),
       InfaqPillField(
