@@ -11,105 +11,124 @@ import 'package:infaq/ui/infaq_widgets.dart';
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
-  static const Color _kPrimary = Color(0xFF3F5F4A);
-  static const Color _kIconTileBg = Color(0xFFE8F4EA);
+  static const Color _kPrimaryLight = Color(0xFF3F5F4A);
+  static const Color _kIconTileBgLight = Color(0xFFE8F4EA);
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final scaffoldBg = isDark ? cs.surface : Colors.white;
+    final brandColor = isDark ? cs.primary : _kPrimaryLight;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        statusBarColor: Colors.white,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
+      value: SystemUiOverlayStyle(
+        statusBarColor: scaffoldBg,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
       ),
       child: Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(24, 12, 24, 20 + bottomInset),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 8),
-              Center(
-                child: Image.asset(
-                  kInfaqBrandIconAsset,
-                  height: 88,
-                  fit: BoxFit.contain,
-                  filterQuality: FilterQuality.high,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'INFAQ',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 34,
-                  fontWeight: FontWeight.w800,
-                  color: _kPrimary,
-                  fontFamily: 'Georgia',
-                  letterSpacing: 0.8,
-                ),
-              ),
-              const SizedBox(height: 32),
-              const _FeatureRow(
-                icon: Icons.trending_up_rounded,
-                title: 'Track Your Spending',
-                subtitle: 'Monitor expenses and stay within budget',
-              ),
-              const SizedBox(height: 18),
-              const _FeatureRow(
-                icon: Icons.auto_awesome_rounded,
-                title: 'AI-Powered Insights',
-                subtitle: 'Get smart analysis of your spending habits',
-              ),
-              const SizedBox(height: 18),
-              const _FeatureRow(
-                icon: Icons.eco_rounded,
-                title: 'Sustainability Tips',
-                subtitle: 'Make eco-friendly financial choices',
-              ),
-              const SizedBox(height: 36),
-              _ShadowPill(
-                child: InfaqPrimaryButton(
-                  label: 'Sign up',
-                  onPressed: () {
-                    Navigator.of(context).push<void>(
-                      MaterialPageRoute<void>(builder: (_) => const RegisterFlowScreen()),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 14),
-              _ShadowPill(
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: OutlinedButton(
-                    onPressed: () {
-                      Navigator.of(context).push<void>(
-                        MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
-                      );
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _kPrimary,
-                      backgroundColor: Colors.white,
-                      side: BorderSide(color: Colors.black.withValues(alpha: 0.12)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                    ),
-                    child: const Text('Sign in', style: TextStyle(fontWeight: FontWeight.w700)),
+        backgroundColor: scaffoldBg,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(24, 12, 24, 20 + bottomInset),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 8),
+                Center(
+                  child: Image.asset(
+                    kInfaqBrandIconAsset,
+                    height: 88,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.high,
                   ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              _LegalFooter(),
-            ],
+                const SizedBox(height: 12),
+                Text(
+                  'INFAQ',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 34,
+                    fontWeight: FontWeight.w800,
+                    color: brandColor,
+                    fontFamily: 'Georgia',
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                const _FeatureRow(
+                  icon: Icons.trending_up_rounded,
+                  title: 'Track Your Spending',
+                  subtitle: 'Monitor expenses and stay within budget',
+                ),
+                const SizedBox(height: 18),
+                const _FeatureRow(
+                  icon: Icons.auto_awesome_rounded,
+                  title: 'AI-Powered Insights',
+                  subtitle: 'Get smart analysis of your spending habits',
+                ),
+                const SizedBox(height: 18),
+                const _FeatureRow(
+                  icon: Icons.eco_rounded,
+                  title: 'Sustainability Tips',
+                  subtitle: 'Make eco-friendly financial choices',
+                ),
+                const SizedBox(height: 36),
+                _ShadowPill(
+                  child: InfaqPrimaryButton(
+                    label: 'Sign up',
+                    onPressed: () {
+                      Navigator.of(context).push<void>(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const RegisterFlowScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _ShadowPill(
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.of(context).push<void>(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const LoginScreen(),
+                          ),
+                        );
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: brandColor,
+                        backgroundColor:
+                            isDark ? cs.surfaceContainerHighest : Colors.white,
+                        side: BorderSide(
+                          color: isDark
+                              ? cs.outline.withValues(alpha: 0.45)
+                              : Colors.black.withValues(alpha: 0.12),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                      ),
+                      child: const Text(
+                        'Sign in',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const _LegalFooter(),
+              ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 }
@@ -121,12 +140,19 @@ class _ShadowPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
-        boxShadow: const [
-          BoxShadow(color: Color(0x223F5F4A), blurRadius: 14, offset: Offset(0, 6)),
-        ],
+        boxShadow: isDark
+            ? const []
+            : const [
+                BoxShadow(
+                  color: Color(0x223F5F4A),
+                  blurRadius: 14,
+                  offset: Offset(0, 6),
+                ),
+              ],
       ),
       child: child,
     );
@@ -146,6 +172,17 @@ class _FeatureRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final iconTileBg =
+        isDark ? cs.surfaceContainerHighest : WelcomeScreen._kIconTileBgLight;
+    final iconColor = isDark ? cs.primary : WelcomeScreen._kPrimaryLight;
+    final titleColor = isDark ? cs.onSurface : const Color(0xFF1B1B1B);
+    final subtitleColor = isDark
+        ? cs.onSurface.withValues(alpha: 0.65)
+        : Colors.black.withValues(alpha: 0.52);
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -153,10 +190,10 @@ class _FeatureRow extends StatelessWidget {
           width: 52,
           height: 52,
           decoration: BoxDecoration(
-            color: WelcomeScreen._kIconTileBg,
+            color: iconTileBg,
             borderRadius: BorderRadius.circular(14),
           ),
-          child: Icon(icon, color: WelcomeScreen._kPrimary, size: 28),
+          child: Icon(icon, color: iconColor, size: 28),
         ),
         const SizedBox(width: 16),
         Expanded(
@@ -165,10 +202,10 @@ class _FeatureRow extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFF1B1B1B),
+                  color: titleColor,
                   height: 1.25,
                 ),
               ),
@@ -178,7 +215,7 @@ class _FeatureRow extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 14,
                   height: 1.35,
-                  color: Colors.black.withValues(alpha: 0.52),
+                  color: subtitleColor,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -191,6 +228,8 @@ class _FeatureRow extends StatelessWidget {
 }
 
 class _LegalFooter extends StatefulWidget {
+  const _LegalFooter();
+
   @override
   State<_LegalFooter> createState() => _LegalFooterState();
 }
@@ -226,18 +265,25 @@ class _LegalFooterState extends State<_LegalFooter> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final linkColor =
+        isDark ? cs.primary : WelcomeScreen._kPrimaryLight;
     final baseStyle = TextStyle(
       fontSize: 12,
       height: 1.45,
-      color: Colors.black.withValues(alpha: 0.42),
+      color: isDark
+          ? cs.onSurface.withValues(alpha: 0.55)
+          : Colors.black.withValues(alpha: 0.42),
     );
     final linkStyle = TextStyle(
       fontSize: 12,
       height: 1.45,
-      color: WelcomeScreen._kPrimary,
+      color: linkColor,
       fontWeight: FontWeight.w600,
       decoration: TextDecoration.underline,
-      decorationColor: WelcomeScreen._kPrimary.withValues(alpha: 0.6),
+      decorationColor: linkColor.withValues(alpha: 0.6),
     );
 
     return Text.rich(
@@ -245,9 +291,17 @@ class _LegalFooterState extends State<_LegalFooter> {
         style: baseStyle,
         children: [
           const TextSpan(text: 'By continuing, you agree to our '),
-          TextSpan(text: 'Terms of Service', style: linkStyle, recognizer: _termsTap),
+          TextSpan(
+            text: 'Terms of Service',
+            style: linkStyle,
+            recognizer: _termsTap,
+          ),
           const TextSpan(text: ' and '),
-          TextSpan(text: 'Privacy Policy', style: linkStyle, recognizer: _privacyTap),
+          TextSpan(
+            text: 'Privacy Policy',
+            style: linkStyle,
+            recognizer: _privacyTap,
+          ),
           const TextSpan(text: '.'),
         ],
       ),

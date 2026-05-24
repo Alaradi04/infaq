@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:infaq/auth/password_recovery_state.dart';
 import 'package:infaq/oauth_redirect.dart';
 import 'package:infaq/screens/login_screen.dart';
 import 'package:infaq/services/auth_navigation_service.dart';
@@ -79,6 +80,13 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
         '[AuthNav] register onAuthStateChange event=${data.event} '
         'hasSession=${data.session != null}',
       );
+      if (data.event == AuthChangeEvent.passwordRecovery) {
+        PasswordRecoveryState.markPending();
+        return;
+      }
+      if (PasswordRecoveryState.isPasswordRecoveryMode) {
+        return;
+      }
       final session = data.session;
       if (session == null) return;
       if (!mounted) return;
@@ -111,6 +119,7 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
 
   void _onEmailConfirmDeepLinkResult(EmailConfirmDeepLinkResult result) {
     if (!mounted) return;
+    if (PasswordRecoveryState.isPasswordRecoveryMode) return;
     switch (result) {
       case EmailConfirmDeepLinkResult.notHandled:
       case EmailConfirmDeepLinkResult.failed:
@@ -130,6 +139,8 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
             _step == 2) {
           _showEmailVerifiedSignInFallback();
         }
+        return;
+      case EmailConfirmDeepLinkResult.passwordRecovery:
         return;
     }
   }

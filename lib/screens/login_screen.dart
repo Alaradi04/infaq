@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:infaq/auth/password_recovery_state.dart';
 import 'package:infaq/oauth_redirect.dart';
+import 'package:infaq/screens/forgot_password_dialog.dart';
 import 'package:infaq/screens/register_flow_screen.dart';
 import 'package:infaq/services/auth_navigation_service.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
@@ -34,6 +36,13 @@ class _LoginScreenState extends State<LoginScreen> {
         '[AuthNav] login onAuthStateChange event=${data.event} '
         'hasSession=${data.session != null}',
       );
+      if (data.event == AuthChangeEvent.passwordRecovery) {
+        PasswordRecoveryState.markPending();
+        return;
+      }
+      if (PasswordRecoveryState.isPasswordRecoveryMode) {
+        return;
+      }
       if (data.session == null) return;
       if (!mounted) return;
       AuthNavigationService.clearAuthOverlaysIfSignedIn(
@@ -129,23 +138,12 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _forgotPassword() async {
-    final email = _email.text.trim();
-    if (email.isEmpty) {
-      showInfaqSnack(context, 'Enter your email first.');
-      return;
-    }
-    try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(email);
-      if (!mounted) return;
-      showInfaqSnack(context, 'Password reset email sent.');
-    } on AuthException catch (e) {
-      if (!mounted) return;
-      showInfaqSnack(context, e.message);
-    } catch (_) {
-      if (!mounted) return;
-      showInfaqSnack(context, 'Could not send reset email.');
-    }
+  void _forgotPassword() {
+    final prefilled = _email.text.trim();
+    showForgotPasswordDialog(
+      context,
+      initialEmail: prefilled.isEmpty ? null : prefilled,
+    );
   }
 
   @override

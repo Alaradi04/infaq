@@ -6,8 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/app_theme_mode.dart';
+import 'package:infaq/auth/password_recovery_state.dart';
 import 'package:infaq/screens/home_screen.dart';
 import 'package:infaq/screens/oauth_profile_setup_screen.dart';
+import 'package:infaq/screens/reset_password_screen.dart';
 import 'package:infaq/screens/welcome_screen.dart';
 import 'package:infaq/services/bank_notification_sync_service.dart';
 import 'package:infaq/services/email_confirm_deep_link_service.dart';
@@ -51,7 +53,13 @@ class _StartupShellState extends State<_StartupShell> {
       await Supabase.initialize(
         url: kSupabaseUrl,
         anonKey: kSupabaseAnonKey,
+        authOptions: const FlutterAuthClientOptions(
+          // INFAQ handles `com.infaq.app://login-callback` in
+          // [EmailConfirmDeepLinkService] so recovery vs signup routing stays explicit.
+          detectSessionInUri: false,
+        ),
       ).timeout(_kSupabaseInitTimeout);
+      PasswordRecoveryState.bindRootNavigator(MainApp.rootNavigatorKey);
       await EmailConfirmDeepLinkService.instance.start();
     } on TimeoutException {
       if (!mounted) return;
@@ -148,6 +156,9 @@ class _StartupShellState extends State<_StartupShell> {
 class MainApp extends StatelessWidget {
   const MainApp({super.key});
 
+  static final GlobalKey<NavigatorState> rootNavigatorKey =
+      GlobalKey<NavigatorState>();
+
   static const Color _primary = Color(0xFF4D6658);
   static const Color _surface = Color(0xFFF4F6F4);
   static const Color _headerLight = Color(0xFFE8F2EA);
@@ -159,6 +170,7 @@ class MainApp extends StatelessWidget {
       listenable: AppThemeMode.instance,
       builder: (context, _) {
         return MaterialApp(
+          navigatorKey: rootNavigatorKey,
           debugShowCheckedModeBanner: false,
           themeMode: AppThemeMode.instance.themeMode,
           builder: (context, child) {
@@ -224,7 +236,7 @@ class MainApp extends StatelessWidget {
               systemOverlayStyle: SystemUiOverlayStyle.light,
             ),
           ),
-          home: const AuthGate(),
+          home: AuthGate(rootNavigatorKey: rootNavigatorKey),
         );
       },
     );
@@ -232,7 +244,9 @@ class MainApp extends StatelessWidget {
 }
 
 class AuthGate extends StatefulWidget {
-  const AuthGate({super.key});
+  const AuthGate({super.key, required this.rootNavigatorKey});
+
+  final GlobalKey<NavigatorState> rootNavigatorKey;
 
   @override
   State<AuthGate> createState() => _AuthGateState();
@@ -241,6 +255,34 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   /// Bumped after [OAuthProfileSetupScreen] saves so [FutureBuilder] re-checks the `users` row.
   int _profileGateEpoch = 0;
+
+  StreamSubscription<AuthState>? _recoveryAuthSub;
+
+  @override
+  void initState() {
+    super.initState();
+    PasswordRecoveryState.bindRootNavigator(widget.rootNavigatorKey);
+    EmailConfirmDeepLinkService.instance.onPasswordRecovery = () {
+      if (mounted) setState(() {});
+    };
+    _recoveryAuthSub =
+        Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.passwordRecovery) {
+        debugPrint('[PasswordRecovery] AuthGate listener: passwordRecovery');
+        PasswordRecoveryState.markPending();
+        if (mounted) setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _recoveryAuthSub?.cancel();
+    if (EmailConfirmDeepLinkService.instance.onPasswordRecovery != null) {
+      EmailConfirmDeepLinkService.instance.onPasswordRecovery = null;
+    }
+    super.dispose();
+  }
 
   Future<bool> _userRowExists(String userId) async {
     try {
@@ -266,25 +308,52 @@ class _AuthGateState extends State<AuthGate> {
     final supabase = Supabase.instance.client;
     final cs = Theme.of(context).colorScheme;
 
-    return StreamBuilder<AuthState>(
-      stream: supabase.auth.onAuthStateChange,
-      initialData: AuthState(
-        AuthChangeEvent.initialSession,
-        supabase.auth.currentSession,
-      ),
-      builder: (context, snapshot) {
-        final session = snapshot.data?.session ?? supabase.auth.currentSession;
-        final event = snapshot.data?.event;
-        debugPrint(
-          '[AuthNav] AuthGate event=$event hasSession=${session != null} user=${session?.user.id}',
-        );
+    return ListenableBuilder(
+      listenable: PasswordRecoveryState.instance,
+      builder: (context, _) {
+        return StreamBuilder<AuthState>(
+          stream: supabase.auth.onAuthStateChange,
+          initialData: AuthState(
+            AuthChangeEvent.initialSession,
+            supabase.auth.currentSession,
+          ),
+          builder: (context, snapshot) {
+            final session =
+                snapshot.data?.session ?? supabase.auth.currentSession;
+            final event = snapshot.data?.event;
+            debugPrint(
+              '[AuthNav] AuthGate event=$event hasSession=${session != null} '
+              'pendingRecovery=${PasswordRecoveryState.pendingPasswordReset} '
+              'user=${session?.user.id}',
+            );
 
-        if (session == null) {
-          return const WelcomeScreen();
-        }
+            final recoveryMode = PasswordRecoveryState.isPasswordRecoveryMode ||
+                event == AuthChangeEvent.passwordRecovery;
 
-        final userId = session.user.id;
-        return FutureBuilder<bool>(
+            if (recoveryMode) {
+              if (event == AuthChangeEvent.passwordRecovery) {
+                PasswordRecoveryState.markPending();
+              }
+              if (session == null) {
+                return Scaffold(
+                  backgroundColor: cs.surface,
+                  body: const Center(child: _InfaqPulseLoader()),
+                );
+              }
+              debugPrint(
+                '[AuthNav] navigation decision: ResetPasswordScreen user=${session.user.id}',
+              );
+              return ResetPasswordScreen(
+                rootNavigatorKey: widget.rootNavigatorKey,
+              );
+            }
+
+            if (session == null) {
+              return const WelcomeScreen();
+            }
+
+            final userId = session.user.id;
+            return FutureBuilder<bool>(
           key: ValueKey<String>('${userId}_$_profileGateEpoch'),
           future: _userRowExists(userId).timeout(
             const Duration(seconds: 15),
@@ -327,6 +396,8 @@ class _AuthGateState extends State<AuthGate> {
               '[AuthNav] navigation decision: HomeScreen userId=$userId',
             );
             return const HomeScreen();
+          },
+        );
           },
         );
       },
