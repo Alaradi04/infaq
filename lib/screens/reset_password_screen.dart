@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:infaq/auth/password_policy.dart';
 import 'package:infaq/auth/password_recovery_state.dart';
 import 'package:infaq/screens/login_screen.dart';
+import 'package:infaq/ui/infaq_password_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
 
 /// Shown after the user opens a password recovery deep link (recovery session).
@@ -29,7 +30,18 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   String? _confirmPasswordError;
 
   @override
+  void initState() {
+    super.initState();
+    _newPassword.addListener(_onNewPasswordChanged);
+  }
+
+  void _onNewPasswordChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
+    _newPassword.removeListener(_onNewPasswordChanged);
     _newPassword.dispose();
     _confirmPassword.dispose();
     super.dispose();
@@ -44,9 +56,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
     if (newPw.isEmpty) {
       newErr = 'Please enter a new password.';
-    } else if (!isInfaqPasswordStrong(newPw)) {
+    } else if (!isInfaqPasswordValid(newPw)) {
       newErr = infaqPasswordRequirementMessage(newPw) ??
-          'Password must be at least $kInfaqPasswordMinLength characters with uppercase, lowercase, and a number.';
+          'Password must be at least $kInfaqPasswordMinLength characters with uppercase, lowercase, a number, and a symbol.';
     }
 
     if (confirmPw.isEmpty) {
@@ -201,6 +213,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       ),
                     ),
                   ],
+                  const SizedBox(height: 8),
+                  InfaqPasswordStrengthIndicator(password: _newPassword.text),
+                  const SizedBox(height: 6),
+                  const InfaqPasswordHelpLink(),
                   const SizedBox(height: 14),
                   InfaqPillField(
                     controller: _confirmPassword,

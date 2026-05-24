@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:infaq/auth/password_recovery_state.dart';
+import 'package:infaq/auth/password_policy.dart';
 import 'package:infaq/oauth_redirect.dart';
 import 'package:infaq/screens/login_screen.dart';
 import 'package:infaq/services/auth_navigation_service.dart';
@@ -13,10 +14,8 @@ import 'package:infaq/services/bank_notification_sync_service.dart';
 import 'package:infaq/services/email_confirm_deep_link_service.dart';
 import 'package:infaq/services/notification_preferences_service.dart';
 import 'package:infaq/ui/infaq_currency_meta.dart';
+import 'package:infaq/ui/infaq_password_widgets.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
-
-/// Strong password: at least this many characters (12–16+ recommended in UI copy).
-const int _kPasswordMinLength = 12;
 
 /// Matches [NotificationSettingsScreen] guidance / primary green for consistency.
 const Color _kRegisterGuidancePrimary = Color(0xFF4D6658);
@@ -477,51 +476,10 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
     return RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email);
   }
 
-  bool get _passwordStrong {
-    final p = _password.text;
-    if (p.length < _kPasswordMinLength) return false;
-    if (!RegExp(r'[A-Z]').hasMatch(p)) return false;
-    if (!RegExp(r'[a-z]').hasMatch(p)) return false;
-    if (!RegExp(r'\d').hasMatch(p)) return false;
-    return true;
-  }
+  bool get _passwordValid => isInfaqPasswordValid(_password.text);
 
-  String? _passwordRequirementHint() {
-    final p = _password.text;
-    if (p.isEmpty) return null;
-    final missing = <String>[];
-    if (p.length < _kPasswordMinLength) {
-      missing.add('at least $_kPasswordMinLength characters (longer is better)');
-    }
-    if (!RegExp(r'[A-Z]').hasMatch(p)) missing.add('an uppercase letter');
-    if (!RegExp(r'[a-z]').hasMatch(p)) missing.add('a lowercase letter');
-    if (!RegExp(r'\d').hasMatch(p)) missing.add('a number');
-    if (missing.isEmpty) return null;
-    return 'Add: ${missing.join(', ')}.';
-  }
-
-  void _showPasswordHelpDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Strong password tips'),
-          content: Text(
-            'Length: use at least $_kPasswordMinLength characters; 12–16 or longer is recommended.\n\n'
-            'Complexity: include uppercase (A–Z), lowercase (a–z), and numbers (0–9). '
-            'Adding symbols (!@#\$%^&*, etc.) is optional but improves strength.\n\n'
-            'Example: MyFamilyBudget2026',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Got it'),
-            ),
-          ],
-        );
-      },
-    );
-  }
+  String? _passwordRequirementHint() =>
+      infaqPasswordRequirementMessage(_password.text);
 
   Future<void> _next() async {
     if (_step == 1) {
@@ -544,12 +502,12 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
         showInfaqSnack(context, 'Password is empty. Please create a password.');
         return;
       }
-      if (!_passwordStrong) {
+      if (!_passwordValid) {
         final hint = _passwordRequirementHint();
         showInfaqSnack(
           context,
           hint ??
-              'Password must be at least $_kPasswordMinLength characters with uppercase, lowercase, and a number.',
+              'Password must be at least $kInfaqPasswordMinLength characters with uppercase, lowercase, a number, and a symbol.',
         );
         return;
       }
@@ -858,41 +816,9 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
         ),
       ),
       const SizedBox(height: 8),
-      Align(
-        alignment: Alignment.center,
-        child: Text(
-          _password.text.isEmpty
-              ? 'weak'
-              : _passwordStrong
-                  ? 'strong'
-                  : 'weak',
-          style: TextStyle(
-            color: _password.text.isEmpty || !_passwordStrong
-                ? Colors.red.withValues(alpha: 0.85)
-                : Colors.green.withValues(alpha: 0.85),
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
+      InfaqPasswordStrengthIndicator(password: _password.text),
       const SizedBox(height: 6),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
-          onPressed: () => _showPasswordHelpDialog(context),
-          icon: Icon(
-            Icons.info_outline_rounded,
-            size: 18,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          label: Text(
-            'How to write a strong password',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-        ),
-      ),
+      const InfaqPasswordHelpLink(),
       const SizedBox(height: 22),
       const _OrDividerLine(),
       const SizedBox(height: 16),
