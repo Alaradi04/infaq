@@ -10,16 +10,7 @@ import 'package:infaq/screens/home_screen.dart';
 import 'package:infaq/screens/oauth_profile_setup_screen.dart';
 import 'package:infaq/screens/welcome_screen.dart';
 import 'package:infaq/services/bank_notification_sync_service.dart';
-
-const String _kSupabaseUrl = String.fromEnvironment(
-  'SUPABASE_URL',
-  defaultValue: 'https://omdppfnhxtzayvpxdlbm.supabase.co',
-);
-
-const String _kSupabaseAnonKey = String.fromEnvironment(
-  'SUPABASE_ANON_KEY',
-  defaultValue: 'sb_publishable_XsViN4uolUNEJWenMUS3wQ_4b9wEjOb',
-);
+import 'package:infaq/supabase_config.dart';
 
 /// How long to wait for [Supabase.initialize] before showing an error (slow DNS, VPN, or bad network).
 const Duration _kSupabaseInitTimeout = Duration(seconds: 25);
@@ -57,8 +48,8 @@ class _StartupShellState extends State<_StartupShell> {
     try {
       await AppThemeMode.instance.load();
       await Supabase.initialize(
-        url: _kSupabaseUrl,
-        anonKey: _kSupabaseAnonKey,
+        url: kSupabaseUrl,
+        anonKey: kSupabaseAnonKey,
       ).timeout(_kSupabaseInitTimeout);
     } on TimeoutException {
       if (!mounted) return;

@@ -144,15 +144,27 @@ class TransactionParserTest {
     }
 
     @Test
-    fun kfhFawriPlusCreditedToIban_isIncome() {
+    fun kfhFawriPlusCreditedToIban_isExpense_outboundPayment() {
+        val msg =
+            "Dear Customer, Fawri+ payment BD 2.500, Ref. AUB103K5U004426E credited to IBAN BH75BIBB00200004446237 on 10/05/2026 at 15:30. Call 17221999 for Inquiries"
+        val parsed = parseRequired("KFH", msg)
+        assertEquals("KFH", parsed.detectedBank)
+        assertEquals("expense", parsed.transactionType)
+        assertEquals(2.500, parsed.amountValue, 0.0001)
+        assertEquals("BHD", parsed.amountCurrency)
+        assertEquals("AUB103K5U004426E", parsed.referenceNumber)
+        assertDateTime(parsed, "10/05/2026 15:30", "dd/MM/yyyy HH:mm")
+    }
+
+    @Test
+    fun kfhFawriPlusCreditedToIban_legacySample_isExpense() {
         val msg =
             "Dear Customer, Fawri+ payment BD 25.5, Ref. ABC123XY credited to IBAN BH123456789 on 08/05/2026 at 19:08. Call 17221999 for Inquiries"
         val parsed = parseRequired("KFH", msg)
         assertEquals("KFH", parsed.detectedBank)
-        assertEquals("income", parsed.transactionType)
+        assertEquals("expense", parsed.transactionType)
         assertEquals(25.5, parsed.amountValue, 0.0001)
         assertEquals("BHD", parsed.amountCurrency)
-        assertEquals("Fawri+ payment credited to IBAN", parsed.merchant)
         assertEquals("ABC123XY", parsed.referenceNumber)
         assertDateTime(parsed, "08/05/2026 19:08", "dd/MM/yyyy HH:mm")
     }
@@ -207,6 +219,127 @@ class TransactionParserTest {
         assertEquals("XYZ1", parsed.referenceNumber)
         assertEquals(200.5, parsed.balanceValue ?: 0.0, 0.0001)
         assertDateTime(parsed, "04/05/2026 19:08", "dd/MM/yyyy HH:mm")
+    }
+
+    @Test
+    fun ilaFawriPlusSentToIban_isExpense() {
+        val msg =
+            "Success! Fawri+ transfer of BHD 2.700 to IBAN **3844 is completed on 23/02/2026 05:21 Ref ABCO260223032237 Balance BHD 0.002 Enquiry 17123456"
+        val parsed = parseRequired("ila", msg)
+        assertEquals("ila", parsed.detectedBank)
+        assertEquals("expense", parsed.transactionType)
+        assertEquals(2.700, parsed.amountValue, 0.0001)
+        assertEquals("BHD", parsed.amountCurrency)
+        assertEquals("ABCO260223032237", parsed.referenceNumber)
+        assertEquals(0.002, parsed.balanceValue ?: 0.0, 0.0001)
+        assertDateTime(parsed, "23/02/2026 05:21", "dd/MM/yyyy HH:mm")
+    }
+
+    @Test
+    fun ilaFawriPlusAcctCredited_isIncome() {
+        val msg =
+            "Success! Your BHD Ac credited with BHD 40.000 on 30/12/2025 16:31 Ref BP2512301331274761 Balance BHD 40.000 Enquiry 17123456"
+        val parsed = parseRequired("ila", msg)
+        assertEquals("ila", parsed.detectedBank)
+        assertEquals("income", parsed.transactionType)
+        assertEquals(40.000, parsed.amountValue, 0.0001)
+        assertEquals("BP2512301331274761", parsed.referenceNumber)
+        assertEquals(40.000, parsed.balanceValue ?: 0.0, 0.0001)
+        assertDateTime(parsed, "30/12/2025 16:31", "dd/MM/yyyy HH:mm")
+    }
+
+    @Test
+    fun ilaCardPurchaseUsd_isExpense() {
+        val msg =
+            "Purchase at AMAZON MARKETPLACE SEATTLE US using card **9499 for USD 98.68 on 30/12/2025 18:24 debited from USD Ac Balance USD 7.18 Enquiry 17123456"
+        val parsed = parseRequired("ila", msg)
+        assertEquals("ila", parsed.detectedBank)
+        assertEquals("expense", parsed.transactionType)
+        assertEquals(98.68, parsed.amountValue, 0.0001)
+        assertEquals("USD", parsed.amountCurrency)
+        assertEquals("AMAZON MARKETPLACE SEATTLE US", parsed.merchant)
+        assertEquals(7.18, parsed.balanceValue ?: 0.0, 0.0001)
+        assertEquals("USD", parsed.balanceCurrency)
+    }
+
+    @Test
+    fun nbbFawriPlusSentToIban_isExpense() {
+        val msg =
+            "Success! Fawri+ transfer of BHD 2.700 to IBAN **3844 is completed on 23/02/2026 05:21 Ref ABCO260223032237 Balance BHD 0.002 Enquiry 17123456"
+        val parsed = parseRequired("NBB", msg)
+        assertEquals("NBB-style Fawri+", parsed.detectedBank)
+        assertEquals("expense", parsed.transactionType)
+        assertEquals(2.700, parsed.amountValue, 0.0001)
+    }
+
+    @Test
+    fun nbbFawriPlusReceived_isIncome() {
+        val msg =
+            "Fawri+ transfer of BHD 15.500 from Ahmed Ali credited to your account on 08/05/2026 20:06, Ref. NBB123456789, A/C ending 0036 balance BHD 50.000"
+        val parsed = parseRequired("NBB", msg)
+        assertEquals("NBB-style Fawri+", parsed.detectedBank)
+        assertEquals("income", parsed.transactionType)
+        assertEquals(15.500, parsed.amountValue, 0.0001)
+        assertEquals("NBB123456789", parsed.referenceNumber)
+        assertEquals(50.000, parsed.balanceValue ?: 0.0, 0.0001)
+    }
+
+    @Test
+    fun nbbDebitCardPurchase_isExpense() {
+        val msg =
+            "Thank you for using NBB Debit Card at IN & OUT PETROL STATIOMANAMA for BHD 25.500 on 05/05/2026 10:37, A/C ending 0036 balance BHD 100.000"
+        val parsed = parseRequired("NBB", msg)
+        assertEquals("NBB-style Fawri+", parsed.detectedBank)
+        assertEquals("expense", parsed.transactionType)
+        assertEquals("IN & OUT PETROL STATIOMANAMA", parsed.merchant)
+        assertEquals(25.500, parsed.amountValue, 0.0001)
+    }
+
+    @Test
+    fun bbkCardMonthNamePurchase_isExpense() {
+        val msg =
+            "Thank you for using BBK Card ending in 0938 for BHD 2.600 at ILLYCAFFE GRAVITY V BAH BH on May 10 at 11:46. A/C bal BHD XXXX For help"
+        val parsed = parseRequired("BBK", msg)
+        assertEquals("BBK", parsed.detectedBank)
+        assertEquals("expense", parsed.transactionType)
+        assertEquals(2.600, parsed.amountValue, 0.0001)
+        assertEquals("ILLYCAFFE GRAVITY V BAH BH", parsed.merchant)
+    }
+
+    @Test
+    fun bisbFawriPlusReceived_isIncome() {
+        val msg =
+            "Fawri+ payment BHD0.100 received from IBAN ending 6237 credited to IBAN ending 2757 ref. BIB103K5X000FTHG on 2026/05/13 10:45. Balance BHD26.461. Tel: 17515151"
+        val parsed = parseRequired("BisB", msg)
+        assertEquals("BisB", parsed.detectedBank)
+        assertEquals("income", parsed.transactionType)
+        assertEquals(0.100, parsed.amountValue, 0.0001)
+        assertEquals("BIB103K5X000FTHG", parsed.referenceNumber)
+        assertEquals(26.461, parsed.balanceValue ?: 0.0, 0.0001)
+    }
+
+    @Test
+    fun bisbFawriPlusSent_isExpense() {
+        val msg =
+            "Fawri+ payment BHD0.100, ref: BIB103K5X000FZ9X was credited to IBAN ending 6237 on 2026/05/13 11:30. Balance BHD26.361. Tel: 17515151"
+        val parsed = parseRequired("BisB", msg)
+        assertEquals("BisB", parsed.detectedBank)
+        assertEquals("expense", parsed.transactionType)
+        assertEquals(0.100, parsed.amountValue, 0.0001)
+        assertEquals("BIB103K5X000FZ9X", parsed.referenceNumber)
+        assertEquals(26.361, parsed.balanceValue ?: 0.0, 0.0001)
+    }
+
+    @Test
+    fun bisbDebitCardPurchase_isExpense() {
+        val msg =
+            "Dear AHMED, thank you for using your Debit card 9075 for BHD 0.400 at ARD Alkayrat CafeteriaMANAMA BH-531526 on 12/05 @10:37. Avail Bal BHD 29.381. Tel 17515151"
+        val parsed = parseRequired("BisB", msg)
+        assertEquals("BisB", parsed.detectedBank)
+        assertEquals("expense", parsed.transactionType)
+        assertEquals(0.400, parsed.amountValue, 0.0001)
+        assertEquals("ARD ALKAYRAT CAFETERIAMANAMA BH-531526", parsed.merchant)
+        assertEquals(29.381, parsed.balanceValue ?: 0.0, 0.0001)
     }
 }
 

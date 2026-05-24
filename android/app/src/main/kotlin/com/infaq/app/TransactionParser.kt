@@ -1,4 +1,4 @@
-package com.infaq.app
+﻿package com.infaq.app
 
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
@@ -45,7 +45,7 @@ object TransactionParser {
         Pattern.DOTALL,
     )
     private val kfhFawriPlusCreditedToIbanPattern = Pattern.compile(
-        """(?i)Dear\s+Customer,\s+Fawri\+\s+payment\s+(BHD|BD)\s*([0-9]+(?:\.[0-9]{1,3})?)\s*,\s*Ref\.\s*([A-Za-z0-9]+)\s+credited\s+to\s+IBAN\s+([A-Za-z0-9]+)\s+on\s+(\d{2}/\d{2}/\d{4})\s+at\s+(\d{2}:\d{2}(?::\d{2})?)""",
+        """(?i)Dear\s+Customer,\s+Fawri\+\s+payment\s+(BHD|BD)\s*([0-9]+(?:\.[0-9]{1,3})?)\s*,?\s*Ref\.?\s*([A-Za-z0-9]+)\s+credited\s+to\s+IBAN\s+([A-Za-z0-9*]+)\s+on\s+(\d{2}/\d{2}/\d{4})\s+at\s+(\d{2}:\d{2}(?::\d{2})?)""",
     )
     private val kfhFawriPlusReceivedFromIbanPattern = Pattern.compile(
         """(?i)Dear\s+Customer,\s+Fawri\+\s+payment\s+(BHD|BD)\s*([0-9]+(?:\.[0-9]{1,3})?)\s*,\s*Ref\.\s*([A-Za-z0-9]+)\s+received\s+from\s+IBAN\s+([A-Za-z0-9]+)\s+on\s+(\d{2}/\d{2}/\d{4})\s+at\s+(\d{2}:\d{2}(?::\d{2})?)""",
@@ -54,11 +54,51 @@ object TransactionParser {
         """(?i)Dear\s+Customer,\s+Fawri\s+payment\s+with\s+ref\.\s*([A-Za-z0-9]+)\s+received\s+from\s+([A-Za-z0-9]+)\s+(BHD|BD)\s*([0-9]+(?:\.[0-9]{1,3})?)\s+credited\s+to\s+your\s+([A-Za-z0-9*]+)\s+on\s+(\d{2}/\d{2}/\d{4})\s+at\s+(\d{2}:\d{2}(?::\d{2})?)""",
     )
     private val ilaCardPurchasePattern = Pattern.compile(
-        """(?i)Success!\s*Purchase\s+at\s+(.+?)\s+using\s+card\s+\*+(\d{4})\s+for\s+(BHD|BD)\s*([0-9]+(?:\.[0-9]{1,3})?)\s+on\s+(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2}(?::\d{2})?)\s+debited\s+from.*?Balance\s+(BHD|BD)\s*([0-9]+(?:\.[0-9]{1,3})?)""",
+        """(?i)(?:Success!\s*)?Purchase\s+at\s+(.+?)\s+using\s+card\s+\*+(\d{4})\s+for\s+(BHD|BD|USD)\s*([0-9]+(?:\.[0-9]{1,3})?)\s+on\s+(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2}(?::\d{2})?)\s+debited\s+from.*?Balance\s+(BHD|BD|USD)\s*([0-9]+(?:\.[0-9]{1,3})?)""",
         Pattern.DOTALL,
     )
     private val ilaFawriPlusTransferPattern = Pattern.compile(
         """(?i)Success!\s*Fawri\+\s+transfer\s+of\s+(BHD|BD)\s*([0-9]+(?:\.[0-9]{1,3})?)\s+from\s+IBAN\s+([A-Za-z0-9]+)\s+credited\s+to\s+BHD\s+Ac\s+on\s+(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2}(?::\d{2})?)\s+Ref\s+([A-Za-z0-9]+).*?Balance\s+(BHD|BD)\s*([0-9]+(?:\.[0-9]{1,3})?)""",
+        Pattern.DOTALL,
+    )
+    // ILA / NBB shared Fawri+ sent (outbound payment)
+    private val fawriPlusSentToIbanPattern = Pattern.compile(
+        """(?i)Success!\s*Fawri\+\s+transfer\s+of\s+(BHD|BD|USD)\s*([0-9]+(?:\.[0-9]{1,3})?)\s+to\s+IBAN\s+([*A-Za-z0-9]+)\s+is\s+completed\s+on\s+(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2}(?::\d{2})?)\s+Ref\s+([A-Za-z0-9]+).*?Balance\s+(BHD|BD|USD)\s*([0-9]+(?:\.[0-9]{1,3})?)""",
+        Pattern.DOTALL,
+    )
+    // ILA / NBB Fawri+ received (account credited)
+    private val fawriPlusAcctCreditedPattern = Pattern.compile(
+        """(?i)Success!\s*Your\s+(?:BHD|USD)\s+Ac\s+credited\s+with\s+(BHD|BD|USD)\s*([0-9]+(?:\.[0-9]{1,3})?)\s+on\s+(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2}(?::\d{2})?)\s+Ref\s+([A-Za-z0-9]+).*?Balance\s+(BHD|BD|USD)\s*([0-9]+(?:\.[0-9]{1,3})?)""",
+        Pattern.DOTALL,
+    )
+    // NBB Fawri+ received (flexible sender/ref/balance)
+    private val nbbFawriPlusReceivedPattern = Pattern.compile(
+        """(?i)Fawri\+\s+transfer\s+of\s+(?:(BHD|BD|USD)\s*)?([0-9]+(?:\.[0-9]{1,3})?)\s+from\s+(.+?)\s+credited\s+to\s+your\s+account\s+on\s+(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2}(?::\d{2})?)\s*,?\s*Ref\.?\s*([A-Za-z0-9]+)?\s*,?\s*A/C\s+ending\s+(\d{4})(?:\s+balance\s+(?:(BHD|BD|USD)\s*)?([0-9]+(?:\.[0-9]{1,3})?))?""",
+        Pattern.DOTALL,
+    )
+    // NBB debit card purchase
+    private val nbbCardPurchasePattern = Pattern.compile(
+        """(?i)Thank\s+you\s+for\s+using\s+NBB\s+Debit\s+Card\s+at\s+(.+?)\s+for\s+(?:(BHD|BD|USD)\s*)?([0-9]+(?:\.[0-9]{1,3})?)\s+on\s+(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2}(?::\d{2})?)\s*,?\s*A/C\s+ending\s+(\d{4})(?:\s+balance\s+(?:(BHD|BD|USD)\s*)?([0-9]+(?:\.[0-9]{1,3})?))?""",
+        Pattern.DOTALL,
+    )
+    // BBK card purchase (month name date, optional masked balance)
+    private val bbkCardMonthPurchasePattern = Pattern.compile(
+        """(?i)Thank\s+you\s+for\s+using\s+BBK\s+Card\s+ending\s+in\s+(\d{4})\s+for\s+(BHD|BD|USD)\s*([0-9]+(?:\.[0-9]{1,3})?)\s+at\s+(.+?)\s+on\s+([A-Za-z]{3,9})\s+(\d{1,2})\s+at\s+(\d{2}:\d{2}(?::\d{2})?)""",
+        Pattern.DOTALL,
+    )
+    // BisB Fawri+ received
+    private val bisbFawriPlusReceivedPattern = Pattern.compile(
+        """(?i)Fawri\+\s+payment\s+(BHD|BD|USD)\s*([0-9]+(?:\.[0-9]{1,3})?)\s+received\s+from\s+IBAN\s+ending\s+(\d{4})\s+credited\s+to\s+IBAN\s+ending\s+(\d{4})\s+ref\.?\s*:?\s*([A-Za-z0-9]+)\s+on\s+(\d{4}/\d{2}/\d{2})\s+(\d{2}:\d{2}(?::\d{2})?).*?Balance\s+(BHD|BD|USD)\s*([0-9]+(?:\.[0-9]{1,3})?)""",
+        Pattern.DOTALL,
+    )
+    // BisB Fawri+ sent (outbound â€” credited to recipient IBAN)
+    private val bisbFawriPlusSentPattern = Pattern.compile(
+        """(?i)Fawri\+\s+payment\s+(BHD|BD|USD)\s*([0-9]+(?:\.[0-9]{1,3})?)\s*,?\s*ref:?\s*([A-Za-z0-9]+)\s+was\s+credited\s+to\s+IBAN\s+ending\s+(\d{4})\s+on\s+(\d{4}/\d{2}/\d{2})\s+(\d{2}:\d{2}(?::\d{2})?).*?Balance\s+(BHD|BD|USD)\s*([0-9]+(?:\.[0-9]{1,3})?)""",
+        Pattern.DOTALL,
+    )
+    // BisB debit card purchase (dd/MM @HH:mm)
+    private val bisbCardPurchasePattern = Pattern.compile(
+        """(?i)thank\s+you\s+for\s+using\s+your\s+Debit\s+card\s+(\d{4})\s+for\s+(BHD|BD|USD)\s*([0-9]+(?:\.[0-9]{1,3})?)\s+at\s+(.+?)\s+on\s+(\d{2}/\d{2})\s*@\s*(\d{2}:\d{2}(?::\d{2})?).*?Avail\s*Bal\s+(BHD|BD|USD)\s*([0-9]+(?:\.[0-9]{1,3})?)""",
         Pattern.DOTALL,
     )
 
@@ -174,6 +214,11 @@ object TransactionParser {
         sourcePackage: String?,
         postTime: Long,
     ): ParsedTransaction? {
+        tryParseBisbTemplates(raw, title, sourcePackage, postTime)?.let { return it }
+        tryParseNbbTemplates(raw, title, sourcePackage, postTime)?.let { return it }
+        tryParseBbkCardMonthPurchase(raw, postTime)?.let { return it }
+        tryParseIlaNbbFawriPlusSent(raw, title, sourcePackage, postTime)?.let { return it }
+        tryParseIlaNbbFawriPlusReceived(raw, title, sourcePackage, postTime)?.let { return it }
         tryParseIlaFawriPlusTransfer(raw, postTime)?.let { return it }
         tryParseIlaCardPurchase(raw, postTime)?.let { return it }
         tryParseKfhFawriPlusCreditedToIban(raw, title, sourcePackage, postTime)?.let { return it }
@@ -181,6 +226,284 @@ object TransactionParser {
         tryParseKfhFawriCredited(raw, title, sourcePackage, postTime)?.let { return it }
         tryParseKfhCardPurchase(raw, title, sourcePackage, postTime)?.let { return it }
         return null
+    }
+
+    private fun tryParseBisbTemplates(
+        raw: String,
+        title: String?,
+        sourcePackage: String?,
+        postTime: Long,
+    ): ParsedTransaction? {
+        val hay = "${title.orEmpty()} $raw ${sourcePackage.orEmpty()}".lowercase(Locale.getDefault())
+        if (!hay.contains("bisb") && !hay.contains("bahrain islamic bank") && !hay.contains("17515151")) {
+            return null
+        }
+        tryParseBisbFawriPlusReceived(raw, postTime)?.let { return it }
+        tryParseBisbFawriPlusSent(raw, postTime)?.let { return it }
+        tryParseBisbCardPurchase(raw, postTime)?.let { return it }
+        return null
+    }
+
+    private fun tryParseBisbFawriPlusReceived(raw: String, postTime: Long): ParsedTransaction? {
+        val m = bisbFawriPlusReceivedPattern.matcher(raw)
+        if (!m.find()) return null
+        val amount = m.group(2)?.toDoubleOrNull() ?: return null
+        val cur = normalizeCurrency(m.group(1)?.uppercase(Locale.getDefault()) ?: "BHD")
+        val ref = m.group(5) ?: return null
+        val d = m.group(6) ?: return null
+        val t = m.group(7) ?: return null
+        val balCur = normalizeCurrency(m.group(8)?.uppercase(Locale.getDefault()) ?: "BHD")
+        val bal = m.group(9)?.toDoubleOrNull()
+        val ts = parseYyyyMmDdAndTime(d, t, postTime)
+        val senderEnding = m.group(3) ?: ""
+        return ParsedTransaction(
+            amountValue = amount,
+            amountCurrency = cur,
+            balanceValue = bal,
+            balanceCurrency = balCur,
+            merchant = "Fawri+ from IBAN ending $senderEnding",
+            referenceNumber = ref,
+            detectedBank = "BisB",
+            timestampMillis = ts,
+            transactionType = "income",
+            matchedIncomeKeyword = "Fawri+ received",
+            matchedExpenseKeyword = null,
+            reasonForTypeDecision = "BisB Fawri+ received template",
+        )
+    }
+
+    private fun tryParseBisbFawriPlusSent(raw: String, postTime: Long): ParsedTransaction? {
+        val m = bisbFawriPlusSentPattern.matcher(raw)
+        if (!m.find()) return null
+        val amount = m.group(2)?.toDoubleOrNull() ?: return null
+        val cur = normalizeCurrency(m.group(1)?.uppercase(Locale.getDefault()) ?: "BHD")
+        val ref = m.group(3) ?: return null
+        val recipientEnding = m.group(4) ?: return null
+        val d = m.group(5) ?: return null
+        val t = m.group(6) ?: return null
+        val balCur = normalizeCurrency(m.group(7)?.uppercase(Locale.getDefault()) ?: "BHD")
+        val bal = m.group(8)?.toDoubleOrNull()
+        val ts = parseYyyyMmDdAndTime(d, t, postTime)
+        return ParsedTransaction(
+            amountValue = amount,
+            amountCurrency = cur,
+            balanceValue = bal,
+            balanceCurrency = balCur,
+            merchant = "Fawri+ to IBAN ending $recipientEnding",
+            referenceNumber = ref,
+            detectedBank = "BisB",
+            timestampMillis = ts,
+            transactionType = "expense",
+            matchedIncomeKeyword = null,
+            matchedExpenseKeyword = "Fawri+ sent",
+            reasonForTypeDecision = "BisB Fawri+ sent template",
+        )
+    }
+
+    private fun tryParseBisbCardPurchase(raw: String, postTime: Long): ParsedTransaction? {
+        val m = bisbCardPurchasePattern.matcher(raw)
+        if (!m.find()) return null
+        val amount = m.group(3)?.toDoubleOrNull() ?: return null
+        val cur = normalizeCurrency(m.group(2)?.uppercase(Locale.getDefault()) ?: "BHD")
+        var merchant = m.group(4)?.trim().orEmpty()
+        if (merchant.isEmpty()) return null
+        merchant = merchant.uppercase(Locale.getDefault()).split("  ").first().trim()
+        val d = m.group(5) ?: return null
+        val t = m.group(6) ?: return null
+        val balCur = normalizeCurrency(m.group(7)?.uppercase(Locale.getDefault()) ?: "BHD")
+        val bal = m.group(8)?.toDoubleOrNull()
+        val ts = parseDdMmSlashAt(d, t, postTime)
+        return ParsedTransaction(
+            amountValue = amount,
+            amountCurrency = cur,
+            balanceValue = bal,
+            balanceCurrency = balCur,
+            merchant = merchant,
+            referenceNumber = null,
+            detectedBank = "BisB",
+            timestampMillis = ts,
+            transactionType = "expense",
+            matchedIncomeKeyword = null,
+            matchedExpenseKeyword = "Debit card",
+            reasonForTypeDecision = "BisB card purchase template",
+        )
+    }
+
+    private fun tryParseNbbTemplates(
+        raw: String,
+        title: String?,
+        sourcePackage: String?,
+        postTime: Long,
+    ): ParsedTransaction? {
+        val hay = "${title.orEmpty()} $raw ${sourcePackage.orEmpty()}".lowercase(Locale.getDefault())
+        if (!hay.contains("nbb") && !hay.contains("national bank of bahrain")) return null
+        nbbFawriPlusReceivedPattern.matcher(raw).let { m ->
+            if (!m.find()) return@let
+            val amount = m.group(2)?.toDoubleOrNull() ?: return@let
+            val cur = normalizeCurrency(m.group(1)?.uppercase(Locale.getDefault()) ?: "BHD")
+            val sender = m.group(3)?.trim()?.ifEmpty { null }
+            val ref = m.group(6)?.trim()?.ifEmpty { null } ?: extractReference(raw)
+            val accountEnding = m.group(7)
+            val balCur = m.group(8)?.let { normalizeCurrency(it.uppercase(Locale.getDefault())) }
+            val bal = m.group(9)?.toDoubleOrNull()
+            val d = m.group(4) ?: return@let
+            val t = m.group(5) ?: return@let
+            val ts = parseDdMmYyyyAndTime(d, t, postTime)
+            val merchant = when {
+                sender != null -> "Fawri+ from $sender"
+                accountEnding != null -> "Fawri+ to A/C ending $accountEnding"
+                else -> "Fawri+"
+            }
+            return ParsedTransaction(
+                amountValue = amount,
+                amountCurrency = cur,
+                balanceValue = bal,
+                balanceCurrency = balCur,
+                merchant = merchant,
+                referenceNumber = ref,
+                detectedBank = "NBB-style Fawri+",
+                timestampMillis = ts,
+                transactionType = "income",
+                matchedIncomeKeyword = "Fawri+ credited to your account",
+                matchedExpenseKeyword = null,
+                reasonForTypeDecision = "NBB Fawri+ received template",
+            )
+        }
+        nbbCardPurchasePattern.matcher(raw).let { m ->
+            if (!m.find()) return@let
+            var merchant = m.group(1)?.trim().orEmpty()
+            if (merchant.isEmpty()) return@let
+            merchant = merchant.uppercase(Locale.getDefault()).split("  ").first().trim()
+            val amount = m.group(3)?.toDoubleOrNull() ?: return@let
+            val cur = normalizeCurrency(m.group(2)?.uppercase(Locale.getDefault()) ?: "BHD")
+            val d = m.group(4) ?: return@let
+            val t = m.group(5) ?: return@let
+            val balCur = m.group(7)?.let { normalizeCurrency(it.uppercase(Locale.getDefault())) }
+            val bal = m.group(8)?.toDoubleOrNull()
+            val ts = parseDdMmYyyyAndTime(d, t, postTime)
+            return ParsedTransaction(
+                amountValue = amount,
+                amountCurrency = cur,
+                balanceValue = bal,
+                balanceCurrency = balCur,
+                merchant = merchant,
+                referenceNumber = null,
+                detectedBank = "NBB-style Fawri+",
+                timestampMillis = ts,
+                transactionType = "expense",
+                matchedIncomeKeyword = null,
+                matchedExpenseKeyword = "NBB Debit Card",
+                reasonForTypeDecision = "NBB card purchase template",
+            )
+        }
+        return null
+    }
+
+    private fun tryParseBbkCardMonthPurchase(raw: String, postTime: Long): ParsedTransaction? {
+        val m = bbkCardMonthPurchasePattern.matcher(raw)
+        if (!m.find()) return null
+        val amount = m.group(3)?.toDoubleOrNull() ?: return null
+        val cur = normalizeCurrency(m.group(2)?.uppercase(Locale.getDefault()) ?: "BHD")
+        var merchant = m.group(4)?.trim().orEmpty()
+        if (merchant.isEmpty()) return null
+        merchant = merchant.uppercase(Locale.getDefault()).split("  ").first().trim()
+        val mon = m.group(5) ?: return null
+        val day = m.group(6)?.toIntOrNull() ?: return null
+        val timePart = m.group(7) ?: return null
+        val ts = parseDdMmmAndTime(day, mon, timePart, postTime)
+        return ParsedTransaction(
+            amountValue = amount,
+            amountCurrency = cur,
+            balanceValue = null,
+            balanceCurrency = null,
+            merchant = merchant,
+            referenceNumber = null,
+            detectedBank = "BBK",
+            timestampMillis = ts,
+            transactionType = "expense",
+            matchedIncomeKeyword = null,
+            matchedExpenseKeyword = "BBK Card",
+            reasonForTypeDecision = "BBK card purchase (month name) template",
+        )
+    }
+
+    private fun tryParseIlaNbbFawriPlusSent(
+        raw: String,
+        title: String?,
+        sourcePackage: String?,
+        postTime: Long,
+    ): ParsedTransaction? {
+        val m = fawriPlusSentToIbanPattern.matcher(raw)
+        if (!m.find()) return null
+        val amount = m.group(2)?.toDoubleOrNull() ?: return null
+        val cur = normalizeCurrency(m.group(1)?.uppercase(Locale.getDefault()) ?: "BHD")
+        val counterparty = m.group(3)?.trim() ?: return null
+        val d = m.group(4) ?: return null
+        val t = m.group(5) ?: return null
+        val ref = m.group(6) ?: return null
+        val balCur = normalizeCurrency(m.group(7)?.uppercase(Locale.getDefault()) ?: "BHD")
+        val bal = m.group(8)?.toDoubleOrNull()
+        val ts = parseDdMmYyyyAndTime(d, t, postTime)
+        return ParsedTransaction(
+            amountValue = amount,
+            amountCurrency = cur,
+            balanceValue = bal,
+            balanceCurrency = balCur,
+            merchant = "Fawri+ to IBAN $counterparty",
+            referenceNumber = ref,
+            detectedBank = ilaNbbDetectedBank(raw, title, sourcePackage),
+            timestampMillis = ts,
+            transactionType = "expense",
+            matchedIncomeKeyword = null,
+            matchedExpenseKeyword = "Fawri+ transfer sent",
+            reasonForTypeDecision = "ILA/NBB Fawri+ sent template",
+        )
+    }
+
+    private fun tryParseIlaNbbFawriPlusReceived(
+        raw: String,
+        title: String?,
+        sourcePackage: String?,
+        postTime: Long,
+    ): ParsedTransaction? {
+        val m = fawriPlusAcctCreditedPattern.matcher(raw)
+        if (!m.find()) return null
+        val amount = m.group(2)?.toDoubleOrNull() ?: return null
+        val cur = normalizeCurrency(m.group(1)?.uppercase(Locale.getDefault()) ?: "BHD")
+        val d = m.group(3) ?: return null
+        val t = m.group(4) ?: return null
+        val ref = m.group(5) ?: return null
+        val balCur = normalizeCurrency(m.group(6)?.uppercase(Locale.getDefault()) ?: "BHD")
+        val bal = m.group(7)?.toDoubleOrNull()
+        val ts = parseDdMmYyyyAndTime(d, t, postTime)
+        return ParsedTransaction(
+            amountValue = amount,
+            amountCurrency = cur,
+            balanceValue = bal,
+            balanceCurrency = balCur,
+            merchant = "Fawri+ credit received",
+            referenceNumber = ref,
+            detectedBank = ilaNbbDetectedBank(raw, title, sourcePackage),
+            timestampMillis = ts,
+            transactionType = "income",
+            matchedIncomeKeyword = "Account credited",
+            matchedExpenseKeyword = null,
+            reasonForTypeDecision = "ILA/NBB Fawri+ received template",
+        )
+    }
+
+    private fun ilaNbbDetectedBank(raw: String, title: String?, sourcePackage: String?): String {
+        val titleHay = "${title.orEmpty()}".lowercase(Locale.getDefault())
+        if (titleHay.contains("nbb") || titleHay.contains("national bank of bahrain")) {
+            return "NBB-style Fawri+"
+        }
+        if (titleHay.contains("ila")) return "ila"
+        val hay = "$titleHay $raw ${sourcePackage.orEmpty()}".lowercase(Locale.getDefault())
+        return when {
+            hay.contains("ila bank") || hay.contains("ilabank") || hay.contains("17123456") -> "ila"
+            hay.contains("nbb") || hay.contains("national bank of bahrain") -> "NBB-style Fawri+"
+            else -> detectBank(raw, title, sourcePackage)
+        }
     }
 
     private fun tryParseIlaFawriPlusTransfer(raw: String, postTime: Long): ParsedTransaction? {
@@ -250,22 +573,28 @@ object TransactionParser {
         val amount = m.group(2)?.toDoubleOrNull() ?: return null
         val cur = normalizeCurrency(m.group(1)?.uppercase(Locale.getDefault()) ?: "BHD")
         val ref = m.group(3) ?: return null
+        val recipientIban = m.group(4)
         val d = m.group(5) ?: return null
         val t = m.group(6) ?: return null
         val ts = parseDdMmYyyyAndTime(d, t, postTime)
+        val merchant = if (!recipientIban.isNullOrBlank()) {
+            "Fawri+ to IBAN $recipientIban"
+        } else {
+            "Fawri+ payment sent"
+        }
         return ParsedTransaction(
             amountValue = amount,
             amountCurrency = cur,
             balanceValue = null,
             balanceCurrency = null,
-            merchant = "Fawri+ payment credited to IBAN",
+            merchant = merchant,
             referenceNumber = ref,
             detectedBank = kfhDetectedBank(raw, title, sourcePackage),
             timestampMillis = ts,
-            transactionType = "income",
-            matchedIncomeKeyword = "credited to IBAN",
-            matchedExpenseKeyword = null,
-            reasonForTypeDecision = "KFH Fawri+ credited to IBAN template",
+            transactionType = "expense",
+            matchedIncomeKeyword = null,
+            matchedExpenseKeyword = "Fawri+ payment credited to IBAN",
+            reasonForTypeDecision = "KFH Fawri+ sent (credited to recipient IBAN) template",
         )
     }
 
@@ -393,6 +722,51 @@ object TransactionParser {
         cal.set(Calendar.MILLISECOND, 0)
         return cal.timeInMillis
     }
+
+    private fun parseYyyyMmDdAndTime(date: String, time: String, fallbackMillis: Long): Long {
+        val dparts = date.split("/")
+        if (dparts.size != 3) return fallbackMillis
+        val yyyy = dparts[0].toIntOrNull() ?: return fallbackMillis
+        val mm = dparts[1].toIntOrNull() ?: return fallbackMillis
+        val dd = dparts[2].toIntOrNull() ?: return fallbackMillis
+        val hhmm = time.split(":")
+        val h = hhmm.getOrNull(0)?.toIntOrNull() ?: return fallbackMillis
+        val mi = hhmm.getOrNull(1)?.toIntOrNull() ?: return fallbackMillis
+        val sec = hhmm.getOrNull(2)?.toIntOrNull() ?: 0
+        val cal = Calendar.getInstance()
+        cal.set(Calendar.YEAR, yyyy)
+        cal.set(Calendar.MONTH, mm - 1)
+        cal.set(Calendar.DAY_OF_MONTH, dd)
+        cal.set(Calendar.HOUR_OF_DAY, h)
+        cal.set(Calendar.MINUTE, mi)
+        cal.set(Calendar.SECOND, sec)
+        cal.set(Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
+    }
+
+    private fun parseDdMmSlashAt(date: String, time: String, fallbackMillis: Long): Long {
+        val dparts = date.split("/")
+        if (dparts.size != 2) return fallbackMillis
+        val dd = dparts[0].toIntOrNull() ?: return fallbackMillis
+        val mm = dparts[1].toIntOrNull() ?: return fallbackMillis
+        val hhmm = time.split(":")
+        val h = hhmm.getOrNull(0)?.toIntOrNull() ?: return fallbackMillis
+        val mi = hhmm.getOrNull(1)?.toIntOrNull() ?: return fallbackMillis
+        val sec = hhmm.getOrNull(2)?.toIntOrNull() ?: 0
+        val ref = Calendar.getInstance()
+        ref.timeInMillis = fallbackMillis
+        val year = ref.get(Calendar.YEAR)
+        val cal = Calendar.getInstance()
+        cal.set(Calendar.YEAR, year)
+        cal.set(Calendar.MONTH, mm - 1)
+        cal.set(Calendar.DAY_OF_MONTH, dd)
+        cal.set(Calendar.HOUR_OF_DAY, h)
+        cal.set(Calendar.MINUTE, mi)
+        cal.set(Calendar.SECOND, sec)
+        cal.set(Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
+    }
+
 
     private fun parseDdMmmAndTime(day: Int, monAbbr: String, time: String, fallbackMillis: Long): Long {
         val month = monthAbbrToCalendar(monAbbr) ?: return fallbackMillis

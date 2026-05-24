@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
@@ -30,7 +31,8 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- Supabase OAuth (PKCE): must match Auth → URL Configuration (Site URL or redirect allow list). -->
+            <!-- Supabase OAuth (PKCE): mobile redirect com.infaq.app://login-callback.
+                 Google Web OAuth redirect (Cloud Console): https://omdppfnhxtzayvpxdlbm.supabase.co/auth/v1/callback -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
