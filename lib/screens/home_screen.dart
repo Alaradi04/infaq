@@ -79,10 +79,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   );
   final LayerLink _servicesLayerLink = LayerLink();
 
-  /// Shown when notification-listener access is still off after the user dismissed
-  /// the intro or enabled SMS auto-recording in settings.
-  bool _showAutoDetectBanner = false;
-
   @override
   void initState() {
     super.initState();
@@ -97,8 +93,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         debugPrint('[Permissions] post-auth delayed startup on Home');
         await AutoDetectionPermissionsCoordinator.instance
             .handleStartupOnHomeScreen(context);
-        if (!mounted) return;
-        await _refreshAutoDetectBanner();
       });
     });
   }
@@ -112,18 +106,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      debugPrint('[Permissions] home resumed — re-check banner + bank sync');
-      unawaited(_refreshAutoDetectBanner());
+      debugPrint('[Permissions] home resumed — bank sync');
       BankNotificationSyncService.scheduleDebouncedSync(
         trigger: 'home_resumed',
       );
     }
-  }
-
-  Future<void> _refreshAutoDetectBanner() async {
-    final show = await AutoDetectionPermissionsCoordinator.instance
-        .shouldShowHomeBanner();
-    if (mounted) setState(() => _showAutoDetectBanner = show);
   }
 
   Future<void> _loadAiHomeInsights({bool forceRefresh = false}) async {
@@ -512,7 +499,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _error = null;
       _tabIndex = 0;
       _managementTabIndex = 0;
-      _showAutoDetectBanner = false;
     });
   }
 
@@ -861,73 +847,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           ? const NeverScrollableScrollPhysics()
                           : const AlwaysScrollableScrollPhysics(),
                       slivers: [
-                        if (_showAutoDetectBanner)
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                              child: Material(
-                                color: cs.errorContainer.withValues(alpha: 0.35),
-                                borderRadius: BorderRadius.circular(14),
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(14),
-                                  onTap: () async {
-                                    await AutoDetectionPermissionsCoordinator
-                                        .instance
-                                        .openListenerSettingsFromBanner();
-                                    await _refreshAutoDetectBanner();
-                                  },
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 12,
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Icon(
-                                          Icons.notifications_active_outlined,
-                                          color: cs.error,
-                                          size: 22,
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                'Automatic recording is off',
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.w800,
-                                                  color: cs.onErrorContainer,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                'Notification access for INFAQ is not enabled. '
-                                                'Tap to open settings, then return — we refresh automatically.',
-                                                style: TextStyle(
-                                                  fontSize: 12.5,
-                                                  height: 1.35,
-                                                  color: cs.onSurface
-                                                      .withValues(alpha: 0.8),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Icon(
-                                          Icons.chevron_right_rounded,
-                                          color: cs.onSurfaceVariant,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
                         SliverToBoxAdapter(
                           child: Container(
                             width: double.infinity,
