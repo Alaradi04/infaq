@@ -387,3 +387,4 @@ class _InfaqPulseLoaderState extends State<_InfaqPulseLoader>
     );
   }
 }
+
