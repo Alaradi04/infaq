@@ -9,6 +9,7 @@ import 'package:infaq/oauth_redirect.dart';
 import 'package:infaq/screens/login_screen.dart';
 import 'package:infaq/services/auth_navigation_service.dart';
 import 'package:infaq/services/bank_notification_sync_service.dart';
+import 'package:infaq/services/email_confirm_deep_link_service.dart';
 import 'package:infaq/services/notification_preferences_service.dart';
 import 'package:infaq/ui/infaq_currency_meta.dart';
 import 'package:infaq/ui/infaq_widgets.dart';
@@ -41,6 +42,11 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
   /// When true, after sign-up we enable automatic bank-notification recording in Supabase prefs.
   bool _autoBankTransactions = false;
   bool _notificationListenerEnabled = false;
+  bool _awaitingEmailConfirmation = false;
+  bool _emailConfirmDialogOpen = false;
+  bool _resendingEmail = false;
+  bool _registrationEmailVerified = false;
+  bool _ownsEmailConfirmHandler = false;
 
   StreamSubscription<AuthState>? _authSub;
 
@@ -61,23 +67,301 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
         '[AuthNav] register onAuthStateChange event=${data.event} '
         'hasSession=${data.session != null}',
       );
-      if (data.session == null) return;
+      final session = data.session;
+      if (session == null) return;
       if (!mounted) return;
+      if (_awaitingEmailConfirmation || _registrationEmailVerified) {
+        unawaited(_handleEmailVerificationSession(session));
+        return;
+      }
       AuthNavigationService.clearAuthOverlaysIfSignedIn(
         context,
         reason: 'register_listener_${data.event.name}',
       );
     });
+    EmailConfirmDeepLinkService.instance.onResult = _onEmailConfirmDeepLinkResult;
+    _ownsEmailConfirmHandler = true;
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.resumed &&
-        mounted &&
-        _step == 2 &&
-        _autoBankTransactions) {
-      unawaited(_refreshNotificationListenerStatus());
+    if (state == AppLifecycleState.resumed && mounted) {
+      if (_step == 2 && _autoBankTransactions) {
+        unawaited(_refreshNotificationListenerStatus());
+      }
+      if (_awaitingEmailConfirmation) {
+        debugPrint('[EmailConfirm] verification link opened');
+        unawaited(_tryCompleteEmailConfirmation(fromResume: true));
+      }
+    }
+  }
+
+  void _onEmailConfirmDeepLinkResult(EmailConfirmDeepLinkResult result) {
+    if (!mounted) return;
+    switch (result) {
+      case EmailConfirmDeepLinkResult.notHandled:
+      case EmailConfirmDeepLinkResult.failed:
+        return;
+      case EmailConfirmDeepLinkResult.verifiedWithSession:
+        final session = Supabase.instance.client.auth.currentSession;
+        if (session != null &&
+            (_awaitingEmailConfirmation ||
+                _registrationEmailVerified ||
+                _step == 2)) {
+          unawaited(_handleEmailVerificationSession(session));
+        }
+        return;
+      case EmailConfirmDeepLinkResult.verifiedNoSession:
+        if (_awaitingEmailConfirmation ||
+            _emailConfirmDialogOpen ||
+            _step == 2) {
+          _showEmailVerifiedSignInFallback();
+        }
+        return;
+    }
+  }
+
+  void _showEmailVerifiedSignInFallback() {
+    if (!mounted) return;
+    debugPrint('[EmailConfirm] fallback to sign in');
+    if (_emailConfirmDialogOpen && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+    _emailConfirmDialogOpen = false;
+    _awaitingEmailConfirmation = false;
+    showInfaqSnack(context, 'Email verified. Please sign in to continue.');
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
+    );
+  }
+
+  bool _isEmailConfirmed(User user) {
+    return user.emailConfirmedAt != null && user.emailConfirmedAt!.isNotEmpty;
+  }
+
+  Future<void> _tryCompleteEmailConfirmation({bool fromResume = false}) async {
+    await EmailConfirmDeepLinkService.refreshAuthAfterCallback();
+    final session = Supabase.instance.client.auth.currentSession;
+    debugPrint('[EmailConfirm] session exists=${session != null}');
+    if (session == null) {
+      if (fromResume) return;
+      return;
+    }
+    await _handleEmailVerificationSession(session);
+  }
+
+  Future<void> _handleEmailVerificationSession(Session session) async {
+    await EmailConfirmDeepLinkService.refreshAuthAfterCallback();
+    session = Supabase.instance.client.auth.currentSession ?? session;
+    final user = session.user;
+    final confirmed = _isEmailConfirmed(user);
+    debugPrint('[EmailConfirm] session exists=true');
+    debugPrint('[EmailConfirm] email confirmed=$confirmed');
+    if (!confirmed && !_awaitingEmailConfirmation) return;
+
+    if (!mounted) return;
+
+    if (_emailConfirmDialogOpen && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+    _emailConfirmDialogOpen = false;
+    _awaitingEmailConfirmation = false;
+    _registrationEmailVerified = true;
+
+    var setupComplete = await _isRegistrationSetupComplete(user.id);
+    if (setupComplete) {
+      debugPrint('[EmailConfirm] moving to home');
+      if (!mounted) return;
+      AuthNavigationService.clearAuthOverlaysIfSignedIn(
+        context,
+        reason: 'email_confirmed_setup_complete',
+      );
+      return;
+    }
+
+    debugPrint('[EmailConfirm] continuing to setup');
+    setState(() => _step = 2);
+
+    final parsedBalance = num.tryParse(_balance.text.trim());
+    if (parsedBalance != null) {
+      await _completeRegistrationForUser(user, session);
+      if (!mounted) return;
+      setupComplete = await _isRegistrationSetupComplete(user.id);
+      if (setupComplete) {
+        debugPrint('[EmailConfirm] moving to home');
+        if (!mounted) return;
+        AuthNavigationService.clearAuthOverlaysIfSignedIn(
+          context,
+          reason: 'email_confirmed_after_upsert',
+        );
+        return;
+      }
+    }
+
+    if (!mounted) return;
+    showInfaqSnack(
+      context,
+      'Email verified! Review your details and tap Sign up to finish.',
+    );
+  }
+
+  Future<bool> _isRegistrationSetupComplete(String userId) async {
+    try {
+      final row = await Supabase.instance.client
+          .from('users')
+          .select('id')
+          .eq('id', userId)
+          .maybeSingle();
+      return row != null;
+    } catch (e, st) {
+      debugPrint('[EmailConfirm] users row check failed: $e\n$st');
+      return false;
+    }
+  }
+
+  Future<void> _completeRegistrationForUser(User user, Session session) async {
+    final email = _email.text.trim();
+    final usernameFromEmail =
+        email.contains('@') ? email.split('@').first : email;
+    final parsedBalance = num.tryParse(_balance.text.trim());
+
+    if (parsedBalance == null) return;
+
+    try {
+      debugPrint('[AuthNav] profile upsert start user=${user.id}');
+      await _upsertUserRow(
+        userId: user.id,
+        name: _fullName.text.trim(),
+        username: usernameFromEmail,
+        currency: _currency,
+        balance: parsedBalance,
+      );
+      await Supabase.instance.client.auth.updateUser(
+        UserAttributes(data: const {'registration_synced': true}),
+      );
+      debugPrint('[AuthNav] profile upsert + metadata update success');
+      if (_autoBankTransactions) {
+        try {
+          await NotificationPreferencesService.instance.loadOrCreateForSettings();
+          await NotificationPreferencesService.instance
+              .updateSmsAutoRecordingEnabled(true);
+          unawaited(
+            BankNotificationSyncService.instance.syncPendingBankTransactions(
+              trigger: 'register_auto_recording_enabled',
+              bypassThrottle: true,
+            ),
+          );
+        } catch (e, st) {
+          debugPrint('[AuthNav] register auto-recording prefs failed: $e\n$st');
+        }
+      }
+      if (mounted) {
+        showInfaqSnack(context, 'Email verified! Finishing sign-up…');
+      }
+    } catch (e, st) {
+      debugPrint(
+        '[AuthNav] profile upsert failed (AuthGate may show setup): $e\n$st',
+      );
+    }
+  }
+
+  Future<void> _resendConfirmationEmail() async {
+    final email = _email.text.trim();
+    if (email.isEmpty) return;
+    debugPrint('[EmailConfirm] resend called');
+    debugPrint('[EmailConfirm] resend redirect=com.infaq.app://login-callback');
+    setState(() => _resendingEmail = true);
+    try {
+      await Supabase.instance.client.auth.resend(
+        type: OtpType.signup,
+        email: email,
+        emailRedirectTo: kOAuthRedirectTo,
+      );
+      if (!mounted) return;
+      showInfaqSnack(context, 'Verification email sent again.');
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      showInfaqSnack(context, e.message);
+    } catch (e) {
+      if (!mounted) return;
+      showInfaqSnack(context, 'Could not resend email. Try again.');
+    } finally {
+      if (mounted) setState(() => _resendingEmail = false);
+    }
+  }
+
+  Future<void> _showEmailConfirmationDialog() async {
+    _awaitingEmailConfirmation = true;
+    _emailConfirmDialogOpen = true;
+    debugPrint('[EmailConfirm] verify email waiting state shown');
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        return PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('Confirm your email'),
+            content: Text(
+              'We sent a verification link to your email.\n\n'
+              'Please check your email and tap the verification link to continue.',
+              style: TextStyle(
+                height: 1.4,
+                color: cs.onSurface.withValues(alpha: 0.85),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: _resendingEmail
+                    ? null
+                    : () {
+                        Navigator.of(ctx).pop();
+                        setState(() {
+                          _awaitingEmailConfirmation = false;
+                          _emailConfirmDialogOpen = false;
+                          _step = 1;
+                        });
+                      },
+                child: Text(
+                  'Change email',
+                  style: TextStyle(color: cs.onSurfaceVariant),
+                ),
+              ),
+              TextButton(
+                onPressed: _resendingEmail ? null : () => _resendConfirmationEmail(),
+                child: _resendingEmail
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Resend email'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  await _tryCompleteEmailConfirmation();
+                  if (!ctx.mounted) return;
+                  if (!_awaitingEmailConfirmation) return;
+                  if (!mounted) return;
+                  showInfaqSnack(
+                    context,
+                    'Still waiting for verification. Check your email and tap the link.',
+                  );
+                },
+                child: const Text('Check again'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (mounted) {
+      setState(() {
+        _emailConfirmDialogOpen = false;
+        if (_awaitingEmailConfirmation) _awaitingEmailConfirmation = false;
+      });
     }
   }
 
@@ -103,6 +387,9 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
 
   @override
   void dispose() {
+    if (_ownsEmailConfirmHandler) {
+      EmailConfirmDeepLinkService.instance.onResult = null;
+    }
     WidgetsBinding.instance.removeObserver(this);
     _authSub?.cancel();
     _fullName.dispose();
@@ -231,15 +518,51 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
 
   Future<void> _signUp() async {
     debugPrint('[AuthNav] sign-up start (email/password)');
+    debugPrint('[EmailConfirm] signup called');
+    debugPrint('[EmailConfirm] signup redirect=com.infaq.app://login-callback');
     setState(() => _loading = true);
     try {
       final email = _email.text.trim();
       final usernameFromEmail =
           email.contains('@') ? email.split('@').first : email;
       final parsedBalance = num.tryParse(_balance.text.trim());
+
+      var session = Supabase.instance.client.auth.currentSession;
+      if (session != null &&
+          (_registrationEmailVerified || _isEmailConfirmed(session.user))) {
+        await EmailConfirmDeepLinkService.refreshAuthAfterCallback();
+        session = Supabase.instance.client.auth.currentSession ?? session;
+        debugPrint('[EmailConfirm] session exists=true');
+        debugPrint(
+          '[EmailConfirm] email confirmed=${_isEmailConfirmed(session.user)}',
+        );
+        if (parsedBalance != null) {
+          await _completeRegistrationForUser(session.user, session);
+        }
+        if (!mounted) return;
+        final setupComplete =
+            await _isRegistrationSetupComplete(session.user.id);
+        if (setupComplete) {
+          debugPrint('[EmailConfirm] moving to home');
+          AuthNavigationService.clearAuthOverlaysIfSignedIn(
+            context,
+            reason: 'email_sign_up_after_confirm',
+          );
+        } else {
+          debugPrint('[EmailConfirm] continuing to setup');
+          setState(() => _step = 2);
+          showInfaqSnack(
+            context,
+            'Email verified! Review your details and tap Sign up to finish.',
+          );
+        }
+        return;
+      }
+
       final response = await Supabase.instance.client.auth.signUp(
         email: email,
         password: _password.text,
+        emailRedirectTo: kOAuthRedirectTo,
         data: {
           'username': usernameFromEmail,
           'name': _fullName.text.trim(),
@@ -249,7 +572,7 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
           'balance': _balance.text.trim(),
         },
       );
-      var session = response.session;
+      session = response.session;
       final user = response.user;
 
       if (session == null && user != null) {
@@ -261,43 +584,7 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
       if (!mounted) return;
 
       if (user != null && parsedBalance != null && session != null) {
-        try {
-          debugPrint('[AuthNav] profile upsert start user=${user.id}');
-          await _upsertUserRow(
-            userId: user.id,
-            name: _fullName.text.trim(),
-            username: usernameFromEmail,
-            currency: _currency,
-            balance: parsedBalance,
-          );
-          await Supabase.instance.client.auth.updateUser(
-            UserAttributes(data: const {'registration_synced': true}),
-          );
-          debugPrint('[AuthNav] profile upsert + metadata update success');
-          if (_autoBankTransactions) {
-            try {
-              await NotificationPreferencesService.instance
-                  .loadOrCreateForSettings();
-              await NotificationPreferencesService.instance
-                  .updateSmsAutoRecordingEnabled(true);
-              unawaited(
-                BankNotificationSyncService.instance
-                    .syncPendingBankTransactions(
-                  trigger: 'register_auto_recording_enabled',
-                  bypassThrottle: true,
-                ),
-              );
-            } catch (e, st) {
-              debugPrint(
-                '[AuthNav] register auto-recording prefs failed: $e\n$st',
-              );
-            }
-          }
-        } catch (e, st) {
-          debugPrint(
-            '[AuthNav] profile upsert failed (AuthGate may show setup): $e\n$st',
-          );
-        }
+        await _completeRegistrationForUser(user, session);
       }
 
       if (!mounted) return;
@@ -315,41 +602,7 @@ class _RegisterFlowScreenState extends State<RegisterFlowScreen>
         debugPrint(
           '[AuthNav] sign-up: no session (email confirmation) user=${user.id}',
         );
-        await showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) {
-            final cs = Theme.of(ctx).colorScheme;
-            return AlertDialog(
-              title: const Text('Verify your email'),
-              content: const Text(
-                'Please verify your email before signing in. We sent you a link — '
-                'open it to activate your account, then use Sign in.\n\n'
-                'You are not signed in yet in this app.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: Text(
-                    'OK',
-                    style: TextStyle(color: cs.onSurfaceVariant),
-                  ),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    Navigator.of(ctx).pop();
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const LoginScreen(),
-                      ),
-                    );
-                  },
-                  child: const Text('Go to Sign in'),
-                ),
-              ],
-            );
-          },
-        );
+        await _showEmailConfirmationDialog();
       } else {
         debugPrint('[AuthNav] sign-up: no user in response');
         showInfaqSnack(

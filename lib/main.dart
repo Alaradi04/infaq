@@ -10,6 +10,7 @@ import 'package:infaq/screens/home_screen.dart';
 import 'package:infaq/screens/oauth_profile_setup_screen.dart';
 import 'package:infaq/screens/welcome_screen.dart';
 import 'package:infaq/services/bank_notification_sync_service.dart';
+import 'package:infaq/services/email_confirm_deep_link_service.dart';
 import 'package:infaq/supabase_config.dart';
 
 /// How long to wait for [Supabase.initialize] before showing an error (slow DNS, VPN, or bad network).
@@ -51,6 +52,7 @@ class _StartupShellState extends State<_StartupShell> {
         url: kSupabaseUrl,
         anonKey: kSupabaseAnonKey,
       ).timeout(_kSupabaseInitTimeout);
+      await EmailConfirmDeepLinkService.instance.start();
     } on TimeoutException {
       if (!mounted) return;
       setState(
